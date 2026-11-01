@@ -1,0 +1,10 @@
+{
+  "extends": "../jsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"]
+  },
+  "include": ["**/*.js", "../api/**/*.js"],
+  "exclude": ["node_modules", "dist"]
+}

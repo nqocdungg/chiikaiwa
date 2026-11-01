@@ -1,0 +1,58 @@
+{
+  "name": "chiikaiwa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.21.1",
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@types/express": "5.0.6",
+    "@types/node": "24.19.2",
+    "@types/punycode": "2.1.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/supertest": "7.2.1",
+    "concurrently": "10.0.6",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "globals": "17.13.0",
+    "jsdom": "30.1.3",
+    "mongodb-memory-server-core": "11.3.0",
+    "prettier": "3.9.10",
+    "supertest": "7.3.1",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  },
+  "engines": {
+    "node": "24.x",
+    "npm": "11.x"
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently --kill-others --names api,client \"npm run dev --workspace server\" \"npm run dev --workspace client\"",
+    "db:dev": "node --env-file-if-exists=.env scripts/database-dev.js",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.js",
+    "db:status": "node --env-file-if-exists=.env scripts/migrate.js --status",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -p client/jsconfig.json && tsc -p server/jsconfig.json && tsc -p jsconfig.json",
+    "test": "vitest run --project server --project client",
+    "test:watch": "vitest --project server --project client",
+    "test:integration": "vitest run --project integration",
+    "build": "npm run build --workspace client && node --check server/app.js && node --check api/index.js",
+    "start": "node --env-file-if-exists=.env server/start.js",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration && npm run build"
+  },
+  "prettier": {
+    "singleQuote": true,
+    "trailingComma": "all"
+  }
+}

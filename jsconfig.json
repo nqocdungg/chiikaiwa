@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "maxNodeModuleJsDepth": 0,
+    "noEmit": true,
+    "strict": true,
+    "target": "ES2023",
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
+    "types": ["node", "@testing-library/jest-dom"]
+  },
+  "include": [
+    "*.js",
+    "client/vite.config.js",
+    "scripts/**/*.js",
+    "tests/**/*.js",
+    "tests/**/*.jsx"
+  ],
+  "exclude": ["node_modules", "client/dist"]
+}

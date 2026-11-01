@@ -1,0 +1,7 @@
+node_modules
+client/dist
+coverage
+.data
+.cache
+.vercel
+package-lock.json
