@@ -2,6 +2,8 @@
 
 Website luyện hội thoại tiếng Nhật. Repository hiện gồm frontend shell, Express API và nền tảng development; các tính năng nghiệp vụ chưa được triển khai.
 
+[Tài liệu dự án](docs/README.md) · [Hướng dẫn đóng góp](CONTRIBUTING.md)
+
 ## Tech stack
 
 - JavaScript ES modules, Node.js 24.x, npm 11.21.1, npm workspaces.
@@ -97,6 +99,9 @@ chiikaiwa/
 │   ├── server/               Unit và HTTP tests
 │   └── integration/          Database integration tests
 ├── .github/workflows/        CI
+├── docs/                     Thiết kế và hướng dẫn development
+├── AGENTS.md                 Chỉ dẫn agent
+├── CONTRIBUTING.md           Quy trình đóng góp
 ├── package.json
 ├── package-lock.json
 ├── eslint.config.js
@@ -120,4 +125,4 @@ Xem [migration guide](server/persistence/migrations/README.md) để thêm migra
 
 Vercel sử dụng root repository và cấu hình trong `vercel.json`. Chọn Node.js 24.x, cấu hình environment server và `APP_ORIGIN` HTTPS. Preview dùng database riêng. CI chạy `npm ci` và `npm run check`; không tự deploy.
 
-Tài liệu thiết kế nằm tại `../docs/` trong workspace CNW, ngoài repository này; dùng bộ tài liệu đó để đối chiếu khi triển khai nghiệp vụ.
+Đối chiếu [tài liệu thiết kế](docs/README.md) khi triển khai nghiệp vụ. Quy trình làm việc, Git conventions và yêu cầu kiểm chứng được quản lý trong [CONTRIBUTING.md](CONTRIBUTING.md).
