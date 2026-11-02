@@ -18,7 +18,7 @@ npm run test:integration
 npm run check
 ```
 
-`npm run check` gồm format check, lint, typecheck, unit/HTTP/component tests, integration tests và build. Chạy tại root repository với runtime theo README.
+`npm run check` gồm format check, lint, typecheck, unit/HTTP/component tests, integration tests, build sản phẩm và build Storybook. Chạy tại root repository với runtime theo README.
 
 Integration tests tự khởi động replica set tạm, dùng database thử và dọn sau khi chạy; không đọc `.env`. Lần đầu cần tải binary MongoDB. Nếu sử dụng `mongod` đã cài, đặt `MONGOMS_SYSTEM_BINARY` trong environment của terminal. Không dùng MongoDB standalone để kết luận transaction hoạt động.
 

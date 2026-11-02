@@ -8,6 +8,7 @@ import prettier from 'eslint-config-prettier';
 export default defineConfig([
   globalIgnores([
     '**/dist/**',
+    'storybook-static/**',
     'coverage/**',
     '.data/**',
     '.cache/**',
@@ -30,6 +31,7 @@ export default defineConfig([
       'tests/**/*.js',
       'tests/**/*.jsx',
       'client/vite.config.js',
+      '.storybook/*.js',
     ],
     languageOptions: { globals: globals.node },
   },
@@ -55,6 +57,10 @@ export default defineConfig([
         },
       ],
     },
+  },
+  {
+    files: ['client/src/**/*.stories.jsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
   prettier,
 ]);

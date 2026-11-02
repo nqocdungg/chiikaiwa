@@ -3,17 +3,17 @@
 | Thuộc tính | Giá trị |
 |---|---|
 | Sản phẩm | Chiikaiwa |
-| Phiên bản | 1.0 |
-| Ngày | 28/10/2026 |
+| Phiên bản | 1.1 |
+| Ngày | 02/11/2026 |
 | Phạm vi | UX/UI Specification cho MVP trên laptop/desktop |
 
 ## 1. Introduction & Scope
 
 Tài liệu xác định cấu trúc thông tin, luồng tương tác, màn hình và phản hồi để thiết kế trên Figma và triển khai frontend. Nguồn nghiệp vụ là Project Overview 1.0 (01-project-overview.md), SRS 1.0 (02-srs.md) và Product Backlog 1.0 (03-product-backlog.md). SRS giữ thẩm quyền về hành vi; backlog xác định phạm vi bàn giao, không cho phép bỏ chức năng P1/P2.
 
-Bao gồm người truy cập, người học, khách theo mã mời và Admin. Không gồm wireframe, mockup, prototype, thiết kế nhân vật, palette, font, kích thước, spacing, design tokens, component library hoặc mã nguồn. Các sơ đồ dưới đây chỉ biểu diễn cấu trúc và luồng.
+Bao gồm người truy cập, người học, khách theo mã mời và Admin. Mục 2.5 ghi nhận hướng visual đã chốt sau review. Chi tiết bố cục, tokens, source và bản demo được mô tả tại [UI hiện hành](../development/ui.md); tài liệu này không chứa toàn bộ mockup, thiết kế nhân vật hay component library. Các sơ đồ dưới đây chỉ biểu diễn cấu trúc và luồng.
 
-Quy ước: UF là luồng, SC là màn hình hoặc trạng thái màn hình có mục đích riêng. FR/BR/NFR/UC/AT và PB giữ nguyên mã nguồn. Một SC không bắt buộc tương ứng một URL; form phụ có thể là vùng nội dung hoặc hộp thoại ở bước thiết kế. Các nguyên tắc trong tài liệu là ràng buộc trải nghiệm; hình thức thể hiện cụ thể để lại cho Visual UI Design.
+Quy ước: UF là luồng, SC là màn hình hoặc trạng thái màn hình có mục đích riêng. FR/BR/NFR/UC/AT và PB giữ nguyên mã nguồn. Một SC không bắt buộc tương ứng một URL; form phụ có thể là vùng nội dung hoặc hộp thoại ở bước thiết kế. Các nguyên tắc trong tài liệu là ràng buộc trải nghiệm; hình thức thể hiện theo giao diện Chiikaiwa đã chốt tại mục 2.5, không làm thay đổi quy tắc nghiệp vụ.
 
 ## 2. UX Principles & Visual Direction
 
@@ -39,6 +39,11 @@ Chưa chốt danh sách nhân vật, phân vai cho từng nhân vật hoặc tà
 
 Nghiệm thu trên Windows/Chrome, viewport từ 1366 × 768 CSS pixel; đây là vùng nội dung trình duyệt, không phải độ phân giải vật lý của màn hình. Kiểm tra cả kích thước tối thiểu, kích thước lớn hơn và khi thay đổi cửa sổ. MVP hỗ trợ web trên laptop/desktop; không thiết kế hoặc nghiệm thu giao diện mobile và không xây ứng dụng di động. Các thời hạn 30 giây xác nhận, 60 giây chọn bộ, 10 phút mã mời, 5 phút phục hồi và 15 phút ôn thử lấy theo trạng thái server. Animation không dừng hoặc gia hạn thời hạn. Giữ giới hạn MVP và ma trận quyền của SRS.
 
+### 2.5. Giao diện đã chốt
+
+Giao diện Chiikaiwa dùng nền kem, mực mận, hồng phấn và xanh dịu. Trang chính dùng bố cục hai vùng: lối luyện hội thoại bên trái, khu học cá nhân bên phải; nội dung ngắn gọn. Phòng luyện có bố cục gọn. [Mô tả và source hiện hành](../development/ui.md).
+
+Thao tác thường xuyên có thể dùng icon với tên truy cập được, tooltip, focus và trạng thái rõ. Lưu từng mục kiến thức dùng sao ở góc mục đó; sao đã lưu có cả trạng thái nhấn và hình dạng tô đầy. Rời phòng và xác nhận đồng thuận vẫn có nhãn chữ.
 ## 3. Information Architecture & Navigation
 
 ### 3.1. Sitemap
@@ -156,6 +161,10 @@ Mọi SC áp dụng trạng thái chung ở mục 6; cột trạng thái dưới
 
 ### 5.2. Phòng Kaiwa
 
+Bố cục laptop/desktop cố định ba vùng: hai khung người luyện ở trái, thẻ tình huống ở giữa, vùng ghi chú/gợi ý/chat ở phải có thể ẩn. Header và điều khiển cuộc gọi/rời phòng nằm ngoài vùng cuộn. Phòng chiếm chiều cao viewport; danh sách bộ, nội dung vai dài và nội dung công cụ cuộn riêng trong vùng tương ứng, không đẩy toàn trang desktop. Ẩn công cụ mở rộng vùng thẻ. Với cửa sổ hẹp/zoom lớn, cho đọc đủ qua cuộn nội bộ, vẫn giữ thao tác thoát và đường mở/đóng công cụ.
+
+Thẻ roleplay mặc định bằng tiếng Nhật, có tên vai (役割), bối cảnh (背景), tình huống (状況) và mục đích (目的). Tình huống/mục tiêu chung phân biệt với nội dung vai riêng. Nút Tiếng Việt bật bản dịch của chính thẻ/vai đang được phép xem; có thể trở về tiếng Nhật. Chuyển ngôn ngữ chỉ là trạng thái riêng, không đổi vai hoặc nội dung phía đối tác, không mở vai còn lại. Bản demo dùng nội dung dịch soạn sẵn; không có dịch AI hoặc API dịch.
+
 Cuộc gọi và tình huống/vai luôn dễ tiếp cận; chat, gợi ý, note là vùng phụ mở/thu gọn. Chuyển vùng không làm mất note chưa lưu. Khi chia sẻ màn hình, vẫn có đường đọc vai và dùng điều khiển cuộc gọi. Không dùng overlay nhân vật che nội dung hoặc nút rời.
 
 Hiển thị “Bạn đang điều khiển” hoặc “Bạn luyện đang điều khiển”. Người không giữ quyền có nút “Lấy quyền điều khiển”; chỉ cập nhật quyền sau phản hồi server. Khóa chọn/bốc cho người không giữ quyền. Chuyển quyền không đổi bộ/lá, không reset đồng hồ và không yêu cầu duyệt. Cuộn danh sách, hover và vị trí chuột là trạng thái riêng; không phát lại hiệu ứng bốc khi chỉ đồng bộ quyền.
@@ -230,7 +239,7 @@ Tôn trọng tùy chọn giảm chuyển động của hệ điều hành/trình
 
 ### 8.1. UI Language & Content Guidelines
 
-Giao diện tiếng Việt; lần đầu giải thích Tomodachi là bạn luyện nói, Kaiwa là luyện hội thoại. Giữ Again/Hard/Good bằng tiếng Anh kèm nghĩa: quên/sai, nhớ đúng nhưng khó, nhớ đúng khá tự tin. Phân biệt thẻ tình huống và flashcard; dùng “Bỏ qua tình huống” và “Hoàn thành và tiếp tục” để tránh nhầm trạng thái.
+Điều hướng và thông báo bằng tiếng Việt; nội dung thẻ roleplay bằng tiếng Nhật với bản Việt bật khi cần theo mục 5.2. Lần đầu dùng thuật ngữ Tomodachi phải giải thích là bạn luyện nói; Kaiwa là luyện hội thoại. Giữ Again/Hard/Good bằng tiếng Anh kèm nghĩa: quên/sai, nhớ đúng nhưng khó, nhớ đúng khá tự tin. Phân biệt thẻ tình huống và flashcard; dùng “Bỏ qua tình huống” và “Hoàn thành và tiếp tục” để tránh nhầm trạng thái.
 
 Thông báo gồm điều đã xảy ra và hành động tiếp theo, không đưa thuật ngữ database/token vào luồng thông thường. Mẫu diễn đạt: “Chưa lưu được ghi chú. Thử lại”; “Bạn đã đồng ý. Đang chờ bạn luyện”; “Lượt dùng thử đã hết hạn. Dữ liệu thử không được chuyển khi đăng ký”. Không hiển thị nội dung nhạy cảm trong thông báo.
 
@@ -292,7 +301,7 @@ Coverage: 63 FR được ánh xạ theo 11 nhóm; cả 34 PB có tham chiếu tr
 
 ### 10.2. Open Design Questions
 
-Các điểm còn mở thuộc Visual UI Design: danh sách và phân vai nhân vật, lựa chọn tài nguyên, bố cục cụ thể, kiểu trình bày điều hướng, hình thức vùng phụ/hộp thoại, palette, typography, spacing, icon và thời lượng/easing chuyển động. Chúng không được thay đổi quy tắc nghiệp vụ hoặc bổ sung quyền. Chính sách lưu đáp án quiz chưa nộp qua tải lại chưa được cam kết; chỉ giữ khi điều hướng giữa các câu trong lượt đang mở, cảnh báo trước rời.
+Giao diện Chiikaiwa, bố cục home hai vùng, phòng ba vùng, thẻ Nhật/bản dịch Việt và icon lưu đã chốt tại mục 2.5, 5.2. Các điểm còn mở: tài nguyên nhân vật chính thức, học liệu/bản dịch được biên soạn và rà soát, chi tiết các màn ngoài phạm vi demo, thông số motion và kiểm chứng accessibility đầy đủ. Chúng không được thay đổi quy tắc nghiệp vụ hoặc bổ sung quyền. Chính sách lưu đáp án quiz chưa nộp qua tải lại chưa được cam kết; chỉ giữ khi điều hướng giữa các câu trong lượt đang mở, cảnh báo trước rời.
 
 ### 10.3. Figma Design Inputs
 
