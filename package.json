@@ -45,6 +45,7 @@
     "db:dev": "node --env-file-if-exists=.env scripts/database-dev.js",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.js",
     "db:status": "node --env-file-if-exists=.env scripts/migrate.js --status",
+    "db:verify-atlas-transaction": "node --env-file-if-exists=.env scripts/verify-atlas-transaction.js",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

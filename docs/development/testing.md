@@ -22,6 +22,8 @@ npm run check
 
 Integration tests tự khởi động replica set tạm, dùng database thử và dọn sau khi chạy; không đọc `.env`. Lần đầu cần tải binary MongoDB. Nếu sử dụng `mongod` đã cài, đặt `MONGOMS_SYSTEM_BINARY` trong environment của terminal. Không dùng MongoDB standalone để kết luận transaction hoạt động.
 
+Để kiểm chứng transaction trên Atlas sau khi đã áp migration, đặt `.env` trỏ tới `chiikaiwa_dev` rồi chạy `npm run db:verify-atlas-transaction`. Lệnh chỉ chấp nhận URI Atlas và đúng database `chiikaiwa_dev`; nó ghi hai bản ghi có ID riêng trong transaction, cố ý gây lỗi, xác nhận cả hai đã rollback rồi dọn bản ghi thử nếu còn. Lệnh này cần được chạy riêng, không nằm trong CI hoặc `npm run check` vì cần thông tin kết nối Atlas.
+
 ## Chọn kiểm tra theo thay đổi
 
 | Thay đổi                 | Bằng chứng cần có                                                                 |
