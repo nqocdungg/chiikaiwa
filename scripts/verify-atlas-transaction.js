@@ -5,6 +5,8 @@ import {
   disconnectDatabase,
   withTransaction,
 } from '../server/persistence/database.js';
+import { databaseIndexes } from '../server/persistence/migrations/20261103000100-add-design-indexes.js';
+import { matchesIndexDefinition } from '../server/persistence/index-definition.js';
 
 const config = readEnv();
 if (
@@ -24,17 +26,45 @@ let db;
 
 try {
   db = await connectDatabase();
+  /** @type {import('mongoose').mongo.Collection<import('mongoose').mongo.Document & {_id: string}>} */
+  const migrationRecords =
+    /** @type {import('mongoose').mongo.Collection<import('mongoose').mongo.Document & {_id: string}>} */ (
+      db.collection('_schema_migrations')
+    );
+  const appliedIndexMigration = await migrationRecords.findOne({
+    _id: '20261103000100-add-design-indexes.js',
+  });
+  if (!appliedIndexMigration) {
+    throw new Error(
+      'Run npm run db:migrate on chiikaiwa_dev before checking transactions.',
+    );
+  }
+
   const operations = db.collection('operation_receipts');
   const webhooks = db.collection('webhook_receipts');
   const [operationIndexes, webhookIndexes] = await Promise.all([
     operations.listIndexes().toArray(),
     webhooks.listIndexes().toArray(),
   ]);
+  const operationIndexDefinition = databaseIndexes.find(
+    (definition) =>
+      definition.collection === 'operation_receipts' &&
+      definition.key.operationId === 1,
+  );
+  const webhookIndexDefinition = databaseIndexes.find(
+    (definition) =>
+      definition.collection === 'webhook_receipts' &&
+      definition.key.eventId === 1,
+  );
   if (
-    !operationIndexes.some(
-      (index) => index.name === 'actor_action_resource_operation_unique',
+    !operationIndexDefinition ||
+    !webhookIndexDefinition ||
+    !operationIndexes.some((index) =>
+      matchesIndexDefinition(index, operationIndexDefinition),
     ) ||
-    !webhookIndexes.some((index) => index.name === 'eventId_unique')
+    !webhookIndexes.some((index) =>
+      matchesIndexDefinition(index, webhookIndexDefinition),
+    )
   ) {
     throw new Error(
       'Apply the OPS-002 migration on chiikaiwa_dev before checking transactions.',

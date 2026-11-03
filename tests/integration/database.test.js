@@ -11,6 +11,7 @@ import {
   withTransaction,
 } from '../../server/persistence/database.js';
 import { runMigrations } from '../../server/persistence/migrations.js';
+import { matchesIndexDefinition } from '../../server/persistence/index-definition.js';
 import {
   databaseIndexes,
   up as applyDesignIndexes,
@@ -83,6 +84,36 @@ describe('MongoDB replica set', () => {
     expect(
       await db.listCollections({ name: 'must_not_run' }).toArray(),
     ).toEqual([]);
+  });
+
+  it('matches an index by key and options even when its name differs', () => {
+    const definition = databaseIndexes.find(
+      (candidate) =>
+        candidate.collection === 'operation_receipts' &&
+        candidate.key.operationId === 1,
+    );
+    if (!definition) throw new Error('Operation receipt index is missing');
+
+    expect(
+      matchesIndexDefinition(
+        {
+          key: definition.key,
+          name: 'alternate_index_name',
+          unique: true,
+        },
+        definition,
+      ),
+    ).toBe(true);
+    expect(
+      matchesIndexDefinition(
+        {
+          key: definition.key,
+          name: 'alternate_index_name',
+          unique: false,
+        },
+        definition,
+      ),
+    ).toBe(false);
   });
 
   it('applies the database design indexes safely on repeated runs', async () => {
