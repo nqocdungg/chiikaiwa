@@ -1,7 +1,6 @@
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
@@ -9,8 +8,13 @@ import app from '../../server/app.js';
 import {
   connectDatabase,
   disconnectDatabase,
+  withTransaction,
 } from '../../server/persistence/database.js';
 import { runMigrations } from '../../server/persistence/migrations.js';
+import {
+  databaseIndexes,
+  up as applyDesignIndexes,
+} from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 
 /** @type {MongoMemoryReplSet} */
 let replicaSet;
@@ -81,28 +85,57 @@ describe('MongoDB replica set', () => {
     ).toEqual([]);
   });
 
-  it('commits and rolls back real multi-document transactions', async () => {
-    const collection = db.collection('foundation_test');
-    await mongoose.connection.transaction(
-      async (session) => {
-        await collection.insertOne({ key: 'committed-a' }, { session });
-        await collection.insertOne({ key: 'committed-b' }, { session });
-      },
-      {
-        readPreference: 'primary',
-        readConcern: { level: 'snapshot' },
-        writeConcern: { w: 'majority' },
-      },
+  it('applies the database design indexes safely on repeated runs', async () => {
+    const users = db.collection('users');
+    await users.createIndex({ emailKey: 1 }, { name: 'legacy_emailKey' });
+    await expect(applyDesignIndexes(db)).rejects.toThrow(
+      'Conflicting index definition on users.emailKey_unique',
     );
+    await users.dropIndex('legacy_emailKey');
+
+    await applyDesignIndexes(db);
+    await applyDesignIndexes(db);
+
+    for (const definition of databaseIndexes) {
+      const indexes = await db
+        .collection(definition.collection)
+        .listIndexes()
+        .toArray();
+      const index = indexes.find(
+        (candidate) => candidate.name === definition.options.name,
+      );
+      expect(index?.key).toEqual(definition.key);
+      expect(Boolean(index?.unique)).toBe(Boolean(definition.options.unique));
+      expect(index?.expireAfterSeconds ?? null).toBe(
+        definition.options.expireAfterSeconds ?? null,
+      );
+    }
+
+    await users.insertOne({ emailKey: 'duplicate@example.test' });
     await expect(
-      mongoose.connection.transaction(async (session) => {
-        await collection.insertOne({ key: 'rolled-back-a' }, { session });
-        await collection.insertOne({ key: 'rolled-back-b' }, { session });
+      users.insertOne({ emailKey: 'duplicate@example.test' }),
+    ).rejects.toMatchObject({ code: 11000, keyPattern: { emailKey: 1 } });
+  });
+
+  it('commits and rolls back real multi-document transactions', async () => {
+    const first = db.collection('foundation_test');
+    const second = db.collection('foundation_transaction_test');
+    await db.createCollection('foundation_transaction_test');
+    await withTransaction(async (session) => {
+      await first.insertOne({ key: 'committed-a' }, { session });
+      await second.insertOne({ key: 'committed-b' }, { session });
+    });
+    await expect(
+      withTransaction(async (session) => {
+        await first.insertOne({ key: 'rolled-back-a' }, { session });
+        await second.insertOne({ key: 'rolled-back-b' }, { session });
         throw new Error('rollback');
       }),
     ).rejects.toThrow('rollback');
-    expect(await collection.countDocuments({ key: /^committed-/u })).toBe(2);
-    expect(await collection.countDocuments({ key: /^rolled-back-/u })).toBe(0);
+    expect(await first.countDocuments({ key: 'committed-a' })).toBe(1);
+    expect(await second.countDocuments({ key: 'committed-b' })).toBe(1);
+    expect(await first.countDocuments({ key: 'rolled-back-a' })).toBe(0);
+    expect(await second.countDocuments({ key: 'rolled-back-b' })).toBe(0);
   });
 
   it('returns 503 when the previously connected database becomes unavailable', async () => {
