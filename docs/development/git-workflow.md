@@ -61,6 +61,7 @@ Trước commit, xem cả diff và staged diff. Stage đúng file của task, kh
 
 - Đọc release notes, kiểm tra tương thích runtime, peer dependencies và diff manifest/lockfile. Các package cần đồng bộ phiên bản như React/React DOM hoặc Storybook và addons phải được review cùng nhau, kể cả khi nằm ở các PR khác nhau.
 - Giữ phiên bản chính xác trong manifest. Major update không tự cấp quyền đổi stack hoặc nâng Node ngoài nhánh đã thống nhất; `@types/node` phải phù hợp với runtime Node 24.
+- Dependabot bỏ qua major updates của `@types/node`, tiếp tục theo dõi minor/patch nhánh 24. Khi nâng major runtime Node, cập nhật typings và xem lại ngoại lệ này trong cùng task.
 - PR dependency dùng cùng CI và yêu cầu ít nhất một thành viên review như PR khác. Không auto-merge; security updates được ưu tiên xử lý, kiểm tra ảnh hưởng và bản vá trước khi merge.
 - Node, phiên bản npm trong `packageManager` và binary MongoDB ghim trong test/local scripts cần được rà soát riêng; không mặc định Dependabot quản lý các giá trị này.
 
