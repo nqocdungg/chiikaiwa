@@ -1,0 +1,1284 @@
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('../assets/fonts/nunito-variable.ttf') format('truetype');
+}
+/* Shared Chiikaiwa UI, scoped under .ck-app. */
+.ck-app {
+  --bg: #fbf6ed;
+  --paper: #fffdf8;
+  --ink: #40312f;
+  --muted: #75615c;
+  --accent: #863e54;
+  --pink: #f5dce1;
+  --illustration-bg: #f2dad9;
+  --line: #dfd4c9;
+  --sage: #e1e9d5;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  background: var(--bg);
+  font:
+    14px/1.55 'Nunito',
+    'Segoe UI',
+    'Yu Gothic',
+    Meiryo,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  scrollbar-color: #b7a49a transparent;
+  scrollbar-width: thin;
+}
+.ck-app *,
+.ck-app *::before,
+.ck-app *::after {
+  box-sizing: border-box;
+}
+.ck-app :is(h1, h2, h3, p, dl, dd) {
+  margin: 0;
+}
+.ck-app :is(h1, h2, h3) {
+  line-height: 1.22;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.ck-app ::selection {
+  color: var(--paper);
+  background: var(--accent);
+}
+.ck-app :is(button, input, textarea, select) {
+  font: inherit;
+  color: inherit;
+}
+.ck-app button {
+  cursor: pointer;
+  transition:
+    background-color 140ms,
+    color 140ms;
+}
+.ck-app button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.ck-app :is(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+.ck-app :is(input, textarea) {
+  caret-color: var(--accent);
+}
+.ck-app svg {
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.ck-app small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ck-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 17px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.3;
+}
+.ck-button--primary {
+  background: var(--accent);
+  color: #fffdf8 !important;
+  border-color: transparent;
+}
+.ck-button--danger {
+  background: #fbe9e9;
+  color: #943845 !important;
+  border-color: transparent;
+}
+.ck-button:hover:not(:disabled),
+.ck-icon-button:hover:not(:disabled) {
+  background: var(--pink);
+  color: var(--accent);
+}
+.ck-button--primary:hover:not(:disabled) {
+  background: #723347;
+  color: #fffdf8;
+}
+.ck-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+}
+.ck-icon-button[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--pink);
+}
+.ck-text-button {
+  background: transparent;
+  border: 0;
+  color: var(--accent) !important;
+  padding: 7px 3px;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+.ck-text-button:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.ck-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ck-friends {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+.ck-brand {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 25px !important;
+  font-weight: 800 !important;
+  text-decoration: none;
+  letter-spacing: -0.03em;
+}
+.ck-brand > span {
+  display: grid;
+  place-items: center;
+  width: 37px;
+  height: 37px;
+  font-size: 27px;
+  font-weight: 500;
+  border-radius: 50% 44% 50% 42%;
+  color: var(--accent);
+  background: var(--pink);
+}
+.ck-home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 24px 5%;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.ck-home-header nav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.ck-home-header nav a,
+.ck-home-header nav button {
+  background: transparent;
+  border: 0;
+  padding: 9px 5px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+}
+.ck-home-header nav a[aria-current] {
+  color: var(--accent);
+  font-weight: 700;
+}
+.ck-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.ck-avatar {
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  background: var(--sage);
+  font-weight: 700;
+}
+.ck-profile small {
+  font-size: 11px;
+}
+.ck-home {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 50px 5% 22px;
+}
+.ck-home-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  align-items: center;
+  gap: 8%;
+}
+.ck-welcome h1 {
+  font-size: 48px;
+  line-height: 1.18;
+  font-weight: 800;
+}
+.ck-welcome > p {
+  color: var(--muted);
+  font-size: 16px;
+  margin: 22px 0 29px;
+  max-width: 40ch;
+}
+.ck-device-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 21px;
+}
+.ck-study {
+  padding: 14px 30px 23px;
+  background: var(--illustration-bg);
+  border-radius: 15px;
+}
+.ck-study .ck-friends {
+  height: 240px;
+}
+.ck-study h2 {
+  font-size: 21px;
+  margin: 5px 0 9px;
+}
+.ck-study-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 18px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #dbc0c3;
+  font-size: 14px;
+  font-weight: 600 !important;
+  text-align: left;
+}
+.ck-study-link:last-child {
+  border-bottom: 0;
+}
+.ck-study-link > svg:last-child {
+  margin-left: auto;
+}
+.ck-study-link:hover {
+  color: var(--accent);
+}
+.ck-home-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 22px;
+  margin-top: 28px;
+  padding: 21px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.ck-home-preview h2 {
+  font-size: 19px;
+  margin-bottom: 8px;
+}
+.ck-home-preview p {
+  max-width: 75ch;
+  color: var(--muted);
+}
+.ck-home-preview > button {
+  margin-left: auto;
+}
+.ck-home-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 22px;
+  margin-top: 40px;
+  color: var(--muted);
+  font-size: 11px;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+/* The room occupies its viewport. Only each named content region scrolls. */
+.ck-app--room {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.ck-demo-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 8px 14px;
+  padding: 6px 22px;
+  background: #403b37;
+  color: #fff8ee;
+  font-size: 10px;
+  min-height: 34px;
+}
+.ck-demo-bar > span {
+  color: #e3d9ce;
+  margin-right: auto;
+}
+.ck-demo-bar label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ck-demo-bar select {
+  background: #514940;
+  color: #fff8ee;
+  border: 1px solid #8a7b6d;
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 10px;
+}
+.ck-demo-bar button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 3px 2px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ck-demo-bar :is(button, select):focus-visible {
+  outline-color: #f5dce1;
+}
+.ck-room-header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 26px;
+  padding: 15px 26px;
+  min-height: 75px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.ck-room-header .ck-brand {
+  padding-right: 26px;
+  border-right: 1px solid var(--line);
+  font-size: 22px !important;
+}
+.ck-room-heading h1 {
+  font-size: 19px;
+}
+.ck-room-heading > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.ck-room-meta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-left: auto;
+  font-size: 12px;
+}
+.ck-status {
+  color: #44604a;
+}
+.ck-status--warning {
+  color: #7c5424;
+}
+.ck-time {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.ck-tools {
+  display: flex;
+  gap: 4px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+.ck-workspace {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: clamp(164px, 17vw, 230px) minmax(0, 1fr) clamp(
+      264px,
+      24vw,
+      330px
+    );
+  gap: 20px;
+  padding: 22px 26px;
+  overflow: hidden;
+}
+.ck-workspace--wide {
+  grid-template-columns: clamp(164px, 17vw, 230px) minmax(0, 1fr);
+}
+.ck-participants {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+.ck-video {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #e0e7e3;
+  color: #405b4b;
+  border-radius: 12px;
+}
+.ck-video--self {
+  background: #e9e2db;
+  color: #62534b;
+}
+.ck-video-state {
+  position: absolute;
+  left: 13px;
+  top: 11px;
+  font-size: 10px;
+}
+.ck-video-avatar {
+  display: grid;
+  place-items: center;
+  width: 65px;
+  height: 65px;
+  border-radius: 50%;
+  background: #ffffffb0;
+  font-size: 29px;
+  font-weight: 600;
+}
+.ck-video-name {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  bottom: 11px;
+  left: 13px;
+  right: 13px;
+  font-size: 13px;
+}
+.ck-video-name small {
+  font-size: 10px;
+  color: inherit;
+}
+.ck-private-caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.ck-scenario {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--paper);
+  border-radius: 12px;
+  box-shadow: 0 5px 24px #40312f08;
+}
+.ck-scenario-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 10px;
+  padding: 10px 20px;
+  background: var(--sage);
+  font-size: 11px;
+  min-height: 41px;
+}
+.ck-scenario-toolbar > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ck-scenario-toolbar .ck-text-button {
+  font-size: 11px !important;
+  padding: 0;
+}
+.ck-level {
+  margin-left: auto;
+}
+.ck-scenario-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+  scrollbar-gutter: stable;
+  overflow-wrap: anywhere;
+}
+.ck-section-heading h2,
+.ck-draw h2,
+.ck-empty h2 {
+  font-size: 25px;
+}
+.ck-section-heading p,
+.ck-draw > p {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ck-deck-list {
+  margin-top: 15px;
+}
+.ck-deck-list > button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 19px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+.ck-deck-list > button > span {
+  min-width: 0;
+}
+.ck-deck-list > button strong {
+  display: block;
+  font-size: 15px;
+}
+.ck-deck-list > button small {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.ck-deck-list > button > svg:last-child {
+  margin-left: auto;
+}
+.ck-card-table {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  padding: 45px 0;
+}
+.ck-card-table button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 108px;
+  height: 166px;
+  border: 1px solid var(--accent);
+  padding: 28px 15px;
+  border-radius: 12px;
+  background: var(--pink);
+  color: var(--accent);
+}
+.ck-card-table button > span {
+  font-size: 39px;
+}
+.ck-card-table button:hover:not(:disabled) {
+  background: var(--sage);
+}
+.ck-card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 15px;
+}
+.ck-shared-label {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 7px;
+}
+.ck-card-heading h2 {
+  font-size: 24px;
+  line-height: 1.45;
+}
+.ck-translate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 7px;
+  color: var(--accent) !important;
+  font-size: 11px !important;
+}
+.ck-translate[aria-pressed='true'] {
+  background: var(--pink);
+  border-color: transparent;
+}
+.ck-shared-goal {
+  padding: 11px 0 17px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.ck-role-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+.ck-role-letter {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--pink);
+  color: var(--accent);
+  font-weight: 700;
+}
+.ck-role-heading > div > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.ck-role-heading h3 {
+  font-size: 23px;
+  line-height: 1.4;
+}
+.ck-private-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.ck-role-fields {
+  margin-top: 20px !important;
+}
+.ck-role-fields > div {
+  margin-top: 16px;
+}
+.ck-role-fields dt {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.ck-role-fields dd {
+  font-size: 16px;
+  line-height: 1.75;
+  max-width: 70ch;
+}
+.ck-starter {
+  padding: 15px 0 0;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 17px;
+}
+.ck-scenario-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+.ck-scenario-actions > .ck-icon-button {
+  margin-right: auto;
+}
+.ck-scenario-actions .ck-button {
+  font-size: 12px !important;
+}
+.ck-consent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 14px;
+  padding: 13px 18px;
+  background: #faedcf;
+  color: #705221;
+  font-size: 12px;
+}
+.ck-consent p {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.ck-consent .ck-button {
+  min-height: 35px;
+  padding: 7px 11px;
+  font-size: 11px !important;
+}
+.ck-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.ck-panel > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 0 10px 7px;
+  border-bottom: 1px solid var(--line);
+}
+.ck-panel h2 {
+  font-size: 18px;
+}
+.ck-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 8px 18px;
+  scrollbar-gutter: stable;
+}
+.ck-knowledge {
+  position: relative;
+  padding: 21px 40px 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.ck-knowledge > .ck-icon-button {
+  position: absolute;
+  top: 13px;
+  right: 0;
+}
+.ck-knowledge .ck-icon-button[aria-pressed='true'] svg {
+  fill: currentColor;
+}
+.ck-knowledge h3 {
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.ck-knowledge > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.ck-knowledge p {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.ck-knowledge .ck-example {
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.ck-save-status {
+  display: block;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.ck-note {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 19px;
+}
+.ck-note > label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ck-note textarea {
+  width: 100%;
+  min-height: 240px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  resize: vertical;
+  line-height: 1.8;
+}
+.ck-note textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+.ck-note > span {
+  font-size: 11px;
+}
+.ck-note > .ck-button {
+  align-self: flex-start;
+  font-size: 11px !important;
+}
+.ck-muted {
+  color: var(--muted);
+}
+.ck-error {
+  color: #963c45;
+}
+.ck-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 40px 12px;
+  text-align: center;
+}
+.ck-empty > svg {
+  color: var(--accent);
+}
+.ck-empty p {
+  color: var(--muted);
+  max-width: 50ch;
+}
+.ck-chat-empty {
+  padding: 27px 0;
+}
+.ck-chat-empty small {
+  max-width: 35ch;
+}
+.ck-chat-empty label {
+  align-self: flex-start;
+  font-size: 12px;
+}
+.ck-chat-empty input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+}
+.ck-callbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+  padding: 12px 26px;
+  min-height: 66px;
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+}
+.ck-callbar > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.ck-device-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ck-device-controls .ck-icon-button {
+  background: var(--bg);
+  border-color: var(--line);
+  width: 42px;
+  height: 42px;
+}
+.ck-device-controls .ck-icon-button[aria-pressed='true'] {
+  background: var(--pink);
+  border-color: transparent;
+  color: var(--accent);
+}
+.ck-recovery {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 9px;
+  padding: 9px 26px;
+  background: #faedcf;
+  color: #705221;
+  font-size: 12px;
+}
+.ck-sharing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  margin-bottom: 22px;
+  min-height: 150px;
+  background: #e8e9e5;
+  color: #48614c;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.ck-feedback {
+  position: fixed;
+  z-index: 5;
+  left: 50%;
+  bottom: 82px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(90vw, 600px);
+  padding: 8px 10px 8px 17px;
+  background: #403b37;
+  color: #fff8ee;
+  border-radius: 10px;
+  box-shadow: 0 8px 25px #40312f20;
+  font-size: 12px;
+}
+.ck-dialog {
+  max-width: min(460px, calc(100vw - 32px));
+  padding: 29px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 20px 70px #0003;
+}
+.ck-dialog::backdrop {
+  background: #40312f75;
+}
+.ck-dialog h2 {
+  font-size: 25px;
+}
+.ck-dialog p {
+  margin: 15px 0 25px;
+  color: var(--muted);
+}
+.ck-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
+  gap: 60px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 40px 8%;
+}
+.ck-summary h2 {
+  font-size: 32px;
+}
+.ck-summary h2 + p {
+  margin-top: 12px;
+  color: var(--muted);
+}
+.ck-summary dl {
+  margin: 27px 0;
+}
+.ck-summary dl > div {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.ck-summary dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.ck-summary dd {
+  font-size: 13px;
+}
+.ck-summary-note {
+  margin-bottom: 24px;
+}
+.ck-summary-note h3 {
+  font-size: 17px;
+}
+.ck-summary-note p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 12px 0 8px;
+}
+.ck-summary aside {
+  align-self: center;
+  text-align: center;
+  color: var(--muted);
+}
+.ck-summary-art {
+  padding: 24px;
+  background: var(--illustration-bg);
+  border-radius: 15px;
+}
+.ck-summary aside > p {
+  font-size: 23px;
+  margin-top: 18px;
+}
+@media (max-width: 1100px) {
+  .ck-workspace {
+    grid-template-columns: 148px minmax(0, 1fr) 248px;
+    gap: 15px;
+    padding: 17px;
+  }
+  .ck-workspace--wide {
+    grid-template-columns: 148px minmax(0, 1fr);
+  }
+  .ck-home-layout {
+    gap: 5%;
+  }
+  .ck-welcome h1 {
+    font-size: 40px;
+  }
+  .ck-scenario-scroll {
+    padding: 20px;
+  }
+  .ck-card-heading {
+    gap: 9px;
+  }
+  .ck-card-heading h2 {
+    font-size: 21px;
+  }
+}
+@media (max-width: 900px) {
+  .ck-room-header {
+    padding: 12px 17px;
+    gap: 15px;
+    min-height: 65px;
+  }
+  .ck-room-header .ck-brand {
+    font-size: 0 !important;
+    padding-right: 15px;
+  }
+  .ck-room-meta {
+    gap: 10px;
+  }
+  .ck-status {
+    display: none;
+  }
+  .ck-tools {
+    padding-left: 10px;
+  }
+  .ck-workspace {
+    grid-template-columns: 110px minmax(0, 1fr) 210px;
+    gap: 12px;
+    padding: 14px;
+  }
+  .ck-workspace--wide {
+    grid-template-columns: 110px minmax(0, 1fr);
+  }
+  .ck-video-avatar {
+    width: 46px;
+    height: 46px;
+    font-size: 22px;
+  }
+  .ck-video-state {
+    left: 8px;
+    top: 9px;
+    font-size: 9px;
+  }
+  .ck-video-name {
+    left: 8px;
+    right: 8px;
+    font-size: 11px;
+  }
+  .ck-private-caption {
+    font-size: 8px;
+    gap: 3px;
+  }
+  .ck-scenario-scroll {
+    padding: 16px;
+  }
+  .ck-scenario-toolbar {
+    padding: 10px 13px;
+    font-size: 10px;
+  }
+  .ck-card-heading {
+    flex-wrap: wrap;
+  }
+  .ck-role-heading {
+    flex-wrap: wrap;
+  }
+  .ck-private-label {
+    margin-left: 0;
+  }
+  .ck-scenario-actions {
+    gap: 8px;
+    padding: 9px 12px;
+  }
+  .ck-scenario-actions .ck-button {
+    font-size: 11px !important;
+    padding: 9px 11px;
+  }
+  .ck-consent {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+  .ck-callbar {
+    padding: 10px 17px;
+    min-height: 62px;
+  }
+  .ck-demo-bar {
+    padding: 6px 15px;
+    gap: 6px 10px;
+  }
+}
+/* Small windows/zoom retain both people and safe controls. Opening tools replaces
+   the card in the second column; closing tools restores it without losing state. */
+@media (max-width: 650px) {
+  .ck-workspace,
+  .ck-workspace--wide {
+    grid-template-columns: 90px minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+  .ck-participants {
+    grid-column: 1;
+    grid-row: 1;
+    gap: 9px;
+  }
+  .ck-scenario {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .ck-panel {
+    grid-column: 2;
+    grid-row: 1;
+    z-index: 1;
+    background: var(--bg);
+  }
+  .ck-workspace:not(.ck-workspace--wide) .ck-scenario {
+    visibility: hidden;
+  }
+  .ck-video-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 19px;
+  }
+  .ck-room-heading > span,
+  .ck-callbar > span {
+    display: none;
+  }
+  .ck-room-heading h1 {
+    font-size: 16px;
+  }
+  .ck-room-header {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .ck-room-header .ck-brand {
+    padding-right: 8px;
+  }
+  .ck-tools {
+    padding-left: 0;
+    border-left: 0;
+    gap: 0;
+  }
+  .ck-time {
+    font-size: 11px;
+  }
+  .ck-icon-button {
+    width: 34px;
+    height: 34px;
+  }
+  .ck-callbar {
+    gap: 10px;
+    padding: 9px 12px;
+  }
+  .ck-demo-bar > span {
+    margin-right: 0;
+  }
+  .ck-private-caption {
+    flex-wrap: wrap;
+    text-align: center;
+  }
+  .ck-home-header {
+    gap: 15px;
+    padding: 18px 22px;
+  }
+  .ck-home-header .ck-brand {
+    font-size: 21px !important;
+  }
+  .ck-home-header nav,
+  .ck-profile > span:last-child {
+    display: none;
+  }
+  .ck-home {
+    padding: 30px 22px 20px;
+  }
+  .ck-home-layout {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  .ck-welcome h1 {
+    font-size: 36px;
+  }
+  .ck-study .ck-friends {
+    height: 200px;
+  }
+  .ck-card-table {
+    gap: 10px;
+    padding: 25px 0;
+  }
+  .ck-card-table button {
+    width: 72px;
+    height: 125px;
+    padding: 18px 10px;
+  }
+  .ck-summary {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 25px;
+  }
+  .ck-summary dl > div {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+  .ck-summary aside .ck-friends {
+    max-height: 180px;
+  }
+}
+@media (max-height: 500px) {
+  .ck-workspace {
+    padding-block: 10px;
+  }
+  .ck-video-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+  }
+  .ck-video-state {
+    font-size: 8px;
+    top: 5px;
+  }
+  .ck-video-name {
+    font-size: 9px;
+    bottom: 5px;
+  }
+  .ck-video-name small {
+    display: inline;
+    margin-left: 4px;
+    font-size: 8px;
+  }
+  .ck-room-header {
+    min-height: 55px;
+    padding-block: 9px;
+  }
+  .ck-callbar {
+    min-height: 57px;
+    padding-block: 7px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ck-app *,
+  .ck-app *::before,
+  .ck-app *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
