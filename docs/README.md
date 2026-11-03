@@ -15,8 +15,8 @@
 ## Hướng dẫn development
 
 - [Chạy local](development/local.md): frontend, API và database.
-
 - [Contributing](../CONTRIBUTING.md): quy trình triển khai và điều kiện hoàn thành.
+- [Scrum và quản lý công việc](development/scrum.md): sprint 2 tuần, Project Tracker, Task ID và Definition of Done.
 - [Git workflow](development/git-workflow.md): branch, commit, PR và merge.
 - [Coding conventions](development/coding-conventions.md): tổ chức source và quy tắc triển khai.
 - [Testing](development/testing.md): lựa chọn kiểm thử và cách chạy check.
@@ -29,6 +29,8 @@
 | Công việc                    | Tài liệu cần đối chiếu                                             |
 | ---------------------------- | ------------------------------------------------------------------ |
 | Bắt đầu một chức năng        | SRS, backlog và kiến trúc; đọc thêm các phần bên dưới theo phạm vi |
+| Nhận task, cập nhật tiến độ  | Scrum, Task Tracker và Task Handoff trên Project Tracker           |
+| Branch, commit, PR, release  | Git workflow và template PR                                        |
 | Giao diện                    | UI/UX và contract API liên quan                                    |
 | API, phân quyền              | SRS, API, kiến trúc và database liên quan                          |
 | Schema, index, migration     | Database, kiến trúc, API và migration guide                        |

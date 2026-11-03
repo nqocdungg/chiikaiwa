@@ -2,13 +2,15 @@
 
 ## Trước khi triển khai
 
-- Đọc [CONTRIBUTING.md](CONTRIBUTING.md), [coding conventions](docs/development/coding-conventions.md) và [testing guide](docs/development/testing.md). Khi thao tác Git, đọc thêm [Git workflow](docs/development/git-workflow.md).
+- Đọc [CONTRIBUTING.md](CONTRIBUTING.md), [coding conventions](docs/development/coding-conventions.md) và [testing guide](docs/development/testing.md). Khi nhận task, đọc [Scrum và quản lý công việc](docs/development/scrum.md); khi thao tác Git, đọc [Git workflow](docs/development/git-workflow.md).
 - Dùng [docs/README.md](docs/README.md) để chọn tài liệu thiết kế theo task. Task chức năng cần đọc SRS, backlog, kiến trúc và các phần UI/API/database liên quan; không cần đọc lại toàn bộ thiết kế cho một sửa đổi tài liệu nhỏ.
 - Kiểm tra trạng thái/diff Git, source hiện có, manifest và lockfile trước khi sửa. Giữ các thay đổi đang có của người khác.
 - Nếu yêu cầu hoặc thiết kế mâu thuẫn/thiếu thông tin ảnh hưởng triển khai, nêu điểm cần làm rõ, đưa lựa chọn cùng khuyến nghị có lý do; chờ câu trả lời cho phần phụ thuộc. Có thể tiếp tục phần độc lập đã đủ dữ liệu; không coi im lặng là đồng ý.
 
 ## Phạm vi và implementation
 
+- Dùng Task ID hiện có trên Project Tracker: OPS/BE/FE/DATA/QA và ba chữ số; không tự tạo mã hoặc suy diễn task đã Done. Tra Task Handoff để xác định AC, dependencies, owner/reviewer và bằng chứng cần có.
+- Task thông thường tách từ và PR về `develop`; release/hotfix và bước chuyển đổi khi chưa có `develop` theo Git workflow. Merge commit được dùng; squash là tùy chọn cho PR task. Không tự đổi cấu hình GitHub hoặc sửa Project Tracker ngoài phạm vi được giao.
 - Giữ JavaScript ES modules, Node 24, npm workspaces và kiến trúc React/Vite + Express/Mongoose đã chốt. Không tự chuyển stack, thêm chức năng, dependency hoặc abstraction ngoài nhu cầu task.
 - Đặt code theo coding conventions. `api/` chỉ là entry triển khai; không thêm logic nghiệp vụ vào đó. Không import mã server hoặc secret vào frontend.
 - Giữ controller mỏng, nghiệp vụ tại service khi cần; không tạo đủ tầng chỉ để chuyển tiếp lời gọi. Viết code gọn, rõ, không để nội dung hội thoại hoặc chữ ký công cụ trong sản phẩm.
@@ -25,4 +27,4 @@
 
 ## Code Review Rules
 
-Ưu tiên lỗi có trigger, ảnh hưởng và vị trí cụ thể: sai yêu cầu/contract, vượt quyền, mất hoặc nhân đôi dữ liệu, lộ secret, lỗi đồng thời hoặc xử lý dịch vụ sai. Đối chiếu test và tài liệu nguồn; không đề nghị refactor ngoài phạm vi hoặc áp convention theo sở thích. Thay đổi do agent tạo vẫn cần thành viên review theo CONTRIBUTING.
+Ưu tiên lỗi có trigger, ảnh hưởng và vị trí cụ thể: sai yêu cầu/contract, vượt quyền, mất hoặc nhân đôi dữ liệu, lộ secret, lỗi đồng thời hoặc xử lý dịch vụ sai. Đối chiếu test và tài liệu nguồn; không đề nghị refactor ngoài phạm vi hoặc áp convention theo sở thích. Phân loại comment Must fix, Should fix, Nit hoặc Question theo Git workflow. Mọi thay đổi cần review độc lập theo CONTRIBUTING.

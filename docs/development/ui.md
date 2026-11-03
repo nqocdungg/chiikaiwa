@@ -32,7 +32,7 @@ client/src/
 └── assets/             Minh họa, font và giấy phép
 ```
 
-Component chỉ dùng trong phòng ở `features/kaiwa/components/`; component dùng giữa các chức năng ở `components/`. Story đặt cạnh component tương ứng. Không đưa trang chủ hoặc tổng kết vào thư mục phòng. Các đường dẫn bàn giao trước đây dưới `features/kaiwa/` được chuyển như cây trên: Home sang `features/home/`, SessionSummary sang `features/session-summary/`, Friends sang `components/`, component của phòng sang `features/kaiwa/components/`, fixtures và điều hướng mẫu sang `demo/`.
+Component chỉ dùng trong phòng ở `features/kaiwa/components/`; component dùng giữa các chức năng ở `components/`. Story đặt cạnh component tương ứng. Không đưa trang chủ hoặc tổng kết vào thư mục phòng.
 
 | Component          | Cách dùng                                                                                                         |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
@@ -74,7 +74,7 @@ npm run storybook
 
 Mở http://127.0.0.1:6006. Nhóm **Chiikaiwa** có các màn và trạng thái; nhóm **Components** xem riêng component, thay props trong Controls. Props `initial*` khởi tạo lại demo khi đổi Controls. Thanh DEMO mô phỏng trạng thái và phản hồi đối tác.
 
-Khi thêm component, viết story cạnh source, tái sử dụng component thật và minh họa các trạng thái cần review. Không sao chép giao diện vào story. Tạm thời ưu tiên xem trực tiếp, lint/typecheck và build; chưa viết test riêng cho demo UI.
+Khi thêm component, viết story cạnh source, tái sử dụng component thật và minh họa các trạng thái cần review. Không sao chép giao diện vào story. Kiểm tra trực tiếp các trạng thái trong story, lint/typecheck và build. Khi thay đổi hành vi sản phẩm, kiểm thử theo [testing guide](testing.md).
 
 ```sh
 npm run build-storybook
@@ -82,13 +82,19 @@ npm run build-storybook
 
 Output ở `storybook-static/`, upload cả thư mục lên static hosting hoặc Deploys của site Netlify. Không đưa output và cache vào source. Demo không cần backend hay `.env`.
 
+## Giới hạn demo
+
+Chỉ bộ cà phê có ba tình huống tương tác. Chat, ghép bạn, mã mời, học liệu và thiết bị chưa kết nối dịch vụ. Ghi chú/kiến thức lưu trong bộ nhớ, reload sẽ mất. Hình minh họa là asset demo; cần xác nhận quyền sử dụng trước phát hành sản phẩm.
+
+Yêu cầu sản phẩm đầy đủ: [UI/UX](../design/04-ui-ux-design.md), [SRS](../design/02-srs.md), [API](../design/07-api-specification.md).
+
 ## Kết nối MCP để code UI với AI
 
 MCP là tùy chọn cho người phát triển. Repo hiện chưa cài addon MCP; bản static trên Netlify chỉ để xem UI, không có endpoint `/mcp`.
 
 ### Bật server local
 
-Chạy tại root repo để cài và đăng ký addon:
+Khi task có phạm vi bổ sung MCP, chạy tại root repo để cài và đăng ký addon; review thay đổi manifest và lockfile trong cùng PR:
 
 ```sh
 npx storybook add @storybook/addon-mcp
@@ -129,12 +135,8 @@ Prompt kiểm tra kết nối:
 
 Prompt làm UI:
 
-> Đọc docs/development/ui.md và component liên quan qua Storybook MCP. Sửa [yêu cầu cụ thể], dùng lại component hiện có, giữ font và màu đã chốt. Cập nhật story để team xem; chưa viết test UI, không chạy Git.
+> Thực hiện task `<TASK-ID>` theo AGENTS.md, CONTRIBUTING.md và Task Handoff. Đọc docs/development/ui.md và component liên quan qua Storybook MCP. Dùng lại component hiện có, giữ font và màu của UI. Cập nhật story và kiểm chứng theo testing guide; branch, commit và PR theo Git workflow. Không tự commit, push, merge hoặc deploy khi chưa được giao.
 
 AI cần đối chiếu props trong source/stories, không tự đoán API component. Sau khi sửa, xem story liên quan và build Storybook. Nếu MCP không kết nối được, kiểm tra server/cổng và addon; vẫn có thể đọc source và dùng Storybook bình thường. Mỗi thành viên cấu hình client MCP trên máy mình; cấu hình addon và lockfile được chia sẻ trong repo khi team chọn bật MCP.
 
-## Giới hạn demo
-
-Chỉ bộ cà phê có ba tình huống tương tác. Chat, ghép bạn, mã mời, học liệu và thiết bị chưa kết nối dịch vụ. Ghi chú/kiến thức lưu trong bộ nhớ, reload sẽ mất. Hình minh họa là asset demo; cần xác nhận quyền sử dụng trước phát hành sản phẩm.
-
-Yêu cầu sản phẩm đầy đủ: [UI/UX](../design/04-ui-ux-design.md), [SRS](../design/02-srs.md), [API](../design/07-api-specification.md).
+Task UI dùng Task ID hiện có trên Project Tracker, đối chiếu AC và yêu cầu kiểm thử trong Task Handoff. Làm việc theo [Git workflow](git-workflow.md) và [quy trình Scrum](scrum.md); bản demo hoặc Storybook build thành công không thay thế tích hợp API/service thật và Definition of Done.

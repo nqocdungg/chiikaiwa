@@ -40,6 +40,8 @@ Chạy kiểm tra mục tiêu khi phát triển, rồi `npm run check` trước 
 
 [Workflow CI](../../.github/workflows/ci.yml) chạy trên pull request, push vào `main` và khi được kích hoạt thủ công. Job `check` dùng Node theo `.nvmrc`, cài npm theo `packageManager` trong `package.json`, chạy `npm ci` rồi `npm run check`. Giữ cùng bộ kiểm tra cho PR của thành viên và Dependabot.
 
+Khi chuyển sang Git Flow, bổ sung trigger push `develop` theo [checklist chuyển đổi](git-workflow.md#chuyển-sang-git-flow). CI hiện chưa kiểm tra quy ước tên branch, commit hoặc tiêu đề PR; reviewer đối chiếu Git workflow.
+
 CI chỉ cần quyền đọc source, không cần secret, Atlas hoặc dịch vụ thật. Integration tests tự tải binary MongoDB và tạo replica set tạm trên runner; lỗi tải binary cần được phân biệt với lỗi test. Không bỏ integration tests hoặc cấp thêm quyền để làm PR của bot pass.
 
 Khi thay đổi dependency hoặc workflow, kiểm tra cài mới bằng `npm ci` và toàn bộ `npm run check`. Kết quả local không thay thế lần chạy Actions trên GitHub; trước merge cần job `check` thành công trên PR. CI không tự triển khai sản phẩm và không chứng minh các tích hợp trên Vercel hoặc dịch vụ ngoài đã được nghiệm thu.
@@ -55,6 +57,8 @@ Khi thay đổi dependency hoặc workflow, kiểm tra cài mới bằng `npm ci
 - Không thêm test chỉ để tăng số lượng hoặc coverage. Không tự hạ assertion hay skip test để làm CI xanh.
 
 ## Báo cáo kết quả
+
+Ghi kết quả vào `Evidence / PR` của Task Tracker và các ca liên quan trong `Test Cases` theo [quản lý công việc](scrum.md). Kèm Task ID, Test ID, build/commit, environment, ngày chạy, actual result và bằng chứng đủ để tái hiện. Chỉ ghi Passed khi đạt đầy đủ Expected Result; ca chưa chạy giữ Not Run. Lỗi có bước tái hiện và task sửa, sau đó retest bản sửa.
 
 Ghi lệnh đã chạy, kết quả và giới hạn. Phân biệt lỗi implementation với việc chưa đủ môi trường kiểm thử; không ghi pass cho phần chưa chạy. Khi lỗi, giữ bằng chứng tái hiện và xử lý nguyên nhân trước khi chạy lại.
 
