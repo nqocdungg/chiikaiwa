@@ -54,3 +54,20 @@ Trước commit, xem cả diff và staged diff. Stage đúng file của task, kh
 - Tác giả xử lý các nhận xét ảnh hưởng tính đúng và chờ CI pass trước khi merge. CI chưa chạy không được ghi thành pass.
 
 Ưu tiên squash merge cho một PR hoàn chỉnh, với commit message đại diện cho toàn bộ thay đổi. Xóa branch sau merge. Branch protection và quyền merge cần được thiết lập trên GitHub; tài liệu này không tự bật các cấu hình đó.
+
+## Cập nhật dependency
+
+[Dependabot](../../.github/dependabot.yml) kiểm tra npm workspaces và GitHub Actions hằng tuần vào thứ Hai, 09:00 giờ Việt Nam. Các workspace dùng chung lockfile tại root. Minor/patch npm được gom theo runtime và development; minor/patch Actions được gom riêng. Major updates tạo PR riêng. Giới hạn PR version updates đang mở là 3 cho npm và 2 cho Actions.
+
+- Đọc release notes, kiểm tra tương thích runtime, peer dependencies và diff manifest/lockfile. Các package cần đồng bộ phiên bản như React/React DOM hoặc Storybook và addons phải được review cùng nhau, kể cả khi nằm ở các PR khác nhau.
+- Giữ phiên bản chính xác trong manifest. Major update không tự cấp quyền đổi stack hoặc nâng Node ngoài nhánh đã thống nhất; `@types/node` phải phù hợp với runtime Node 24.
+- PR dependency dùng cùng CI và yêu cầu ít nhất một thành viên review như PR khác. Không auto-merge; security updates được ưu tiên xử lý, kiểm tra ảnh hưởng và bản vá trước khi merge.
+- Node, phiên bản npm trong `packageManager` và binary MongoDB ghim trong test/local scripts cần được rà soát riêng; không mặc định Dependabot quản lý các giá trị này.
+
+## Thiết lập trên GitHub
+
+Maintainer cần xác minh và bật dependency graph, Dependabot alerts và security updates trong repository settings. Các nhóm trong YAML chỉ áp dụng cho version updates; giữ security updates riêng ở giai đoạn đầu. Lịch hằng tuần và giới hạn PR version updates không trì hoãn hoặc giới hạn PR security updates theo cùng cách.
+
+File Dependabot phải có trên default branch `main` để version updates hoạt động. Sau lần chạy đầu, kiểm tra bot nhận đủ manifest root, `client`, `server` và cập nhật lockfile chung; PR của bot phải chạy CI.
+
+Thiết lập ruleset/branch protection cho `main`: yêu cầu PR, check `check` thành công, ít nhất một approval từ thành viên khác, giải quyết review conversations, chặn force-push và xóa branch. Chọn check từ lần chạy GitHub thực tế. Khả năng bảo vệ private repository phụ thuộc gói GitHub; nếu chưa hỗ trợ, team vẫn phải tuân quy trình review và CI trước merge. Không coi cấu hình trong repository là bằng chứng các settings này đã được bật.

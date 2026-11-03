@@ -36,6 +36,14 @@ Integration tests tự khởi động replica set tạm, dùng database thử v�
 
 Chạy kiểm tra mục tiêu khi phát triển, rồi `npm run check` trước PR có thay đổi code/tooling. CI chạy lại cùng bộ check. PR chỉ sửa tài liệu vẫn phải có kết quả kiểm tra tài liệu và chờ CI; không cần thêm test ứng dụng để kiểm tra một sửa đổi văn bản.
 
+## Continuous integration
+
+[Workflow CI](../../.github/workflows/ci.yml) chạy trên pull request, push vào `main` và khi được kích hoạt thủ công. Job `check` dùng Node theo `.nvmrc`, cài npm theo `packageManager` trong `package.json`, chạy `npm ci` rồi `npm run check`. Giữ cùng bộ kiểm tra cho PR của thành viên và Dependabot.
+
+CI chỉ cần quyền đọc source, không cần secret, Atlas hoặc dịch vụ thật. Integration tests tự tải binary MongoDB và tạo replica set tạm trên runner; lỗi tải binary cần được phân biệt với lỗi test. Không bỏ integration tests hoặc cấp thêm quyền để làm PR của bot pass.
+
+Khi thay đổi dependency hoặc workflow, kiểm tra cài mới bằng `npm ci` và toàn bộ `npm run check`. Kết quả local không thay thế lần chạy Actions trên GitHub; trước merge cần job `check` thành công trên PR. CI không tự triển khai sản phẩm và không chứng minh các tích hợp trên Vercel hoặc dịch vụ ngoài đã được nghiệm thu.
+
 ## Nguyên tắc viết test
 
 - Kiểm tra hành vi và bất biến, không sao chép implementation thành expected result.
