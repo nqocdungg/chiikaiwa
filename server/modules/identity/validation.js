@@ -188,11 +188,8 @@ export function validateRegisterInput(body) {
     fields.push(displayNameRes.error);
   }
 
-  if (fields.length > 0) {
-    throw createValidationError(fields);
-  }
-
   if (
+    fields.length > 0 ||
     'error' in emailRes ||
     'error' in passwordRes ||
     'error' in displayNameRes

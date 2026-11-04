@@ -21,7 +21,6 @@ import {
   logoutSession,
   registerUser,
 } from './identity-service.js';
-import { validateLoginInput } from './validation.js';
 
 export function createAuthRouter() {
   const router = express.Router();
@@ -69,10 +68,9 @@ export function createAuthRouter() {
           : undefined;
 
       await enforceLoginRateLimit({ ip, emailKey: normalizedEmailKey });
-      validateLoginInput(request.body);
 
-      const authEnv = readAuthEnv();
       const { user, expiresAt, jwtToken } = await loginUser(request.body);
+      const authEnv = readAuthEnv();
       setAuthSessionCookie(response, jwtToken, expiresAt, {
         secure: authEnv.secureCookies,
       });
