@@ -233,4 +233,222 @@ describe('AuthContext and Identity lifecycle', () => {
     expect(result.current.kind).toBe('unauthenticated');
     expect(result.current.user).toBeNull();
   });
+
+  it('clears isLoading to false when refreshSession receives 401 SESSION_EXPIRED from an active session', async () => {
+    const mockUser = {
+      id: '507f1f77bcf86cd799439011',
+      email: 'learner@chiikaiwa.com',
+      displayName: 'Hạnh Nhi',
+      role: 'learner',
+      version: 1,
+      status: 'active',
+    };
+
+    vi.spyOn(api, 'get')
+      .mockImplementationOnce(async () => ({
+        data: { kind: 'user', user: mockUser },
+        meta: { requestId: 'req-init' },
+        epoch: getIdentityEpoch(),
+      }))
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 401,
+          code: 'SESSION_EXPIRED',
+          message: 'Phiên đăng nhập đã hết hạn.',
+        }),
+      );
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => <AuthProvider>{children}</AuthProvider>,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.kind).toBe('user');
+    expect(result.current.isLoading).toBe(false);
+
+    await act(async () => {
+      await result.current.refreshSession();
+    });
+
+    expect(result.current.kind).toBe('unauthenticated');
+    expect(result.current.user).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('handles overlapping refreshSession calls without restoring stale user or sticking isLoading', async () => {
+    /** @type {(val: any) => void} */
+    let resolveFirst = () => {};
+    /** @type {(err: any) => void} */
+    let rejectSecond = () => {};
+
+    const firstStartEpoch = getIdentityEpoch();
+    vi.spyOn(api, 'get')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectSecond = reject;
+          }),
+      );
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => (
+        <AuthProvider skipInitialCheck>{children}</AuthProvider>
+      ),
+    });
+
+    /** @type {Promise<void>} */
+    let p1;
+    /** @type {Promise<void>} */
+    let p2;
+    act(() => {
+      p1 = result.current.refreshSession();
+      p2 = result.current.refreshSession();
+    });
+
+    expect(result.current.isLoading).toBe(true);
+
+    // First (superseded) request resolves first -> must NOT end loading or set stale user
+    await act(async () => {
+      resolveFirst({
+        data: {
+          kind: 'user',
+          user: {
+            id: 'stale-u',
+            email: 'stale@chiikaiwa.com',
+            displayName: 'Stale',
+            role: 'learner',
+            status: 'active',
+            version: 1,
+          },
+        },
+        meta: { requestId: 'req-stale' },
+        epoch: firstStartEpoch,
+      });
+      await p1;
+    });
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.user).toBeNull();
+
+    // Second (latest) request rejects with 401 -> must set unauthenticated and end loading
+    await act(async () => {
+      rejectSecond(
+        new ApiError({
+          status: 401,
+          code: 'SESSION_EXPIRED',
+          message: 'Expired',
+        }),
+      );
+      await p2;
+    });
+
+    expect(result.current.kind).toBe('unauthenticated');
+    expect(result.current.user).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('surfaces server/network/CSRF errors on logout without faking server revocation or auto-retrying', async () => {
+    vi.spyOn(api, 'get').mockImplementationOnce(async () => ({
+      data: {
+        kind: 'user',
+        user: {
+          id: 'u-active',
+          email: 'active@chiikaiwa.com',
+          displayName: 'Active',
+          role: 'learner',
+          status: 'active',
+          version: 1,
+        },
+      },
+      meta: { requestId: 'me-active' },
+      epoch: getIdentityEpoch(),
+    }));
+
+    const postSpy = vi
+      .spyOn(api, 'post')
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 503,
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Tạm thời gián đoạn.',
+        }),
+      )
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 0,
+          code: 'NETWORK_ERROR',
+          message: 'Mất kết nối mạng.',
+        }),
+      )
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 403,
+          code: 'CSRF_INVALID',
+          message: 'CSRF không hợp lệ.',
+        }),
+      );
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => <AuthProvider>{children}</AuthProvider>,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.kind).toBe('user');
+    setPrivateCache('sensitive-key', { secret: true });
+
+    // 1. 503 SERVICE_UNAVAILABLE
+    /** @type {ApiError | undefined} */
+    let err503;
+    await act(async () => {
+      try {
+        await result.current.logout();
+      } catch (err) {
+        err503 = /** @type {ApiError} */ (err);
+      }
+    });
+    expect(err503).toBeInstanceOf(ApiError);
+    expect(err503?.status).toBe(503);
+    expect(result.current.error?.code).toBe('SERVICE_UNAVAILABLE');
+    expect(result.current.kind).toBe('user');
+    expect(result.current.isLoading).toBe(false);
+    expect(getPrivateCache('sensitive-key')).toBeUndefined();
+
+    // 2. Network error
+    /** @type {ApiError | undefined} */
+    let errNet;
+    await act(async () => {
+      try {
+        await result.current.logout();
+      } catch (err) {
+        errNet = /** @type {ApiError} */ (err);
+      }
+    });
+    expect(errNet?.code).toBe('NETWORK_ERROR');
+    expect(result.current.kind).toBe('user');
+
+    // 3. 403 CSRF_INVALID -> must not auto-retry
+    /** @type {ApiError | undefined} */
+    let errCsrf;
+    await act(async () => {
+      try {
+        await result.current.logout();
+      } catch (err) {
+        errCsrf = /** @type {ApiError} */ (err);
+      }
+    });
+    expect(errCsrf?.code).toBe('CSRF_INVALID');
+    expect(postSpy).toHaveBeenCalledTimes(3);
+  });
 });

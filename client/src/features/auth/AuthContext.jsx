@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../services/api-client.js';
 import {
   clearPrivateCache,
@@ -33,6 +33,7 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
   );
   const [isLoading, setIsLoading] = useState(!skipInitialCheck);
   const [error, setError] = useState(/** @type {ApiError | null} */ (null));
+  const authRequestSeqRef = useRef(0);
 
   const resetState = useCallback(() => {
     setUser(null);
@@ -118,20 +119,27 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
   );
 
   const checkAuth = useCallback(async () => {
+    const requestSeq = ++authRequestSeqRef.current;
     const startEpoch = getIdentityEpoch();
     setIsLoading(true);
     setError(null);
     try {
       const res = await api.get('/auth/me');
+      if (requestSeq !== authRequestSeqRef.current) {
+        return;
+      }
       const data =
         /** @type {{kind?: string, user?: SelfUser, guest?: GuestSession}} */ (
           res.data
         );
       applyMeResponse(data, res.epoch ?? startEpoch);
     } catch (err) {
+      if (requestSeq !== authRequestSeqRef.current) {
+        return;
+      }
       handleMeError(err, startEpoch);
     } finally {
-      if (startEpoch === getIdentityEpoch()) {
+      if (requestSeq === authRequestSeqRef.current) {
         setIsLoading(false);
       }
     }
@@ -142,11 +150,12 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
       return;
     }
     let isMounted = true;
+    const requestSeq = ++authRequestSeqRef.current;
     const startEpoch = getIdentityEpoch();
     api
       .get('/auth/me')
       .then((res) => {
-        if (!isMounted) return;
+        if (!isMounted || requestSeq !== authRequestSeqRef.current) return;
         const data =
           /** @type {{kind?: string, user?: SelfUser, guest?: GuestSession}} */ (
             res.data
@@ -154,11 +163,11 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
         applyMeResponse(data, res.epoch ?? startEpoch);
       })
       .catch((err) => {
-        if (!isMounted) return;
+        if (!isMounted || requestSeq !== authRequestSeqRef.current) return;
         handleMeError(err, startEpoch);
       })
       .finally(() => {
-        if (isMounted) {
+        if (isMounted && requestSeq === authRequestSeqRef.current) {
           setIsLoading(false);
         }
       });
@@ -171,6 +180,7 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
   const login = useCallback(
     /** @param {{email: string, password: string}} credentials */
     async (credentials) => {
+      const requestSeq = ++authRequestSeqRef.current;
       setIsLoading(true);
       setError(null);
       try {
@@ -199,21 +209,37 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
         setError(apiErr);
         throw apiErr;
       } finally {
-        setIsLoading(false);
+        if (requestSeq === authRequestSeqRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     [],
   );
 
   const logout = useCallback(async () => {
+    const requestSeq = ++authRequestSeqRef.current;
     setIsLoading(true);
+    setError(null);
     try {
       await api.post('/auth/logout', {});
-    } catch {
-      // Clear local session even if logout API returns error or was expired
-    } finally {
       resetState();
-      setIsLoading(false);
+    } catch (err) {
+      clearPrivateCache();
+      const apiErr =
+        err instanceof ApiError
+          ? err
+          : new ApiError({
+              status: 500,
+              code: 'INTERNAL_ERROR',
+              message: 'Đăng xuất không thành công.',
+            });
+      setError(apiErr);
+      throw apiErr;
+    } finally {
+      if (requestSeq === authRequestSeqRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [resetState]);
 

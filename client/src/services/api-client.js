@@ -235,15 +235,21 @@ export class ApiClient {
       };
     }
 
-    // Try parsing response body
+    const responseRequestId = response.headers.get('x-request-id') ?? requestId;
+    const contentType = (
+      response.headers.get('content-type') ?? ''
+    ).toLowerCase();
+    const isJsonContentType = contentType.includes('application/json');
+
+    // Try parsing response body when Content-Type indicates JSON
     /** @type {any} */
     let parsedBody = null;
-    const contentType = response.headers.get('content-type') ?? '';
-    if (contentType.includes('application/json')) {
+    let jsonParseError = false;
+    if (isJsonContentType) {
       try {
         parsedBody = await response.json();
       } catch {
-        // Non-JSON or malformed body
+        jsonParseError = true;
       }
     }
 
@@ -267,7 +273,7 @@ export class ApiClient {
           (response.statusText || 'Yêu cầu không thành công.'),
         details: errorObj.details ?? {},
         meta: {
-          requestId: metaObj.requestId ?? requestId,
+          requestId: metaObj.requestId ?? responseRequestId,
           serverTime: metaObj.serverTime ?? new Date().toISOString(),
         },
         retryAfter: Number.isNaN(retryAfter) ? null : retryAfter,
@@ -275,15 +281,46 @@ export class ApiClient {
       });
     }
 
-    const resultData = parsedBody?.data ?? parsedBody;
+    if (!isJsonContentType || jsonParseError) {
+      throw new ApiError({
+        status: response.status,
+        code: 'INVALID_RESPONSE',
+        message: 'Phản hồi từ máy chủ không đúng định dạng JSON hợp lệ.',
+        meta: {
+          requestId: responseRequestId,
+          serverTime: new Date().toISOString(),
+        },
+        idempotencyKey,
+      });
+    }
+
+    if (
+      parsedBody === null ||
+      typeof parsedBody !== 'object' ||
+      Array.isArray(parsedBody) ||
+      !('data' in parsedBody)
+    ) {
+      throw new ApiError({
+        status: response.status,
+        code: 'INVALID_RESPONSE',
+        message: 'Cấu trúc phản hồi từ máy chủ không đúng chuẩn envelope.',
+        meta: {
+          requestId: parsedBody?.meta?.requestId ?? responseRequestId,
+          serverTime: parsedBody?.meta?.serverTime ?? new Date().toISOString(),
+        },
+        idempotencyKey,
+      });
+    }
+
+    const resultData = parsedBody.data;
     if (method === 'GET' && options.cacheKey) {
       setPrivateCache(options.cacheKey, resultData, epoch);
     }
 
     return {
       data: resultData,
-      meta: parsedBody?.meta ?? {
-        requestId: response.headers.get('x-request-id') ?? requestId,
+      meta: parsedBody.meta ?? {
+        requestId: responseRequestId,
         serverTime: new Date().toISOString(),
       },
       epoch,

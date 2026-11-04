@@ -39,6 +39,30 @@ describe('Route protection, direct URL navigation and refresh', () => {
     ).toBeVisible();
   });
 
+  it('allows anonymous visitor to access /invitation (SC-06) for guest trial entry', async () => {
+    render(
+      <MemoryRouter initialEntries={['/invitation']}>
+        <App skipInitialAuthCheck />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Phòng mời' })).toBeVisible();
+  });
+
+  it('allows anonymous visitor to stay on /invitation after /auth/me returns 401', async () => {
+    vi.spyOn(api, 'get').mockRejectedValueOnce(new Error('Unauthorized'));
+
+    render(
+      <MemoryRouter initialEntries={['/invitation']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Phòng mời' }),
+    ).toBeVisible();
+  });
+
   it('allows authenticated learner to access protected /home and /profile on direct URL', async () => {
     vi.spyOn(api, 'get').mockImplementationOnce(async () => ({
       data: {

@@ -1,6 +1,7 @@
 import { Link, Route, Routes } from 'react-router';
 import { AuthProvider } from './features/auth/AuthContext.jsx';
 import {
+  InvitationRoute,
   ProtectedRoute,
   PublicOnlyRoute,
   SessionMemberRoute,
@@ -97,12 +98,16 @@ export function App({ skipInitialAuthCheck = false } = {}) {
               />
             </Route>
 
-            {/* SC-06, SC-11, SC-12, SC-14, SC-15: Learner or Guest routes (U / G) */}
-            <Route element={<ProtectedRoute allowedRoles={['U', 'G']} />}>
+            {/* SC-06: Invitation room — accessible to anonymous visitors (for POST /guest-trials), learners (U), and guests (G) */}
+            <Route element={<InvitationRoute />}>
               <Route
                 path="/invitation"
                 element={<RouteShell screenId="SC-06" title="Phòng mời" />}
               />
+            </Route>
+
+            {/* SC-11, SC-12, SC-14, SC-15: Learner or Guest routes (U / G) */}
+            <Route element={<ProtectedRoute allowedRoles={['U', 'G']} />}>
               <Route
                 path="/topics"
                 element={<RouteShell screenId="SC-11" title="Kho chủ đề" />}

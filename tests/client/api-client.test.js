@@ -435,4 +435,60 @@ describe('ApiClient and cache isolation', () => {
     // Cache must NOT contain User A's response under User B's session
     expect(getPrivateCache('saved-items')).toBeUndefined();
   });
+
+  it('rejects 200 responses with malformed JSON and preserves requestId and idempotencyKey', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('{broken', {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-Id': 'req-malformed-json',
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      client.post(
+        '/me/saved-items',
+        { knowledgeVersionId: 'kv1' },
+        { skipCsrf: true, idempotencyKey: 'idem-malformed-1' },
+      ),
+    ).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err.status).toBe(200);
+      expect(err.code).toBe('INVALID_RESPONSE');
+      expect(err.meta.requestId).toBe('req-malformed-json');
+      expect(err.idempotencyKey).toBe('idem-malformed-1');
+      return true;
+    });
+  });
+
+  it('rejects 200 responses with text/html Content-Type and preserves requestId and idempotencyKey', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('<!doctype html><html><body>Gateway HTML</body></html>', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'X-Request-Id': 'req-html-200',
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      client.post(
+        '/me/saved-items',
+        { knowledgeVersionId: 'kv2' },
+        { skipCsrf: true, idempotencyKey: 'idem-html-2' },
+      ),
+    ).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err.status).toBe(200);
+      expect(err.code).toBe('INVALID_RESPONSE');
+      expect(err.meta.requestId).toBe('req-html-200');
+      expect(err.idempotencyKey).toBe('idem-html-2');
+      return true;
+    });
+  });
 });

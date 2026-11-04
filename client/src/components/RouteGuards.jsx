@@ -267,3 +267,46 @@ export function PublicOnlyRoute({ children }) {
 
   return children ? <>{children}</> : <Outlet />;
 }
+
+/**
+ * Route guard for SC-06 (/invitation).
+ * Allows unauthenticated visitors ('P') to open the invitation entry screen for POST /guest-trials,
+ * as well as authenticated learners ('U') and active guests ('G'), while still enforcing
+ * expired guest redirects and locked account restrictions.
+ *
+ * @param {Object} props
+ * @param {import('react').ReactNode} [props.children]
+ */
+export function InvitationRoute({ children }) {
+  const { status, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div
+        className="flex min-h-[50vh] items-center justify-center"
+        role="status"
+        aria-live="polite"
+      >
+        <span className="text-muted">Đang kiểm tra quyền truy cập...</span>
+      </div>
+    );
+  }
+
+  if (status === 'expired') {
+    return <Navigate to="/expired" replace />;
+  }
+
+  if (status === 'locked') {
+    return (
+      <div className="mx-auto max-w-md py-16 text-center">
+        <h1 className="text-2xl font-bold text-ink">Tài khoản đã bị khóa</h1>
+        <p className="mt-4 text-muted">
+          Tài khoản của bạn hiện đang bị khóa. Vui lòng liên hệ quản trị viên để
+          được hỗ trợ.
+        </p>
+      </div>
+    );
+  }
+
+  return children ? <>{children}</> : <Outlet />;
+}
