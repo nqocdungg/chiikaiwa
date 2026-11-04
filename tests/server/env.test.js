@@ -38,4 +38,14 @@ describe('environment', () => {
       readEnv({ ...source, APP_ORIGIN: 'private-config-value' }),
     ).toThrow('APP_ORIGIN must be a valid HTTP origin');
   });
+  it('requires a strong JWT_SECRET in production without exposing the secret', () => {
+    expect(() =>
+      readEnv({
+        ...source,
+        NODE_ENV: 'production',
+        APP_ORIGIN: 'https://chiikaiwa.example.com',
+        JWT_SECRET: 'short-secret-value',
+      }),
+    ).toThrow('JWT_SECRET must be at least 32 characters');
+  });
 });
