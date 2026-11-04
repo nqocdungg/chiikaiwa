@@ -16,28 +16,31 @@ Tài liệu này xác định các tiêu chí bắt buộc khi biên soạn dữ
 
 ---
 
-## 2. Tiêu chí chất lượng & cấu trúc dữ liệu (Database Design §7.2)
+## 2. Tiêu chí chất lượng & cấu trúc dữ liệu (Database Design §7.1 & §7.2)
+
+### Quy chuẩn định danh (Content Item & Content Version)
+
+- [ ] Mỗi record có `contentId` (hoặc `_id` item): chuỗi ObjectId 24 ký tự hex đại diện cho định danh bền vững của học liệu (`content_items`).
+- [ ] Mỗi record có `versionId`: chuỗi ObjectId 24 ký tự hex đại diện cho bản xuất bản (`content_versions`), với `revision` nguyên dương (bắt đầu từ `1`).
+- [ ] Các mối quan hệ liên kết giữa các bản xuất bản trỏ tới `versionId` của bản ghi đích theo đúng hợp đồng Database Design §7.2 (`knowledgeVersionIds`, `questionVersionIds`, `scenarioVersionIds`).
 
 ### Thẻ tình huống (Scenario)
 
-- [ ] Định danh `_id` là chuỗi ObjectId 24 ký tự hex hợp lệ.
 - [ ] Có bối cảnh (`context`) rõ ràng, mô tả tình huống giao tiếp đời thực.
 - [ ] Có mục tiêu giao tiếp (`objective`) cụ thể để hai người học đo lường mức độ hoàn thành khi kết thúc.
 - [ ] Có 2 vai độc lập (`roleA`, `roleB`), thể hiện rõ vai trò của từng người (người mua / người bán, bạn bè, đồng nghiệp...), không để trống hoặc sao chép nguyên văn vai của nhau.
 - [ ] Có ít nhất 1 gợi ý diễn đạt (`hints`).
-- [ ] Chứa tối thiểu 3 ID câu hỏi quiz (`questionIds`) liên quan trực tiếp đến tình huống.
-- [ ] Liên kết đúng với các mục kiến thức (`knowledgeIds`) tương ứng.
+- [ ] Chứa tối thiểu 3 ID câu hỏi quiz (`questionVersionIds`) liên quan trực tiếp đến tình huống.
+- [ ] Liên kết đúng với các mục kiến thức (`knowledgeVersionIds`) tương ứng.
 
 ### Kiến thức (Knowledge)
 
-- [ ] Định danh `_id` là chuỗi ObjectId 24 ký tự hex hợp lệ.
 - [ ] Phân loại đúng loại: `vocabulary` (từ vựng) hoặc `grammar` (cấu trúc ngữ pháp).
 - [ ] Có cách đọc (`reading`), giải nghĩa tiếng Việt (`meaning`) chuẩn xác.
 - [ ] Có ít nhất 1 câu ví dụ song ngữ Nhật - Việt (`examples`) minh họa cách dùng trong ngữ cảnh.
 
 ### Câu hỏi Quiz (Question)
 
-- [ ] Định danh `_id` là chuỗi ObjectId 24 ký tự hex hợp lệ.
 - [ ] **Trắc nghiệm (`multipleChoice`):**
   - Có mảng `options` chứa ít nhất 2 phương án lựa chọn.
   - Mỗi option có `id` duy nhất và nội dung `text` không rỗng.
@@ -45,15 +48,15 @@ Tài liệu này xác định các tiêu chí bắt buộc khi biên soạn dữ
 - [ ] **Điền ngắn (`shortAnswer`):**
   - Có mảng `acceptedAnswers` chứa ít nhất 1 đáp án được chấp nhận.
 - [ ] Có giải thích (`explanation`) chi tiết vì sao đáp án đó đúng.
-- [ ] Liên kết đúng tới `knowledgeIds` nguồn nếu câu hỏi kiểm tra kiến thức đó.
+- [ ] Liên kết đúng tới `knowledgeVersionIds` nguồn nếu câu hỏi kiểm tra kiến thức đó.
 
 ### Bộ chủ đề (Deck)
 
-- [ ] Định danh `_id` là chuỗi ObjectId 24 ký tự hex hợp lệ.
 - [ ] Tiêu đề (`title`) và khóa chủ đề (`topicKey`) rõ ràng.
 - [ ] Cấp độ (`level`) thuộc một trong các cấp: `N5`, `N4`, `N3`, `N2`, `N1`.
 - [ ] Mô tả (`description`) khái quát mục tiêu của bộ.
-- [ ] Mảng `scenarioIds` chứa ít nhất 1 tình huống hợp lệ.
+- [ ] Mảng `scenarioVersionIds` chứa ít nhất 1 tình huống hợp lệ.
+- [ ] Danh sách `knowledgeVersionIds` và `questionVersionIds` được hợp nhất đầy đủ từ các tình huống trong bộ.
 
 ---
 

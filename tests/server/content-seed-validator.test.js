@@ -31,9 +31,13 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
       expect(result.errors).toEqual([]);
     });
 
-    it('mẫu dữ liệu phải đáp ứng tiêu chí tối thiểu của AC 1', () => {
+    it('mẫu dữ liệu phải đáp ứng đúng contract Database Design §7.1 & §7.2', () => {
       expect(sampleDataset.scenarios.length).toBeGreaterThanOrEqual(1);
       const scenario = sampleDataset.scenarios[0];
+
+      // Đủ định danh contentId và versionId
+      expect(isValidObjectId(scenario.contentId)).toBe(true);
+      expect(isValidObjectId(scenario.versionId)).toBe(true);
 
       // Đủ bối cảnh, mục tiêu, hai vai, gợi ý
       expect(scenario.context.trim()).not.toBe('');
@@ -42,16 +46,20 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
       expect(scenario.roleB.trim()).not.toBe('');
       expect(scenario.hints.length).toBeGreaterThan(0);
 
-      // Có ít nhất 3 câu hỏi quiz
-      expect(scenario.questionIds.length).toBeGreaterThanOrEqual(3);
+      // Chuẩn trường theo thiết kế §7.2: questionVersionIds và knowledgeVersionIds
+      expect(scenario.questionVersionIds.length).toBeGreaterThanOrEqual(3);
+      expect(scenario.knowledgeVersionIds.length).toBeGreaterThan(0);
 
-      // Có liên kết knowledge
-      expect(scenario.knowledgeIds.length).toBeGreaterThan(0);
+      // Deck chuẩn trường: scenarioVersionIds, knowledgeVersionIds, questionVersionIds
+      const deck = sampleDataset.decks[0];
+      expect(deck.scenarioVersionIds.length).toBeGreaterThanOrEqual(1);
+      expect(deck.questionVersionIds.length).toBeGreaterThanOrEqual(3);
+      expect(deck.knowledgeVersionIds.length).toBeGreaterThanOrEqual(1);
     });
   });
 
   describe('AC 1 & AC 2: Kiểm thử phát hiện lỗi dữ liệu (Negative Cases)', () => {
-    it('báo lỗi khi tình huống có ít hơn 3 câu hỏi quiz (AC 1)', () => {
+    it('báo lỗi khi tình huống có ít hơn 3 câu hỏi quiz khi dùng questionVersionIds (AC 1 & §7.2)', () => {
       const invalidScenario = {
         _id: '672000000000000000000101',
         title: 'Tình huống thiếu quiz',
@@ -60,16 +68,19 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
         roleA: 'Khách hàng',
         roleB: 'Nhân viên',
         hints: ['Gợi ý 1'],
-        questionIds: ['672000000000000000000011', '672000000000000000000012'], // Chỉ có 2 câu quiz
+        questionVersionIds: [
+          '672000000000000000000011',
+          '672000000000000000000012',
+        ], // Chỉ có 2 câu quiz
       };
 
       const errors = validateScenarioPayload(invalidScenario, {
         isPublishing: true,
       });
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors.some((e) => e.includes('ít nhất 3 questionIds'))).toBe(
-        true,
-      );
+      expect(
+        errors.some((e) => e.includes('ít nhất 3 questionVersionIds')),
+      ).toBe(true);
     });
 
     it('cho phép tình huống có ít hơn 3 câu hỏi quiz nếu chưa xuất bản (đang soạn nháp)', () => {
@@ -80,7 +91,7 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
         roleA: 'Vai A',
         roleB: 'Vai B',
         hints: ['Gợi ý'],
-        questionIds: ['672000000000000000000011'], // 1 câu khi soạn dở
+        questionVersionIds: ['672000000000000000000011'], // 1 câu khi soạn dở
       };
 
       const errors = validateScenarioPayload(draftScenario, {
@@ -150,7 +161,7 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
         topicKey: 'test_topic',
         level: 'N6', // Sai cấp độ
         description: 'Mô tả',
-        scenarioIds: ['672000000000000000000101'],
+        scenarioVersionIds: ['672000000000000000000101'],
       };
 
       const errors = validateDeckPayload(invalidDeck);
@@ -160,11 +171,12 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
       ).toBe(true);
     });
 
-    it('validateSeedDataset báo lỗi khi có ID tham chiếu không tồn tại trong dataset (AC 2)', () => {
+    it('validateSeedDataset báo lỗi khi có ID tham chiếu version không tồn tại trong dataset (§7.2)', () => {
       const datasetWithBrokenRef = {
         knowledges: [
           {
-            _id: '672000000000000000000001',
+            contentId: '672000000000000000000001',
+            versionId: '6720000000000000000000a1',
             type: 'vocabulary',
             expression: 'りんご',
             meaning: 'Quả táo',
@@ -174,15 +186,16 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
         questions: [],
         scenarios: [
           {
-            _id: '672000000000000000000101',
+            contentId: '672000000000000000000101',
+            versionId: '6720000000000000000000c1',
             title: 'Tình huống tham chiếu sai',
             context: 'Bối cảnh',
             objective: 'Mục tiêu',
             roleA: 'Vai A',
             roleB: 'Vai B',
             hints: ['Gợi ý'],
-            knowledgeIds: ['672000000000000000000999'], // Knowledge này không tồn tại trong mảng knowledges
-            questionIds: [
+            knowledgeVersionIds: ['672000000000000000000999'], // Không tồn tại
+            questionVersionIds: [
               '672000000000000000000888',
               '672000000000000000000889',
               '672000000000000000000890',
@@ -197,31 +210,33 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
       expect(
         result.errors.some((e) =>
           e.includes(
-            "tham chiếu tới knowledge ID '672000000000000000000999' không tồn tại",
+            "tham chiếu tới knowledge ID/version '672000000000000000000999' không tồn tại",
           ),
         ),
       ).toBe(true);
       expect(
         result.errors.some((e) =>
           e.includes(
-            "tham chiếu tới question ID '672000000000000000000888' không tồn tại",
+            "tham chiếu tới question ID/version '672000000000000000000888' không tồn tại",
           ),
         ),
       ).toBe(true);
     });
 
-    it('validateSeedDataset báo lỗi khi có hai record trùng _id (AC 2)', () => {
+    it('validateSeedDataset báo lỗi khi có hai record trùng contentId hoặc versionId (AC 2)', () => {
       const duplicateIdDataset = {
         knowledges: [
           {
-            _id: '672000000000000000000001',
+            contentId: '672000000000000000000001',
+            versionId: '6720000000000000000000a1',
             type: 'vocabulary',
             expression: 'Từ 1',
             meaning: 'Nghĩa 1',
             examples: [{ japanese: 'jp1', vietnamese: 'vi1' }],
           },
           {
-            _id: '672000000000000000000001', // Trùng ID với record trên
+            contentId: '672000000000000000000001', // Trùng contentId
+            versionId: '6720000000000000000000a2',
             type: 'vocabulary',
             expression: 'Từ 2',
             meaning: 'Nghĩa 2',
@@ -235,7 +250,50 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
 
       const result = validateSeedDataset(duplicateIdDataset);
       expect(result.isValid).toBe(false);
-      expect(result.errors.some((e) => e.includes('trùng lặp _id'))).toBe(true);
+      expect(result.errors.some((e) => e.includes('trùng lặp contentId'))).toBe(
+        true,
+      );
+    });
+
+    it('báo lỗi khi một nhóm học liệu không phải là mảng (Review Must fix: questions: not-an-array)', () => {
+      const invalidTypeDataset = {
+        knowledges: [
+          {
+            contentId: '672000000000000000000001',
+            versionId: '6720000000000000000000a1',
+            type: 'vocabulary',
+            expression: 'りんご',
+            meaning: 'Quả táo',
+            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
+          },
+        ],
+        questions: 'not-an-array',
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(invalidTypeDataset);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some((e) =>
+          e.includes('Dataset.questions phải là một mảng'),
+        ),
+      ).toBe(true);
+    });
+
+    it('báo lỗi khi bản ghi trong mảng không phải object (ví dụ null hoặc chuỗi)', () => {
+      const invalidElementDataset = {
+        knowledges: [null],
+        questions: [],
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(invalidElementDataset);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some((e) => e.includes('bản ghi phải là một object')),
+      ).toBe(true);
     });
   });
 });
