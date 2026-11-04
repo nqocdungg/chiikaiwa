@@ -451,4 +451,282 @@ describe('AuthContext and Identity lifecycle', () => {
     expect(errCsrf?.code).toBe('CSRF_INVALID');
     expect(postSpy).toHaveBeenCalledTimes(3);
   });
+
+  it('does not restore user or resolve as success when a slow login finishes after logout succeeds', async () => {
+    /** @type {(val: any) => void} */
+    let resolveSlowLogin = () => {};
+
+    vi.spyOn(api, 'post')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSlowLogin = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        data: null,
+        meta: { requestId: 'logout-ok' },
+        epoch: getIdentityEpoch(),
+      });
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => (
+        <AuthProvider skipInitialCheck>{children}</AuthProvider>
+      ),
+    });
+
+    /** @type {Promise<any>} */
+    let slowLoginPromise;
+    act(() => {
+      slowLoginPromise = result.current.login({
+        email: 'slow@chiikaiwa.com',
+        password: 'password123',
+      });
+    });
+
+    expect(result.current.isLoading).toBe(true);
+
+    // Logout succeeds before slow login returns
+    await act(async () => {
+      await result.current.logout();
+    });
+
+    expect(result.current.kind).toBe('unauthenticated');
+    expect(result.current.user).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+
+    // Now slow login returns -> must reject with AUTH_SUPERSEDED and NOT restore user
+    /** @type {ApiError | undefined} */
+    let slowLoginError;
+    await act(async () => {
+      resolveSlowLogin({
+        data: {
+          user: {
+            id: 'u-slow',
+            email: 'slow@chiikaiwa.com',
+            displayName: 'Slow User',
+            role: 'learner',
+            status: 'active',
+            version: 1,
+          },
+          expiresAt: '2026-11-11T00:00:00.000Z',
+        },
+        meta: { requestId: 'login-slow' },
+        epoch: 1,
+      });
+      try {
+        await slowLoginPromise;
+      } catch (err) {
+        slowLoginError = /** @type {ApiError} */ (err);
+      }
+    });
+
+    expect(slowLoginError).toBeInstanceOf(ApiError);
+    expect(slowLoginError?.code).toBe('AUTH_SUPERSEDED');
+    expect(result.current.kind).toBe('unauthenticated');
+    expect(result.current.user).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('does not clear new user or cache when a slow logout finishes after a newer login succeeds', async () => {
+    /** @type {(val: any) => void} */
+    let resolveSlowLogout = () => {};
+
+    vi.spyOn(api, 'post')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSlowLogout = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        data: {
+          user: {
+            id: 'u-fresh',
+            email: 'fresh@chiikaiwa.com',
+            displayName: 'Fresh User',
+            role: 'learner',
+            status: 'active',
+            version: 1,
+          },
+          expiresAt: '2026-11-11T00:00:00.000Z',
+        },
+        meta: { requestId: 'login-fresh' },
+        epoch: 2,
+      });
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => (
+        <AuthProvider skipInitialCheck>{children}</AuthProvider>
+      ),
+    });
+
+    /** @type {Promise<void>} */
+    let slowLogoutPromise;
+    act(() => {
+      slowLogoutPromise = result.current.logout();
+    });
+
+    // Newer login succeeds while slow logout is still in-flight
+    await act(async () => {
+      await result.current.login({
+        email: 'fresh@chiikaiwa.com',
+        password: 'password123',
+      });
+    });
+
+    setPrivateCache('fresh-user-note', 'important-data');
+    expect(result.current.kind).toBe('user');
+    expect(result.current.user?.id).toBe('u-fresh');
+    expect(result.current.isLoading).toBe(false);
+
+    // Now the older slow logout returns 204 -> must reject with AUTH_SUPERSEDED and NOT wipe fresh user or cache
+    /** @type {ApiError | undefined} */
+    let slowLogoutError;
+    await act(async () => {
+      resolveSlowLogout({
+        data: null,
+        meta: { requestId: 'logout-slow' },
+        epoch: 1,
+      });
+      try {
+        await slowLogoutPromise;
+      } catch (err) {
+        slowLogoutError = /** @type {ApiError} */ (err);
+      }
+    });
+
+    expect(slowLogoutError).toBeInstanceOf(ApiError);
+    expect(slowLogoutError?.code).toBe('AUTH_SUPERSEDED');
+    expect(result.current.kind).toBe('user');
+    expect(result.current.user?.id).toBe('u-fresh');
+    expect(result.current.error).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+    expect(getPrivateCache('fresh-user-note')).toBe('important-data');
+  });
+
+  it('does not overwrite newer error or state when an older auth request fails late', async () => {
+    /** @type {(err: any) => void} */
+    let rejectStaleLogout = () => {};
+    /** @type {(err: any) => void} */
+    let rejectStaleLogin = () => {};
+
+    vi.spyOn(api, 'post')
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectStaleLogout = reject;
+          }),
+      )
+      .mockResolvedValueOnce({
+        data: {
+          user: {
+            id: 'u-valid',
+            email: 'valid@chiikaiwa.com',
+            displayName: 'Valid User',
+            role: 'learner',
+            status: 'active',
+            version: 1,
+          },
+          expiresAt: '2026-11-11T00:00:00.000Z',
+        },
+        meta: { requestId: 'login-valid' },
+        epoch: 2,
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectStaleLogin = reject;
+          }),
+      )
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 503,
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Máy chủ đang bảo trì.',
+        }),
+      );
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => (
+        <AuthProvider skipInitialCheck>{children}</AuthProvider>
+      ),
+    });
+
+    // Case A: Stale logout fails after newer login succeeded -> must NOT set error or clear new user's cache
+    /** @type {Promise<void>} */
+    let pStaleLogout;
+    act(() => {
+      pStaleLogout = result.current.logout();
+    });
+
+    await act(async () => {
+      await result.current.login({
+        email: 'valid@chiikaiwa.com',
+        password: 'password123',
+      });
+    });
+
+    setPrivateCache('valid-cache', { ok: true });
+
+    await act(async () => {
+      rejectStaleLogout(
+        new ApiError({
+          status: 503,
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Stale logout failed',
+        }),
+      );
+      try {
+        await pStaleLogout;
+      } catch {
+        // expected rejection for stale caller
+      }
+    });
+
+    expect(result.current.kind).toBe('user');
+    expect(result.current.user?.id).toBe('u-valid');
+    expect(result.current.error).toBeNull();
+    expect(getPrivateCache('valid-cache')).toEqual({ ok: true });
+
+    // Case B: Stale login fails with 401 after newer logout failed with 503 -> must NOT overwrite 503 error
+    /** @type {Promise<any>} */
+    let pStaleLogin;
+    act(() => {
+      pStaleLogin = result.current.login({
+        email: 'wrong@chiikaiwa.com',
+        password: 'wrong',
+      });
+    });
+
+    await act(async () => {
+      try {
+        await result.current.logout();
+      } catch {
+        // expected 503
+      }
+    });
+
+    expect(result.current.error?.code).toBe('SERVICE_UNAVAILABLE');
+
+    await act(async () => {
+      rejectStaleLogin(
+        new ApiError({
+          status: 401,
+          code: 'INVALID_CREDENTIALS',
+          message: 'Sai mật khẩu.',
+        }),
+      );
+      try {
+        await pStaleLogin;
+      } catch {
+        // expected rejection for stale caller
+      }
+    });
+
+    // Newer error (SERVICE_UNAVAILABLE) must be preserved
+    expect(result.current.error?.code).toBe('SERVICE_UNAVAILABLE');
+    expect(result.current.isLoading).toBe(false);
+  });
 });

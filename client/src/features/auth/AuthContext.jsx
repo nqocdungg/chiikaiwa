@@ -185,6 +185,13 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
       setError(null);
       try {
         const res = await api.post('/auth/login', credentials);
+        if (requestSeq !== authRequestSeqRef.current) {
+          throw new ApiError({
+            status: 409,
+            code: 'AUTH_SUPERSEDED',
+            message: 'Yêu cầu đăng nhập đã bị thay thế bởi thao tác mới hơn.',
+          });
+        }
         const data = /** @type {{user: SelfUser, expiresAt: string}} */ (
           res.data
         );
@@ -206,7 +213,9 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
                 code: 'INTERNAL_ERROR',
                 message: 'Đăng nhập không thành công.',
               });
-        setError(apiErr);
+        if (requestSeq === authRequestSeqRef.current) {
+          setError(apiErr);
+        }
         throw apiErr;
       } finally {
         if (requestSeq === authRequestSeqRef.current) {
@@ -223,9 +232,15 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
     setError(null);
     try {
       await api.post('/auth/logout', {});
+      if (requestSeq !== authRequestSeqRef.current) {
+        throw new ApiError({
+          status: 409,
+          code: 'AUTH_SUPERSEDED',
+          message: 'Yêu cầu đăng xuất đã bị thay thế bởi thao tác mới hơn.',
+        });
+      }
       resetState();
     } catch (err) {
-      clearPrivateCache();
       const apiErr =
         err instanceof ApiError
           ? err
@@ -234,7 +249,10 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
               code: 'INTERNAL_ERROR',
               message: 'Đăng xuất không thành công.',
             });
-      setError(apiErr);
+      if (requestSeq === authRequestSeqRef.current) {
+        clearPrivateCache();
+        setError(apiErr);
+      }
       throw apiErr;
     } finally {
       if (requestSeq === authRequestSeqRef.current) {
@@ -246,10 +264,18 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
   const register = useCallback(
     /** @param {{email: string, password: string, displayName: string}} payload */
     async (payload) => {
+      const requestSeq = ++authRequestSeqRef.current;
       setIsLoading(true);
       setError(null);
       try {
         const res = await api.post('/auth/register', payload);
+        if (requestSeq !== authRequestSeqRef.current) {
+          throw new ApiError({
+            status: 409,
+            code: 'AUTH_SUPERSEDED',
+            message: 'Yêu cầu đăng ký đã bị thay thế bởi thao tác mới hơn.',
+          });
+        }
         const data = /** @type {{user: SelfUser}} */ (res.data);
         return data.user;
       } catch (err) {
@@ -261,10 +287,14 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
                 code: 'INTERNAL_ERROR',
                 message: 'Đăng ký không thành công.',
               });
-        setError(apiErr);
+        if (requestSeq === authRequestSeqRef.current) {
+          setError(apiErr);
+        }
         throw apiErr;
       } finally {
-        setIsLoading(false);
+        if (requestSeq === authRequestSeqRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     [],
