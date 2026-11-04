@@ -177,6 +177,7 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
           {
             contentId: '672000000000000000000001',
             versionId: '6720000000000000000000a1',
+            revision: 1,
             type: 'vocabulary',
             expression: 'りんご',
             meaning: 'Quả táo',
@@ -188,6 +189,7 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
           {
             contentId: '672000000000000000000101',
             versionId: '6720000000000000000000c1',
+            revision: 1,
             title: 'Tình huống tham chiếu sai',
             context: 'Bối cảnh',
             objective: 'Mục tiêu',
@@ -210,25 +212,26 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
       expect(
         result.errors.some((e) =>
           e.includes(
-            "tham chiếu tới knowledge ID/version '672000000000000000000999' không tồn tại",
+            "tham chiếu tới knowledge versionId '672000000000000000000999' không tồn tại",
           ),
         ),
       ).toBe(true);
       expect(
         result.errors.some((e) =>
           e.includes(
-            "tham chiếu tới question ID/version '672000000000000000000888' không tồn tại",
+            "tham chiếu tới question versionId '672000000000000000000888' không tồn tại",
           ),
         ),
       ).toBe(true);
     });
 
-    it('validateSeedDataset báo lỗi khi có hai record trùng contentId hoặc versionId (AC 2)', () => {
+    it('validateSeedDataset báo lỗi khi có hai record cùng loại trùng contentId hoặc versionId (AC 2)', () => {
       const duplicateIdDataset = {
         knowledges: [
           {
             contentId: '672000000000000000000001',
             versionId: '6720000000000000000000a1',
+            revision: 1,
             type: 'vocabulary',
             expression: 'Từ 1',
             meaning: 'Nghĩa 1',
@@ -237,6 +240,7 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
           {
             contentId: '672000000000000000000001', // Trùng contentId
             versionId: '6720000000000000000000a2',
+            revision: 1,
             type: 'vocabulary',
             expression: 'Từ 2',
             meaning: 'Nghĩa 2',
@@ -255,12 +259,135 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
       );
     });
 
+    it('Must fix 1: từ chối khi questionVersionIds trỏ nhầm vào contentId của câu hỏi thay vì versionId (§7.2)', () => {
+      const cloned = JSON.parse(JSON.stringify(sampleDataset));
+      const targetQuestion = cloned.questions[0];
+      cloned.scenarios[0].questionVersionIds[0] = targetQuestion.contentId;
+
+      const result = validateSeedDataset(cloned);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some((e) =>
+          e.includes(
+            `tham chiếu tới question versionId '${targetQuestion.contentId}' không tồn tại`,
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('Must fix 1: từ chối khi dùng tên trường cũ questionIds / knowledgeIds / scenarioIds', () => {
+      const scenarioWithOldField = {
+        title: 'Tình huống dùng trường cũ',
+        context: 'Bối cảnh',
+        objective: 'Mục tiêu',
+        roleA: 'Vai A',
+        roleB: 'Vai B',
+        hints: ['Gợi ý'],
+        questionIds: ['6720000000000000000000b1'],
+        knowledgeIds: ['6720000000000000000000a1'],
+      };
+
+      const errors = validateScenarioPayload(scenarioWithOldField, {
+        isPublishing: false,
+      });
+      expect(
+        errors.some((e) =>
+          e.includes("không được dùng trường cũ 'questionIds'"),
+        ),
+      ).toBe(true);
+      expect(
+        errors.some((e) =>
+          e.includes("không được dùng trường cũ 'knowledgeIds'"),
+        ),
+      ).toBe(true);
+    });
+
+    it('Must fix 2: báo lỗi khi một question và một knowledge có cùng contentId (trùng content_items._id)', () => {
+      const duplicateAcrossKindsDataset = {
+        knowledges: [
+          {
+            contentId: '672000000000000000000099',
+            versionId: '6720000000000000000000a1',
+            revision: 1,
+            type: 'vocabulary',
+            expression: 'りんご',
+            meaning: 'Quả táo',
+            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
+          },
+        ],
+        questions: [
+          {
+            contentId: '672000000000000000000099', // Trùng contentId với knowledge ở trên
+            versionId: '6720000000000000000000b1',
+            revision: 1,
+            type: 'multipleChoice',
+            prompt: 'Câu hỏi trắc nghiệm',
+            options: [
+              { id: '1', text: 'A' },
+              { id: '2', text: 'B' },
+            ],
+            correctOptionId: '1',
+            explanation: 'Giải thích',
+          },
+        ],
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(duplicateAcrossKindsDataset);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some((e) =>
+          e.includes(
+            "Question[672000000000000000000099]: trùng lặp contentId '672000000000000000000099' với một record khác (Knowledge[672000000000000000000099])",
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('Review: báo lỗi khi bản ghi thiếu revision hoặc revision không phải số nguyên dương >= 1', () => {
+      const invalidRevisionDataset = {
+        knowledges: [
+          {
+            contentId: '672000000000000000000001',
+            versionId: '6720000000000000000000a1',
+            // Thiếu revision
+            type: 'vocabulary',
+            expression: 'りんご',
+            meaning: 'Quả táo',
+            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
+          },
+          {
+            contentId: '672000000000000000000002',
+            versionId: '6720000000000000000000a2',
+            revision: 0, // revision < 1
+            type: 'vocabulary',
+            expression: 'みかん',
+            meaning: 'Quả quýt',
+            examples: [{ japanese: 'みかん。', vietnamese: 'Quýt.' }],
+          },
+        ],
+        questions: [],
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(invalidRevisionDataset);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some((e) =>
+          e.includes('revision bắt buộc phải là số nguyên dương (>= 1)'),
+        ),
+      ).toBe(true);
+    });
+
     it('báo lỗi khi một nhóm học liệu không phải là mảng (Review Must fix: questions: not-an-array)', () => {
       const invalidTypeDataset = {
         knowledges: [
           {
             contentId: '672000000000000000000001',
             versionId: '6720000000000000000000a1',
+            revision: 1,
             type: 'vocabulary',
             expression: 'りんご',
             meaning: 'Quả táo',
@@ -293,6 +420,281 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
       expect(result.isValid).toBe(false);
       expect(
         result.errors.some((e) => e.includes('bản ghi phải là một object')),
+      ).toBe(true);
+    });
+
+    it('Lỗi tiềm ẩn 1: báo lỗi khi contentId của một record trùng với versionId của record khác', () => {
+      const crossCollisionDataset = {
+        knowledges: [
+          {
+            contentId: '672000000000000000000001',
+            versionId: '672000000000000000000011', // versionId bằng contentId của question
+            revision: 1,
+            type: 'vocabulary',
+            expression: 'りんご',
+            meaning: 'Quả táo',
+            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
+          },
+        ],
+        questions: [
+          {
+            contentId: '672000000000000000000011', // trùng versionId của knowledge
+            versionId: '6720000000000000000000b1',
+            revision: 1,
+            type: 'multipleChoice',
+            prompt: 'Câu hỏi trắc nghiệm',
+            options: [
+              { id: '1', text: 'A' },
+              { id: '2', text: 'B' },
+            ],
+            correctOptionId: '1',
+            explanation: 'Giải thích',
+          },
+        ],
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(crossCollisionDataset);
+      expect(result.isValid).toBe(false);
+      const crossErrors = result.errors.filter(
+        (e) =>
+          e.includes('672000000000000000000011') &&
+          e.includes('content_items._id') &&
+          e.includes('content_versions._id'),
+      );
+      expect(crossErrors.length).toBe(1);
+    });
+
+    it('Lỗi tiềm ẩn 1 (hướng ngược): không double-report khi versionId_B = contentId_A đã đăng ký trước', () => {
+      const crossCollisionReversedDataset = {
+        knowledges: [
+          {
+            contentId: '672000000000000000000099',
+            versionId: '6720000000000000000000a9',
+            revision: 1,
+            type: 'vocabulary',
+            expression: 'みかん',
+            meaning: 'Quả quýt',
+            examples: [{ japanese: 'みかん。', vietnamese: 'Quýt.' }],
+          },
+          {
+            contentId: '672000000000000000000098',
+            versionId: '672000000000000000000099', // versionId bằng contentId của knowledge trên
+            revision: 1,
+            type: 'grammar',
+            expression: '〜てください',
+            meaning: 'Xin hãy...',
+            examples: [
+              { japanese: 'やってください。', vietnamese: 'Xin hãy làm.' },
+            ],
+          },
+        ],
+        questions: [],
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(crossCollisionReversedDataset);
+      expect(result.isValid).toBe(false);
+      const crossErrors = result.errors.filter(
+        (e) =>
+          e.includes('672000000000000000000099') &&
+          (e.includes('content_items') || e.includes('content_versions')),
+      );
+      expect(crossErrors.length).toBe(1);
+    });
+
+    it('Lỗi tiềm ẩn 2: báo lỗi khi contentId là chuỗi rỗng thay vì âm thầm fallback sang _id', () => {
+      const emptyContentIdDataset = {
+        knowledges: [
+          {
+            contentId: '', // falsy chuỗi rỗng
+            _id: '672000000000000000000001',
+            versionId: '6720000000000000000000a1',
+            revision: 1,
+            type: 'vocabulary',
+            expression: 'りんご',
+            meaning: 'Quả táo',
+            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
+          },
+        ],
+        questions: [],
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(emptyContentIdDataset);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some(
+          (e) => e.includes("contentId ''") && e.includes('ObjectId'),
+        ),
+      ).toBe(true);
+    });
+
+    it('Lỗi tiềm ẩn 3: Deck trỏ nhầm questionVersionIds vào contentId của câu hỏi thay vì versionId', () => {
+      const cloned = JSON.parse(JSON.stringify(sampleDataset));
+      const targetQuestion = cloned.questions[0];
+      cloned.decks[0].questionVersionIds[0] = targetQuestion.contentId;
+
+      const result = validateSeedDataset(cloned);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some((e) =>
+          e.includes(
+            `tham chiếu tới question versionId '${targetQuestion.contentId}' không tồn tại`,
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('Lỗi tiềm ẩn 4: báo lỗi khi versionId trùng nhau giữa hai loại học liệu khác nhau', () => {
+      const duplicateVersionIdAcrossKindsDataset = {
+        knowledges: [
+          {
+            contentId: '672000000000000000000001',
+            versionId: '6720000000000000000000ff', // Trùng versionId với question
+            revision: 1,
+            type: 'vocabulary',
+            expression: 'りんご',
+            meaning: 'Quả táo',
+            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
+          },
+        ],
+        questions: [
+          {
+            contentId: '672000000000000000000002',
+            versionId: '6720000000000000000000ff', // Trùng versionId với knowledge
+            revision: 1,
+            type: 'multipleChoice',
+            prompt: 'Câu hỏi trắc nghiệm',
+            options: [
+              { id: '1', text: 'A' },
+              { id: '2', text: 'B' },
+            ],
+            correctOptionId: '1',
+            explanation: 'Giải thích',
+          },
+        ],
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(duplicateVersionIdAcrossKindsDataset);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some((e) =>
+          e.includes("trùng lặp versionId '6720000000000000000000ff'"),
+        ),
+      ).toBe(true);
+    });
+
+    it('Lỗi tiềm ẩn 6: versionId rỗng không được tạo ID ảo trong valid sets', () => {
+      const emptyVersionIdDataset = {
+        knowledges: [
+          {
+            contentId: '672000000000000000000001',
+            versionId: '', // rỗng — không hợp lệ
+            publishedVersionId: '6720000000000000000000a1',
+            revision: 1,
+            type: 'vocabulary',
+            expression: 'りんご',
+            meaning: 'Quả táo',
+            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
+          },
+        ],
+        questions: [
+          {
+            contentId: '672000000000000000000011',
+            versionId: '6720000000000000000000b1',
+            revision: 1,
+            type: 'multipleChoice',
+            prompt: 'Câu hỏi',
+            options: [
+              { id: '1', text: 'A' },
+              { id: '2', text: 'B' },
+            ],
+            correctOptionId: '1',
+            explanation: 'Giải thích',
+            knowledgeVersionIds: ['6720000000000000000000a1'],
+          },
+        ],
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(emptyVersionIdDataset);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some(
+          (e) => e.includes("versionId ''") && e.includes('ObjectId'),
+        ),
+      ).toBe(true);
+      expect(
+        result.errors.some((e) =>
+          e.includes(
+            "tham chiếu tới knowledge versionId '6720000000000000000000a1' không tồn tại",
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('Lỗi tiềm ẩn A: báo lỗi khi _id không khớp với contentId trong cùng bản ghi', () => {
+      const mismatchIdDataset = {
+        knowledges: [
+          {
+            _id: '672000000000000000000001',
+            contentId: '672000000000000000000002', // Khác _id
+            versionId: '6720000000000000000000a1',
+            revision: 1,
+            type: 'vocabulary',
+            expression: 'りんご',
+            meaning: 'Quả táo',
+            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
+          },
+        ],
+        questions: [],
+        scenarios: [],
+        decks: [],
+      };
+
+      const result = validateSeedDataset(mismatchIdDataset);
+      expect(result.isValid).toBe(false);
+      expect(
+        result.errors.some((e) =>
+          e.includes(
+            "_id '672000000000000000000001' phải bằng contentId '672000000000000000000002'",
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('Lỗi tiềm ẩn C: phát hiện trùng lặp ID trong cùng mảng questionVersionIds hoặc knowledgeVersionIds', () => {
+      const duplicateInArrayScenario = {
+        _id: '672000000000000000000101',
+        title: 'Tình huống trùng lặp ID trong mảng',
+        context: 'Bối cảnh',
+        objective: 'Mục tiêu',
+        roleA: 'Vai A',
+        roleB: 'Vai B',
+        hints: ['Gợi ý'],
+        questionVersionIds: [
+          '6720000000000000000000b1',
+          '6720000000000000000000b1', // Trùng ID trong mảng
+          '6720000000000000000000b2',
+        ],
+      };
+
+      const errors = validateScenarioPayload(duplicateInArrayScenario, {
+        isPublishing: true,
+      });
+      expect(
+        errors.some((e) =>
+          e.includes(
+            "ID '6720000000000000000000b1' bị trùng lặp trong cùng mảng",
+          ),
+        ),
       ).toBe(true);
     });
   });

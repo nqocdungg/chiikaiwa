@@ -26,6 +26,44 @@ export function isValidObjectId(id) {
 }
 
 /**
+ * Kiểm tra mảng versionId: hợp lệ ObjectId, không trùng lặp, tồn tại trong tập hợp cho phép.
+ * @param {unknown[]} ids
+ * @param {string} fieldName
+ * @param {string} prefix
+ * @param {Set<string>|null} validSet
+ * @param {string} kindLabel
+ * @returns {string[]}
+ */
+function validateVersionIdArray(ids, fieldName, prefix, validSet, kindLabel) {
+  /** @type {string[]} */
+  const errors = [];
+  /** @type {Set<string>} */
+  const seen = new Set();
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i];
+    if (typeof id !== 'string' || !isValidObjectId(id)) {
+      errors.push(
+        `${prefix}.${fieldName}[${i}]: ID '${id}' không đúng chuẩn ObjectId.`,
+      );
+    } else {
+      if (seen.has(id)) {
+        errors.push(
+          `${prefix}.${fieldName}[${i}]: ID '${id}' bị trùng lặp trong cùng mảng.`,
+        );
+      } else {
+        seen.add(id);
+      }
+      if (validSet instanceof Set && !validSet.has(id)) {
+        errors.push(
+          `${prefix}.${fieldName}[${i}]: tham chiếu tới ${kindLabel} versionId '${id}' không tồn tại.`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+/**
  * Validate payload của mục kiến thức (knowledge).
  * @param {Record<string, any>} payload
  * @param {string} [identifier='knowledge']
@@ -92,13 +130,13 @@ export function validateKnowledgePayload(payload, identifier = 'knowledge') {
 /**
  * Validate payload của câu hỏi quiz (question).
  * @param {Record<string, any>} payload
- * @param {Set<string>|null} [validKnowledgeIds=null] Nếu truyền Set, sẽ kiểm tra sự tồn tại của ID
+ * @param {Set<string>|null} [validKnowledgeVersionIds=null] Nếu truyền Set, sẽ kiểm tra sự tồn tại của versionId
  * @param {string} [identifier='question']
  * @returns {string[]}
  */
 export function validateQuestionPayload(
   payload,
-  validKnowledgeIds = null,
+  validKnowledgeVersionIds = null,
   identifier = 'question',
 ) {
   /** @type {string[]} */
@@ -180,30 +218,27 @@ export function validateQuestionPayload(
     errors.push(`${prefix}: type phải là 'multipleChoice' hoặc 'shortAnswer'.`);
   }
 
-  const knowledgeVersionIds =
-    payload.knowledgeVersionIds !== undefined
-      ? payload.knowledgeVersionIds
-      : payload.knowledgeIds;
+  if (payload.knowledgeIds !== undefined) {
+    errors.push(
+      `${prefix}: không được dùng trường cũ 'knowledgeIds', phải dùng 'knowledgeVersionIds' theo contract Database Design §7.2.`,
+    );
+  }
+
+  const knowledgeVersionIds = payload.knowledgeVersionIds;
 
   if (knowledgeVersionIds !== undefined) {
     if (!Array.isArray(knowledgeVersionIds)) {
       errors.push(`${prefix}: knowledgeVersionIds nếu có phải là mảng ID.`);
     } else {
-      for (let i = 0; i < knowledgeVersionIds.length; i++) {
-        const kId = knowledgeVersionIds[i];
-        if (!isValidObjectId(kId)) {
-          errors.push(
-            `${prefix}.knowledgeVersionIds[${i}]: ID '${kId}' không đúng chuẩn ObjectId.`,
-          );
-        } else if (
-          validKnowledgeIds instanceof Set &&
-          !validKnowledgeIds.has(kId)
-        ) {
-          errors.push(
-            `${prefix}.knowledgeVersionIds[${i}]: tham chiếu tới knowledge ID/version '${kId}' không tồn tại.`,
-          );
-        }
-      }
+      errors.push(
+        ...validateVersionIdArray(
+          knowledgeVersionIds,
+          'knowledgeVersionIds',
+          prefix,
+          validKnowledgeVersionIds,
+          'knowledge',
+        ),
+      );
     }
   }
 
@@ -215,8 +250,8 @@ export function validateQuestionPayload(
  * @param {Record<string, any>} payload
  * @param {object} [options={}]
  * @param {boolean} [options.isPublishing=true] Nếu true, bắt buộc phải có ít nhất 3 questionVersionIds
- * @param {Set<string>|null} [options.validKnowledgeIds=null]
- * @param {Set<string>|null} [options.validQuestionIds=null]
+ * @param {Set<string>|null} [options.validKnowledgeVersionIds=null]
+ * @param {Set<string>|null} [options.validQuestionVersionIds=null]
  * @param {string} [identifier='scenario']
  * @returns {string[]}
  */
@@ -224,8 +259,8 @@ export function validateScenarioPayload(
   payload,
   {
     isPublishing = true,
-    validKnowledgeIds = null,
-    validQuestionIds = null,
+    validKnowledgeVersionIds = null,
+    validQuestionVersionIds = null,
   } = {},
   identifier = 'scenario',
 ) {
@@ -274,14 +309,25 @@ export function validateScenarioPayload(
     }
   }
 
-  const questionVersionIds =
-    payload.questionVersionIds !== undefined
-      ? payload.questionVersionIds
-      : payload.questionIds;
+  if (payload.questionIds !== undefined) {
+    errors.push(
+      `${prefix}: không được dùng trường cũ 'questionIds', phải dùng 'questionVersionIds' theo contract Database Design §7.2.`,
+    );
+  }
 
-  // Tiêu chí bắt buộc cho xuất bản và dữ liệu seed: tối thiểu 3 câu quiz
+  if (payload.knowledgeIds !== undefined) {
+    errors.push(
+      `${prefix}: không được dùng trường cũ 'knowledgeIds', phải dùng 'knowledgeVersionIds' theo contract Database Design §7.2.`,
+    );
+  }
+
+  const questionVersionIds = payload.questionVersionIds;
+
   if (isPublishing) {
-    if (!Array.isArray(questionVersionIds) || questionVersionIds.length < 3) {
+    const distinctCount = Array.isArray(questionVersionIds)
+      ? new Set(questionVersionIds).size
+      : 0;
+    if (distinctCount < 3) {
       errors.push(
         `${prefix}: mỗi tình huống bắt buộc phải có ít nhất 3 questionVersionIds tương ứng khi xuất bản.`,
       );
@@ -289,47 +335,32 @@ export function validateScenarioPayload(
   }
 
   if (Array.isArray(questionVersionIds)) {
-    for (let i = 0; i < questionVersionIds.length; i++) {
-      const qId = questionVersionIds[i];
-      if (!isValidObjectId(qId)) {
-        errors.push(
-          `${prefix}.questionVersionIds[${i}]: ID '${qId}' không đúng chuẩn ObjectId.`,
-        );
-      } else if (
-        validQuestionIds instanceof Set &&
-        !validQuestionIds.has(qId)
-      ) {
-        errors.push(
-          `${prefix}.questionVersionIds[${i}]: tham chiếu tới question ID/version '${qId}' không tồn tại.`,
-        );
-      }
-    }
+    errors.push(
+      ...validateVersionIdArray(
+        questionVersionIds,
+        'questionVersionIds',
+        prefix,
+        validQuestionVersionIds,
+        'question',
+      ),
+    );
   }
 
-  const knowledgeVersionIds =
-    payload.knowledgeVersionIds !== undefined
-      ? payload.knowledgeVersionIds
-      : payload.knowledgeIds;
+  const knowledgeVersionIds = payload.knowledgeVersionIds;
 
   if (knowledgeVersionIds !== undefined) {
     if (!Array.isArray(knowledgeVersionIds)) {
       errors.push(`${prefix}: knowledgeVersionIds phải là mảng ID.`);
     } else {
-      for (let i = 0; i < knowledgeVersionIds.length; i++) {
-        const kId = knowledgeVersionIds[i];
-        if (!isValidObjectId(kId)) {
-          errors.push(
-            `${prefix}.knowledgeVersionIds[${i}]: ID '${kId}' không đúng chuẩn ObjectId.`,
-          );
-        } else if (
-          validKnowledgeIds instanceof Set &&
-          !validKnowledgeIds.has(kId)
-        ) {
-          errors.push(
-            `${prefix}.knowledgeVersionIds[${i}]: tham chiếu tới knowledge ID/version '${kId}' không tồn tại.`,
-          );
-        }
-      }
+      errors.push(
+        ...validateVersionIdArray(
+          knowledgeVersionIds,
+          'knowledgeVersionIds',
+          prefix,
+          validKnowledgeVersionIds,
+          'knowledge',
+        ),
+      );
     }
   }
 
@@ -341,9 +372,9 @@ export function validateScenarioPayload(
  * @param {Record<string, any>} payload
  * @param {object} [options={}]
  * @param {boolean} [options.isPublishing=true] Nếu true, bắt buộc phải có ít nhất 1 scenario
- * @param {Set<string>|null} [options.validScenarioIds=null]
- * @param {Set<string>|null} [options.validKnowledgeIds=null]
- * @param {Set<string>|null} [options.validQuestionIds=null]
+ * @param {Set<string>|null} [options.validScenarioVersionIds=null]
+ * @param {Set<string>|null} [options.validKnowledgeVersionIds=null]
+ * @param {Set<string>|null} [options.validQuestionVersionIds=null]
  * @param {string} [identifier='deck']
  * @returns {string[]}
  */
@@ -351,9 +382,9 @@ export function validateDeckPayload(
   payload,
   {
     isPublishing = true,
-    validScenarioIds = null,
-    validKnowledgeIds = null,
-    validQuestionIds = null,
+    validScenarioVersionIds = null,
+    validKnowledgeVersionIds = null,
+    validQuestionVersionIds = null,
   } = {},
   identifier = 'deck',
 ) {
@@ -383,13 +414,31 @@ export function validateDeckPayload(
     errors.push(`${prefix}: description không được để trống.`);
   }
 
-  const scenarioVersionIds =
-    payload.scenarioVersionIds !== undefined
-      ? payload.scenarioVersionIds
-      : payload.scenarioIds;
+  if (payload.scenarioIds !== undefined) {
+    errors.push(
+      `${prefix}: không được dùng trường cũ 'scenarioIds', phải dùng 'scenarioVersionIds' theo contract Database Design §7.2.`,
+    );
+  }
+
+  if (payload.knowledgeIds !== undefined) {
+    errors.push(
+      `${prefix}: không được dùng trường cũ 'knowledgeIds', phải dùng 'knowledgeVersionIds' theo contract Database Design §7.2.`,
+    );
+  }
+
+  if (payload.questionIds !== undefined) {
+    errors.push(
+      `${prefix}: không được dùng trường cũ 'questionIds', phải dùng 'questionVersionIds' theo contract Database Design §7.2.`,
+    );
+  }
+
+  const scenarioVersionIds = payload.scenarioVersionIds;
 
   if (isPublishing) {
-    if (!Array.isArray(scenarioVersionIds) || scenarioVersionIds.length === 0) {
+    const distinctCount = Array.isArray(scenarioVersionIds)
+      ? new Set(scenarioVersionIds).size
+      : 0;
+    if (distinctCount === 0) {
       errors.push(
         `${prefix}: bộ chủ đề xuất bản phải có ít nhất một scenarioVersionIds.`,
       );
@@ -397,74 +446,50 @@ export function validateDeckPayload(
   }
 
   if (Array.isArray(scenarioVersionIds)) {
-    for (let i = 0; i < scenarioVersionIds.length; i++) {
-      const sId = scenarioVersionIds[i];
-      if (!isValidObjectId(sId)) {
-        errors.push(
-          `${prefix}.scenarioVersionIds[${i}]: ID '${sId}' không đúng chuẩn ObjectId.`,
-        );
-      } else if (
-        validScenarioIds instanceof Set &&
-        !validScenarioIds.has(sId)
-      ) {
-        errors.push(
-          `${prefix}.scenarioVersionIds[${i}]: tham chiếu tới scenario ID/version '${sId}' không tồn tại.`,
-        );
-      }
-    }
+    errors.push(
+      ...validateVersionIdArray(
+        scenarioVersionIds,
+        'scenarioVersionIds',
+        prefix,
+        validScenarioVersionIds,
+        'scenario',
+      ),
+    );
   }
 
-  const knowledgeVersionIds =
-    payload.knowledgeVersionIds !== undefined
-      ? payload.knowledgeVersionIds
-      : payload.knowledgeIds;
+  const knowledgeVersionIds = payload.knowledgeVersionIds;
 
   if (knowledgeVersionIds !== undefined) {
     if (!Array.isArray(knowledgeVersionIds)) {
       errors.push(`${prefix}: knowledgeVersionIds phải là mảng ID.`);
     } else {
-      for (let i = 0; i < knowledgeVersionIds.length; i++) {
-        const kId = knowledgeVersionIds[i];
-        if (!isValidObjectId(kId)) {
-          errors.push(
-            `${prefix}.knowledgeVersionIds[${i}]: ID '${kId}' không đúng chuẩn ObjectId.`,
-          );
-        } else if (
-          validKnowledgeIds instanceof Set &&
-          !validKnowledgeIds.has(kId)
-        ) {
-          errors.push(
-            `${prefix}.knowledgeVersionIds[${i}]: tham chiếu tới knowledge ID/version '${kId}' không tồn tại.`,
-          );
-        }
-      }
+      errors.push(
+        ...validateVersionIdArray(
+          knowledgeVersionIds,
+          'knowledgeVersionIds',
+          prefix,
+          validKnowledgeVersionIds,
+          'knowledge',
+        ),
+      );
     }
   }
 
-  const questionVersionIds =
-    payload.questionVersionIds !== undefined
-      ? payload.questionVersionIds
-      : payload.questionIds;
+  const questionVersionIds = payload.questionVersionIds;
 
   if (questionVersionIds !== undefined) {
     if (!Array.isArray(questionVersionIds)) {
       errors.push(`${prefix}: questionVersionIds phải là mảng ID.`);
     } else {
-      for (let i = 0; i < questionVersionIds.length; i++) {
-        const qId = questionVersionIds[i];
-        if (!isValidObjectId(qId)) {
-          errors.push(
-            `${prefix}.questionVersionIds[${i}]: ID '${qId}' không đúng chuẩn ObjectId.`,
-          );
-        } else if (
-          validQuestionIds instanceof Set &&
-          !validQuestionIds.has(qId)
-        ) {
-          errors.push(
-            `${prefix}.questionVersionIds[${i}]: tham chiếu tới question ID/version '${qId}' không tồn tại.`,
-          );
-        }
-      }
+      errors.push(
+        ...validateVersionIdArray(
+          questionVersionIds,
+          'questionVersionIds',
+          prefix,
+          validQuestionVersionIds,
+          'question',
+        ),
+      );
     }
   }
 
@@ -521,7 +546,7 @@ export function validateSeedDataset(dataset) {
     };
   }
 
-  // 1. Kiểm tra định danh nội dung (contentId) và phiên bản (versionId)
+  // 1. Kiểm tra định danh nội dung (contentId), phiên bản (versionId) và revision
   /** @type {Map<string, string>} */
   const allContentIds = new Map();
   /** @type {Map<string, string>} */
@@ -538,35 +563,58 @@ export function validateSeedDataset(dataset) {
       return;
     }
 
-    const contentId = item.contentId || item._id;
+    const rawContentId =
+      item.contentId !== undefined ? item.contentId : item._id;
+    const contentId = rawContentId;
     if (!isValidObjectId(contentId)) {
       allErrors.push(
-        `${kind}[${idx}]: contentId/id '${contentId}' không phải ObjectId 24 hex hợp lệ.`,
+        `${kind}[${idx}]: contentId '${contentId}' không phải ObjectId 24 ký tự hex hợp lệ.`,
       );
     } else {
-      const key = `${kind}:${contentId}`;
-      if (allContentIds.has(key)) {
+      if (allContentIds.has(contentId)) {
         allErrors.push(
-          `${kind}[${contentId}]: trùng lặp contentId với một record khác.`,
+          `${kind}[${contentId}]: trùng lặp contentId '${contentId}' với một record khác (${allContentIds.get(contentId)}).`,
         );
       } else {
-        allContentIds.set(key, `${kind}[${contentId}]`);
+        allContentIds.set(contentId, `${kind}[${contentId}]`);
+      }
+      if (
+        item.contentId !== undefined &&
+        item._id !== undefined &&
+        item._id !== item.contentId
+      ) {
+        allErrors.push(
+          `${kind}[${idx}]: _id '${item._id}' phải bằng contentId '${item.contentId}' vì _id chính là contentId khi lưu vào content_items.`,
+        );
       }
     }
 
-    const versionId = item.versionId || item.publishedVersionId || item._id;
+    const rawVersionId =
+      item.versionId !== undefined ? item.versionId : item.publishedVersionId;
+    const versionId = rawVersionId;
     if (!isValidObjectId(versionId)) {
       allErrors.push(
-        `${kind}[${idx}]: versionId '${versionId}' không phải ObjectId 24 hex hợp lệ.`,
+        `${kind}[${idx}]: versionId '${versionId}' không phải ObjectId 24 ký tự hex hợp lệ.`,
       );
     } else {
       if (allVersionIds.has(versionId)) {
         allErrors.push(
-          `${kind}[${versionId}]: trùng lặp versionId với một record khác (${allVersionIds.get(versionId)}).`,
+          `${kind}[${versionId}]: trùng lặp versionId '${versionId}' với một record khác (${allVersionIds.get(versionId)}).`,
         );
       } else {
         allVersionIds.set(versionId, `${kind}[${versionId}]`);
       }
+    }
+
+    // Kiểm tra revision: Số phiên bản nguyên dương (>= 1) theo Database Design §7.2 và checklist
+    if (
+      typeof item.revision !== 'number' ||
+      !Number.isInteger(item.revision) ||
+      item.revision < 1
+    ) {
+      allErrors.push(
+        `${kind}[${idx}]: revision bắt buộc phải là số nguyên dương (>= 1).`,
+      );
     }
   };
 
@@ -578,36 +626,52 @@ export function validateSeedDataset(dataset) {
     registerRecord(scenarios[i], 'Scenario', i);
   for (let i = 0; i < decks.length; i++) registerRecord(decks[i], 'Deck', i);
 
+  // Kiểm tra chéo sau khi toàn bộ contentId đã được đăng ký:
+  // Một contentId không được trùng với bất kỳ versionId nào (§7.1 & §7.2)
+  for (const [contentId, contentLabel] of allContentIds) {
+    if (allVersionIds.has(contentId)) {
+      allErrors.push(
+        `contentId '${contentId}' (${contentLabel}) trùng với versionId của record ${allVersionIds.get(contentId)} — vi phạm tính duy nhất giữa content_items._id và content_versions._id.`,
+      );
+    }
+  }
+
+  /**
+   * Theo Database Design §7.2:
+   * knowledgeVersionIds, questionVersionIds, scenarioVersionIds bắt buộc trỏ tới versionId
+   * (content_versions._id) của bản xuất bản, TUYỆT ĐỐI KHÔNG trỏ tới contentId.
+   */
   /** @type {Set<string>} */
-  const validKnowledgeIds = new Set();
+  const validKnowledgeVersionIds = new Set();
   for (let i = 0; i < knowledges.length; i++) {
     const k = knowledges[i];
     if (k && typeof k === 'object') {
-      if (isValidObjectId(k.versionId)) validKnowledgeIds.add(k.versionId);
-      if (isValidObjectId(k.contentId)) validKnowledgeIds.add(k.contentId);
-      if (isValidObjectId(k._id)) validKnowledgeIds.add(k._id);
+      // Dùng kiểm tra tường minh để tránh falsy string ('') âm thầm fallback
+      const vId =
+        k.versionId !== undefined ? k.versionId : k.publishedVersionId;
+      if (isValidObjectId(vId)) validKnowledgeVersionIds.add(vId);
     }
   }
 
   /** @type {Set<string>} */
-  const validQuestionIds = new Set();
+  const validQuestionVersionIds = new Set();
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     if (q && typeof q === 'object') {
-      if (isValidObjectId(q.versionId)) validQuestionIds.add(q.versionId);
-      if (isValidObjectId(q.contentId)) validQuestionIds.add(q.contentId);
-      if (isValidObjectId(q._id)) validQuestionIds.add(q._id);
+      const vId =
+        q.versionId !== undefined ? q.versionId : q.publishedVersionId;
+      if (isValidObjectId(vId)) validQuestionVersionIds.add(vId);
     }
   }
 
   /** @type {Set<string>} */
-  const validScenarioIds = new Set();
+  const validScenarioVersionIds = new Set();
   for (let i = 0; i < scenarios.length; i++) {
     const s = scenarios[i];
     if (s && typeof s === 'object') {
-      if (isValidObjectId(s.versionId)) validScenarioIds.add(s.versionId);
-      if (isValidObjectId(s.contentId)) validScenarioIds.add(s.contentId);
-      if (isValidObjectId(s._id)) validScenarioIds.add(s._id);
+      const vId =
+        s.versionId !== undefined ? s.versionId : s.publishedVersionId;
+      if (isValidObjectId(vId)) validScenarioVersionIds.add(vId);
     }
   }
 
@@ -615,21 +679,27 @@ export function validateSeedDataset(dataset) {
   for (let i = 0; i < knowledges.length; i++) {
     const k = knowledges[i];
     if (k && typeof k === 'object') {
-      allErrors.push(
-        ...validateKnowledgePayload(k, k.contentId || k._id || String(i)),
-      );
+      const id =
+        k.contentId !== undefined
+          ? k.contentId
+          : k._id !== undefined
+            ? k._id
+            : String(i);
+      allErrors.push(...validateKnowledgePayload(k, id));
     }
   }
 
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     if (q && typeof q === 'object') {
+      const id =
+        q.contentId !== undefined
+          ? q.contentId
+          : q._id !== undefined
+            ? q._id
+            : String(i);
       allErrors.push(
-        ...validateQuestionPayload(
-          q,
-          validKnowledgeIds,
-          q.contentId || q._id || String(i),
-        ),
+        ...validateQuestionPayload(q, validKnowledgeVersionIds, id),
       );
     }
   }
@@ -637,11 +707,21 @@ export function validateSeedDataset(dataset) {
   for (let i = 0; i < scenarios.length; i++) {
     const s = scenarios[i];
     if (s && typeof s === 'object') {
+      const id =
+        s.contentId !== undefined
+          ? s.contentId
+          : s._id !== undefined
+            ? s._id
+            : String(i);
       allErrors.push(
         ...validateScenarioPayload(
           s,
-          { isPublishing: true, validKnowledgeIds, validQuestionIds },
-          s.contentId || s._id || String(i),
+          {
+            isPublishing: true,
+            validKnowledgeVersionIds,
+            validQuestionVersionIds,
+          },
+          id,
         ),
       );
     }
@@ -650,16 +730,22 @@ export function validateSeedDataset(dataset) {
   for (let i = 0; i < decks.length; i++) {
     const d = decks[i];
     if (d && typeof d === 'object') {
+      const id =
+        d.contentId !== undefined
+          ? d.contentId
+          : d._id !== undefined
+            ? d._id
+            : String(i);
       allErrors.push(
         ...validateDeckPayload(
           d,
           {
             isPublishing: true,
-            validScenarioIds,
-            validKnowledgeIds,
-            validQuestionIds,
+            validScenarioVersionIds,
+            validKnowledgeVersionIds,
+            validQuestionVersionIds,
           },
-          d.contentId || d._id || String(i),
+          id,
         ),
       );
     }
