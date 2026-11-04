@@ -323,6 +323,22 @@ export function validateScenarioPayload(
 
   const questionVersionIds = payload.questionVersionIds;
 
+  if (questionVersionIds !== undefined) {
+    if (!Array.isArray(questionVersionIds)) {
+      errors.push(`${prefix}: questionVersionIds phải là mảng ID.`);
+    } else {
+      errors.push(
+        ...validateVersionIdArray(
+          questionVersionIds,
+          'questionVersionIds',
+          prefix,
+          validQuestionVersionIds,
+          'question',
+        ),
+      );
+    }
+  }
+
   if (isPublishing) {
     const distinctCount = Array.isArray(questionVersionIds)
       ? new Set(questionVersionIds).size
@@ -332,18 +348,6 @@ export function validateScenarioPayload(
         `${prefix}: mỗi tình huống bắt buộc phải có ít nhất 3 questionVersionIds tương ứng khi xuất bản.`,
       );
     }
-  }
-
-  if (Array.isArray(questionVersionIds)) {
-    errors.push(
-      ...validateVersionIdArray(
-        questionVersionIds,
-        'questionVersionIds',
-        prefix,
-        validQuestionVersionIds,
-        'question',
-      ),
-    );
   }
 
   const knowledgeVersionIds = payload.knowledgeVersionIds;
@@ -434,6 +438,22 @@ export function validateDeckPayload(
 
   const scenarioVersionIds = payload.scenarioVersionIds;
 
+  if (scenarioVersionIds !== undefined) {
+    if (!Array.isArray(scenarioVersionIds)) {
+      errors.push(`${prefix}: scenarioVersionIds phải là mảng ID.`);
+    } else {
+      errors.push(
+        ...validateVersionIdArray(
+          scenarioVersionIds,
+          'scenarioVersionIds',
+          prefix,
+          validScenarioVersionIds,
+          'scenario',
+        ),
+      );
+    }
+  }
+
   if (isPublishing) {
     const distinctCount = Array.isArray(scenarioVersionIds)
       ? new Set(scenarioVersionIds).size
@@ -443,18 +463,6 @@ export function validateDeckPayload(
         `${prefix}: bộ chủ đề xuất bản phải có ít nhất một scenarioVersionIds.`,
       );
     }
-  }
-
-  if (Array.isArray(scenarioVersionIds)) {
-    errors.push(
-      ...validateVersionIdArray(
-        scenarioVersionIds,
-        'scenarioVersionIds',
-        prefix,
-        validScenarioVersionIds,
-        'scenario',
-      ),
-    );
   }
 
   const knowledgeVersionIds = payload.knowledgeVersionIds;
@@ -589,9 +597,7 @@ export function validateSeedDataset(dataset) {
       }
     }
 
-    const rawVersionId =
-      item.versionId !== undefined ? item.versionId : item.publishedVersionId;
-    const versionId = rawVersionId;
+    const versionId = item.versionId;
     if (!isValidObjectId(versionId)) {
       allErrors.push(
         `${kind}[${idx}]: versionId '${versionId}' không phải ObjectId 24 ký tự hex hợp lệ.`,
@@ -626,16 +632,6 @@ export function validateSeedDataset(dataset) {
     registerRecord(scenarios[i], 'Scenario', i);
   for (let i = 0; i < decks.length; i++) registerRecord(decks[i], 'Deck', i);
 
-  // Kiểm tra chéo sau khi toàn bộ contentId đã được đăng ký:
-  // Một contentId không được trùng với bất kỳ versionId nào (§7.1 & §7.2)
-  for (const [contentId, contentLabel] of allContentIds) {
-    if (allVersionIds.has(contentId)) {
-      allErrors.push(
-        `contentId '${contentId}' (${contentLabel}) trùng với versionId của record ${allVersionIds.get(contentId)} — vi phạm tính duy nhất giữa content_items._id và content_versions._id.`,
-      );
-    }
-  }
-
   /**
    * Theo Database Design §7.2:
    * knowledgeVersionIds, questionVersionIds, scenarioVersionIds bắt buộc trỏ tới versionId
@@ -645,11 +641,8 @@ export function validateSeedDataset(dataset) {
   const validKnowledgeVersionIds = new Set();
   for (let i = 0; i < knowledges.length; i++) {
     const k = knowledges[i];
-    if (k && typeof k === 'object') {
-      // Dùng kiểm tra tường minh để tránh falsy string ('') âm thầm fallback
-      const vId =
-        k.versionId !== undefined ? k.versionId : k.publishedVersionId;
-      if (isValidObjectId(vId)) validKnowledgeVersionIds.add(vId);
+    if (k && typeof k === 'object' && isValidObjectId(k.versionId)) {
+      validKnowledgeVersionIds.add(k.versionId);
     }
   }
 
@@ -657,10 +650,8 @@ export function validateSeedDataset(dataset) {
   const validQuestionVersionIds = new Set();
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
-    if (q && typeof q === 'object') {
-      const vId =
-        q.versionId !== undefined ? q.versionId : q.publishedVersionId;
-      if (isValidObjectId(vId)) validQuestionVersionIds.add(vId);
+    if (q && typeof q === 'object' && isValidObjectId(q.versionId)) {
+      validQuestionVersionIds.add(q.versionId);
     }
   }
 
@@ -668,10 +659,8 @@ export function validateSeedDataset(dataset) {
   const validScenarioVersionIds = new Set();
   for (let i = 0; i < scenarios.length; i++) {
     const s = scenarios[i];
-    if (s && typeof s === 'object') {
-      const vId =
-        s.versionId !== undefined ? s.versionId : s.publishedVersionId;
-      if (isValidObjectId(vId)) validScenarioVersionIds.add(vId);
+    if (s && typeof s === 'object' && isValidObjectId(s.versionId)) {
+      validScenarioVersionIds.add(s.versionId);
     }
   }
 

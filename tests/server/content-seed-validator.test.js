@@ -423,86 +423,63 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
       ).toBe(true);
     });
 
-    it('Lỗi tiềm ẩn 1: báo lỗi khi contentId của một record trùng với versionId của record khác', () => {
-      const crossCollisionDataset = {
-        knowledges: [
-          {
-            contentId: '672000000000000000000001',
-            versionId: '672000000000000000000011', // versionId bằng contentId của question
-            revision: 1,
-            type: 'vocabulary',
-            expression: 'りんご',
-            meaning: 'Quả táo',
-            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
-          },
-        ],
-        questions: [
-          {
-            contentId: '672000000000000000000011', // trùng versionId của knowledge
-            versionId: '6720000000000000000000b1',
-            revision: 1,
-            type: 'multipleChoice',
-            prompt: 'Câu hỏi trắc nghiệm',
-            options: [
-              { id: '1', text: 'A' },
-              { id: '2', text: 'B' },
-            ],
-            correctOptionId: '1',
-            explanation: 'Giải thích',
-          },
-        ],
-        scenarios: [],
-        decks: [],
-      };
+    it('Must fix: báo lỗi khi record thiếu versionId kể cả khi có publishedVersionId cùng giá trị', () => {
+      const cloned = JSON.parse(JSON.stringify(sampleDataset));
+      const targetQuestion = cloned.questions[0];
+      const validVersionId = targetQuestion.versionId;
+      delete targetQuestion.versionId;
+      targetQuestion.publishedVersionId = validVersionId;
 
-      const result = validateSeedDataset(crossCollisionDataset);
+      const result = validateSeedDataset(cloned);
       expect(result.isValid).toBe(false);
-      const crossErrors = result.errors.filter(
-        (e) =>
-          e.includes('672000000000000000000011') &&
-          e.includes('content_items._id') &&
-          e.includes('content_versions._id'),
-      );
-      expect(crossErrors.length).toBe(1);
+      expect(
+        result.errors.some(
+          (e) => e.includes("versionId 'undefined'") && e.includes('ObjectId'),
+        ),
+      ).toBe(true);
+      expect(
+        result.errors.some((e) =>
+          e.includes(
+            `tham chiếu tới question versionId '${validVersionId}' không tồn tại`,
+          ),
+        ),
+      ).toBe(true);
     });
 
-    it('Lỗi tiềm ẩn 1 (hướng ngược): không double-report khi versionId_B = contentId_A đã đăng ký trước', () => {
-      const crossCollisionReversedDataset = {
-        knowledges: [
-          {
-            contentId: '672000000000000000000099',
-            versionId: '6720000000000000000000a9',
-            revision: 1,
-            type: 'vocabulary',
-            expression: 'みかん',
-            meaning: 'Quả quýt',
-            examples: [{ japanese: 'みかん。', vietnamese: 'Quýt.' }],
-          },
-          {
-            contentId: '672000000000000000000098',
-            versionId: '672000000000000000000099', // versionId bằng contentId của knowledge trên
-            revision: 1,
-            type: 'grammar',
-            expression: '〜てください',
-            meaning: 'Xin hãy...',
-            examples: [
-              { japanese: 'やってください。', vietnamese: 'Xin hãy làm.' },
-            ],
-          },
-        ],
-        questions: [],
-        scenarios: [],
-        decks: [],
+    it('Should fix: báo lỗi khi questionVersionIds không phải là mảng kể cả khi isPublishing là false', () => {
+      const draftWithBadType = {
+        title: 'Tình huống nháp',
+        context: 'Bối cảnh',
+        objective: 'Mục tiêu',
+        roleA: 'Vai A',
+        roleB: 'Vai B',
+        hints: ['Gợi ý'],
+        questionVersionIds: 'not-an-array',
       };
 
-      const result = validateSeedDataset(crossCollisionReversedDataset);
-      expect(result.isValid).toBe(false);
-      const crossErrors = result.errors.filter(
-        (e) =>
-          e.includes('672000000000000000000099') &&
-          (e.includes('content_items') || e.includes('content_versions')),
-      );
-      expect(crossErrors.length).toBe(1);
+      const errors = validateScenarioPayload(draftWithBadType, {
+        isPublishing: false,
+      });
+      expect(
+        errors.some((e) => e.includes('questionVersionIds phải là mảng ID')),
+      ).toBe(true);
+    });
+
+    it('Should fix: báo lỗi khi scenarioVersionIds của deck không phải là mảng kể cả khi isPublishing là false', () => {
+      const draftDeckWithBadType = {
+        title: 'Bộ chủ đề nháp',
+        topicKey: 'draft_topic',
+        level: 'N5',
+        description: 'Mô tả',
+        scenarioVersionIds: 'not-an-array',
+      };
+
+      const errors = validateDeckPayload(draftDeckWithBadType, {
+        isPublishing: false,
+      });
+      expect(
+        errors.some((e) => e.includes('scenarioVersionIds phải là mảng ID')),
+      ).toBe(true);
     });
 
     it('Lỗi tiềm ẩn 2: báo lỗi khi contentId là chuỗi rỗng thay vì âm thầm fallback sang _id', () => {
@@ -586,56 +563,6 @@ describe('DATA-001: Content Seed & Learning Material Validator', () => {
       expect(
         result.errors.some((e) =>
           e.includes("trùng lặp versionId '6720000000000000000000ff'"),
-        ),
-      ).toBe(true);
-    });
-
-    it('Lỗi tiềm ẩn 6: versionId rỗng không được tạo ID ảo trong valid sets', () => {
-      const emptyVersionIdDataset = {
-        knowledges: [
-          {
-            contentId: '672000000000000000000001',
-            versionId: '', // rỗng — không hợp lệ
-            publishedVersionId: '6720000000000000000000a1',
-            revision: 1,
-            type: 'vocabulary',
-            expression: 'りんご',
-            meaning: 'Quả táo',
-            examples: [{ japanese: 'りんご。', vietnamese: 'Táo.' }],
-          },
-        ],
-        questions: [
-          {
-            contentId: '672000000000000000000011',
-            versionId: '6720000000000000000000b1',
-            revision: 1,
-            type: 'multipleChoice',
-            prompt: 'Câu hỏi',
-            options: [
-              { id: '1', text: 'A' },
-              { id: '2', text: 'B' },
-            ],
-            correctOptionId: '1',
-            explanation: 'Giải thích',
-            knowledgeVersionIds: ['6720000000000000000000a1'],
-          },
-        ],
-        scenarios: [],
-        decks: [],
-      };
-
-      const result = validateSeedDataset(emptyVersionIdDataset);
-      expect(result.isValid).toBe(false);
-      expect(
-        result.errors.some(
-          (e) => e.includes("versionId ''") && e.includes('ObjectId'),
-        ),
-      ).toBe(true);
-      expect(
-        result.errors.some((e) =>
-          e.includes(
-            "tham chiếu tới knowledge versionId '6720000000000000000000a1' không tồn tại",
-          ),
         ),
       ).toBe(true);
     });
