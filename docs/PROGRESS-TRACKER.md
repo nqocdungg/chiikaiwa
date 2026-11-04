@@ -26,7 +26,7 @@ File này giúp agent hoặc thành viên tiếp theo nắm nhanh task đã làm
 ### OPS-002 — MongoDB indexes và transaction
 
 - Ngày cập nhật: 2026-11-03
-- Trạng thái: Còn dở — Project Tracker vẫn ghi `In Progress`, review `Pending`.
+- Trạng thái: Đã hoàn thành
 - PR: 49ebcbf4aec5fc10bf62c08dee1638352ff98c6a
 - Đã làm: Cấu hình kết nối/reuse MongoDB, transaction helper và duplicate-key handling; thêm migration indexes chạy lặp an toàn; thêm kiểm tra index Atlas theo key/options. Atlas đã hiện migration record và các collections theo ảnh đã gửi.
 - File liên quan: `server/persistence/database.js`, `server/persistence/migrations/`, `scripts/verify-atlas-transaction.js`, `server/persistence/index-definition.js`, `tests/integration/database.test.js`.
