@@ -66,14 +66,13 @@ Task chỉ Done khi:
 - Dependencies hoàn tất theo điều kiện nghiệm thu; reviewer khác owner chấp nhận.
 - Có PR khi thay đổi source, kết quả kiểm chứng và evidence truy vết được.
 - Tài liệu/config cần thiết cập nhật; không chứa secret hoặc dữ liệu riêng.
-- Actual/remaining được ghi theo thực tế, remaining bằng 0.
 
-Merge PR hoặc build thành công không tự động chứng minh task Done. Với dữ liệu, QA hoặc vận hành, đánh giá đầu ra và bằng chứng theo Task Handoff.
+Actual/remaining phục vụ theo dõi tiến độ và dự báo, giả thiết không phải điều kiện DoD. Với dữ liệu, QA hoặc vận hành, đánh giá đầu ra và bằng chứng theo Task Handoff.
 
 ## Giao tiếp
 
 Update hằng ngày nêu kết quả so với kế hoạch, link bằng chứng, mục tiêu tiếp theo và blocker. Cập nhật trực tiếp trên bảng, PR hoặc kênh nhóm; không duy trì nhiều bản tiến độ độc lập.
 
-Khi bị kẹt, tự kiểm tra có giới hạn; khoảng một giờ chưa ra thì báo hỗ trợ. Rủi ro dữ liệu/bảo mật hoặc vấn đề chặn người khác cần báo ngay. Thông tin gồm mục tiêu, việc đã thử, lỗi/kết quả, giả thuyết và cần hỗ trợ gì từ ai trước khi nào. Action item của Retro phải có owner và hạn, được xem lại trong sprint sau.
+Khi bị block, tự kiểm tra có giới hạn; khoảng một giờ chưa ra thì báo hỗ trợ. Rủi ro dữ liệu/bảo mật hoặc vấn đề chặn người khác cần báo ngay. Thông tin gồm mục tiêu, việc đã thử, lỗi/kết quả, giả thuyết và cần hỗ trợ gì từ ai trước khi nào. Action item của Retro phải có owner và hạn, được xem lại trong sprint sau.
 
 Tham chiếu: [Scrum Guide](https://scrumguides.org/scrum-guide.html).
