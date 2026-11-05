@@ -6,6 +6,18 @@ import { getIdentityEpoch } from '../services/cache.js';
 
 const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/u;
 
+function AccountLockedNotice() {
+  return (
+    <div className="mx-auto max-w-md py-16 text-center">
+      <h1 className="text-2xl font-bold text-ink">Tài khoản đã bị khóa</h1>
+      <p className="mt-4 text-muted">
+        Tài khoản của bạn hiện đang bị khóa. Vui lòng liên hệ quản trị viên để
+        được hỗ trợ.
+      </p>
+    </div>
+  );
+}
+
 /**
  * Route guard that restricts access based on authentication state and allowed identity roles.
  *
@@ -44,15 +56,7 @@ export function ProtectedRoute({ allowedRoles = ['U'], children }) {
 
   // Locked accounts are stopped immediately
   if (status === 'locked') {
-    return (
-      <div className="mx-auto max-w-md py-16 text-center">
-        <h1 className="text-2xl font-bold text-ink">Tài khoản đã bị khóa</h1>
-        <p className="mt-4 text-muted">
-          Tài khoản của bạn hiện đang bị khóa. Vui lòng liên hệ quản trị viên để
-          được hỗ trợ.
-        </p>
-      </div>
-    );
+    return <AccountLockedNotice />;
   }
 
   // Not logged in -> redirect to login
@@ -184,15 +188,7 @@ export function SessionMemberRoute({ children }) {
   }
 
   if (status === 'locked') {
-    return (
-      <div className="mx-auto max-w-md py-16 text-center">
-        <h1 className="text-2xl font-bold text-ink">Tài khoản đã bị khóa</h1>
-        <p className="mt-4 text-muted">
-          Tài khoản của bạn hiện đang bị khóa. Vui lòng liên hệ quản trị viên để
-          được hỗ trợ.
-        </p>
-      </div>
-    );
+    return <AccountLockedNotice />;
   }
 
   if (kind === 'unauthenticated') {
@@ -297,15 +293,7 @@ export function InvitationRoute({ children }) {
   }
 
   if (status === 'locked') {
-    return (
-      <div className="mx-auto max-w-md py-16 text-center">
-        <h1 className="text-2xl font-bold text-ink">Tài khoản đã bị khóa</h1>
-        <p className="mt-4 text-muted">
-          Tài khoản của bạn hiện đang bị khóa. Vui lòng liên hệ quản trị viên để
-          được hỗ trợ.
-        </p>
-      </div>
-    );
+    return <AccountLockedNotice />;
   }
 
   return children ? <>{children}</> : <Outlet />;

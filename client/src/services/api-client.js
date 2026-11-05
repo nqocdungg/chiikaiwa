@@ -56,7 +56,9 @@ export function createIdempotencyKey() {
  * @returns {boolean}
  */
 export function isIdempotencyExempt(path) {
-  const normalized = path.replace(/^\/api\/v1/u, '');
+  const normalized = new URL(path, 'http://localhost').pathname
+    .replace(/^\/api\/v1(?=\/|$)/u, '')
+    .replace(/\/+$/u, '');
   return IDEMPOTENCY_EXEMPT_PATHS.some((regex) => regex.test(normalized));
 }
 

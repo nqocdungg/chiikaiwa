@@ -28,6 +28,9 @@ describe('ApiClient and cache isolation', () => {
 
   it('identifies idempotency exempt paths correctly according to 07 §2.2', () => {
     expect(isIdempotencyExempt('/auth/login')).toBe(true);
+    expect(isIdempotencyExempt('/auth/login/')).toBe(true);
+    expect(isIdempotencyExempt('/api/v1/auth/login#form')).toBe(true);
+    expect(isIdempotencyExempt('/me/profile?next=/auth/login')).toBe(false);
     expect(isIdempotencyExempt('/auth/logout')).toBe(true);
     expect(isIdempotencyExempt('/auth/password-reset-requests')).toBe(true);
     expect(isIdempotencyExempt('/auth/password-resets')).toBe(true);
@@ -144,8 +147,10 @@ describe('ApiClient and cache isolation', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await client.post('/auth/login', { email: 'a@b.com', password: 'secret' });
-    const [, init] = fetchMock.mock.calls[0];
+    const path = '/auth/login/?redirect=/home';
+    await client.post(path, { email: 'a@b.com', password: 'secret' });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1' + path);
     expect(init.headers.get('X-CSRF-Token')).toBe('preset-token');
     expect(init.headers.get('Idempotency-Key')).toBeNull();
   });
