@@ -16,7 +16,10 @@ import {
   disconnectDatabase,
 } from '../../server/persistence/database.js';
 import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
-import { hashGuestCredential } from '../../server/modules/identity/crypto.js';
+import {
+  hashGuestCredential,
+  signJwt,
+} from '../../server/modules/identity/crypto.js';
 
 const { ObjectId } = mongoose.Types;
 const DEFAULT_ORIGIN = 'http://127.0.0.1:5173';
@@ -498,7 +501,7 @@ describe('BE-001 Authentication replica-set integration tests', () => {
 
     // 1. When both valid user cookie and valid guest cookie are sent to POST /auth/logout,
     // user is the executing identity (07 §2.1): user session is revoked while guest session stays active
-    await request(app)
+    const userLogoutRes = await request(app)
       .post('/api/v1/auth/logout')
       .set('Origin', DEFAULT_ORIGIN)
       .set(
@@ -508,6 +511,13 @@ describe('BE-001 Authentication replica-set integration tests', () => {
       .set('X-CSRF-Token', csrfToken)
       .send({})
       .expect(204);
+
+    expect(
+      extractCookiePair(userLogoutRes.headers['set-cookie'], 'ck_session'),
+    ).toBe('ck_session=');
+    expect(
+      extractCookiePair(userLogoutRes.headers['set-cookie'], 'ck_guest'),
+    ).toBe('');
 
     // User cookie is now revoked
     await request(app)
@@ -523,13 +533,20 @@ describe('BE-001 Authentication replica-set integration tests', () => {
     expect(guestStillActive.body.data.kind).toBe('guest');
 
     // 2. Now guest logs out: server must revoke the guest credential
-    await request(app)
+    const guestLogoutRes = await request(app)
       .post('/api/v1/auth/logout')
       .set('Origin', DEFAULT_ORIGIN)
       .set('Cookie', `${csrfCookie}; ck_guest=${rawGuestToken}`)
       .set('X-CSRF-Token', csrfToken)
       .send({})
       .expect(204);
+
+    expect(
+      extractCookiePair(guestLogoutRes.headers['set-cookie'], 'ck_guest'),
+    ).toBe('ck_guest=');
+    expect(
+      extractCookiePair(guestLogoutRes.headers['set-cookie'], 'ck_session'),
+    ).toBe('');
 
     // 3. Replaying the old guest cookie to GET /auth/me must be rejected (401 SESSION_EXPIRED)
     const replayGuestRes = await request(app)
@@ -565,6 +582,293 @@ describe('BE-001 Authentication replica-set integration tests', () => {
       .countDocuments({ _id: practiceSessionId });
     expect(savedCount).toBe(1);
     expect(sessionCount).toBe(1);
+  });
+
+  it('rejects invalid ck_session without falling back to valid ck_guest on protected routes, clears only ck_session on logout, and never revokes a real session from a forged token', async () => {
+    const { csrfToken, csrfCookie } = await getCsrfContext();
+    const authEnvSecret = 'chiikaiwa-dev-only-jwt-secret-key-at-least-32-bytes';
+
+    // 1. Seed a valid guest session
+    const rawGuestToken = 'guest-credential-option-b-test';
+    const guestId = new ObjectId();
+    const practiceSessionId = new ObjectId();
+    const futureExpiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    await db.collection('guest_sessions').insertOne({
+      _id: guestId,
+      credentialHash: hashGuestCredential(rawGuestToken),
+      invitationId: new ObjectId(),
+      practiceSessionId,
+      status: 'active',
+      expiresAt: futureExpiry,
+      version: 0,
+      cleanupState: 'pending',
+    });
+
+    // 2. Register and log in a user account
+    const regRes = await request(app)
+      .post('/api/v1/auth/register')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        email: 'optionb@example.com',
+        password: 'ValidPassword123',
+        displayName: 'Option B User',
+      })
+      .expect(201);
+
+    const userId = new ObjectId(regRes.body.data.user.id);
+
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        email: 'optionb@example.com',
+        password: 'ValidPassword123',
+      })
+      .expect(200);
+
+    const revokedSessionCookie = extractCookiePair(
+      loginRes.headers['set-cookie'],
+      'ck_session',
+    );
+    const firstSessionDoc = await db
+      .collection('auth_sessions')
+      .findOne({ userId });
+    expect(firstSessionDoc).not.toBeNull();
+
+    // Mark the first user session as revoked in the database
+    await db
+      .collection('auth_sessions')
+      .updateOne(
+        { _id: firstSessionDoc?._id },
+        { $set: { revokedAt: new Date() } },
+      );
+
+    // Sequence (a): GET /auth/me with revoked ck_session + valid ck_guest -> 401 SESSION_EXPIRED (no fallback to guest)
+    const meWithRevokedSession = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `${revokedSessionCookie}; ck_guest=${rawGuestToken}`)
+      .expect(401);
+    expect(meWithRevokedSession.body.error.code).toBe('SESSION_EXPIRED');
+
+    // Sequence (b): POST /auth/logout with those exact two cookies + valid CSRF/Origin -> 204;
+    // response clears ck_session and does NOT clear ck_guest or revoke guest_sessions
+    const logoutWithRevokedSession = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set(
+        'Cookie',
+        `${csrfCookie}; ${revokedSessionCookie}; ck_guest=${rawGuestToken}`,
+      )
+      .set('X-CSRF-Token', csrfToken)
+      .send({})
+      .expect(204);
+
+    expect(
+      extractCookiePair(
+        logoutWithRevokedSession.headers['set-cookie'],
+        'ck_session',
+      ),
+    ).toBe('ck_session=');
+    expect(
+      extractCookiePair(
+        logoutWithRevokedSession.headers['set-cookie'],
+        'ck_guest',
+      ),
+    ).toBe('');
+
+    const guestAfterInvalidUserLogout = await db
+      .collection('guest_sessions')
+      .findOne({ _id: guestId });
+    expect(guestAfterInvalidUserLogout?.revokedAt).toBeUndefined();
+
+    // Sequence (c): GET /auth/me with only the original ck_guest -> 200, kind is 'guest'
+    const meWithGuestOnly = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `ck_guest=${rawGuestToken}`)
+      .expect(200);
+    expect(meWithGuestOnly.body.data.kind).toBe('guest');
+    expect(meWithGuestOnly.body.data.guest.sessionId).toBe(
+      practiceSessionId.toHexString(),
+    );
+
+    // 3. Create a second active user session to test expired token, invalid signature, stale authVersion, locked account, and forged logout
+    const secondLoginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        email: 'optionb@example.com',
+        password: 'ValidPassword123',
+      })
+      .expect(200);
+
+    const activeSessionCookie = extractCookiePair(
+      secondLoginRes.headers['set-cookie'],
+      'ck_session',
+    );
+    const activeSessionDoc = await db
+      .collection('auth_sessions')
+      .findOne({ userId, revokedAt: { $exists: false } });
+    expect(activeSessionDoc).not.toBeNull();
+    const activeSessionIdHex = activeSessionDoc?._id.toHexString() ?? '';
+
+    // Expired ck_session + valid ck_guest -> 401 SESSION_EXPIRED (no fallback)
+    const pastIat = Math.floor(Date.now() / 1000) - 7200;
+    const pastExp = pastIat + 3600;
+    const expiredJwt = signJwt(
+      {
+        sub: userId.toHexString(),
+        sid: activeSessionIdHex,
+        authVersion: 0,
+        iat: pastIat,
+        exp: pastExp,
+      },
+      authEnvSecret,
+      { issuer: 'chiikaiwa', audience: 'chiikaiwa-web' },
+    );
+
+    const meWithExpiredSession = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `ck_session=${expiredJwt}; ck_guest=${rawGuestToken}`)
+      .expect(401);
+    expect(meWithExpiredSession.body.error.code).toBe('SESSION_EXPIRED');
+
+    // Forged ck_session (wrong signature containing real sid & sub of activeSessionDoc) + valid ck_guest:
+    // - GET /auth/me -> 401 SESSION_EXPIRED (no fallback)
+    // - POST /auth/logout -> 204, clears ck_session, preserves ck_guest, and MUST NOT revoke the real activeSessionDoc!
+    const forgedJwt = signJwt(
+      {
+        sub: userId.toHexString(),
+        sid: activeSessionIdHex,
+        authVersion: 0,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'forged-wrong-secret-key-with-at-least-32-characters',
+      { issuer: 'chiikaiwa', audience: 'chiikaiwa-web' },
+    );
+
+    const meWithForgedSession = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `ck_session=${forgedJwt}; ck_guest=${rawGuestToken}`)
+      .expect(401);
+    expect(meWithForgedSession.body.error.code).toBe('SESSION_EXPIRED');
+
+    const logoutWithForgedSession = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set(
+        'Cookie',
+        `${csrfCookie}; ck_session=${forgedJwt}; ck_guest=${rawGuestToken}`,
+      )
+      .set('X-CSRF-Token', csrfToken)
+      .send({})
+      .expect(204);
+
+    expect(
+      extractCookiePair(
+        logoutWithForgedSession.headers['set-cookie'],
+        'ck_session',
+      ),
+    ).toBe('ck_session=');
+    expect(
+      extractCookiePair(
+        logoutWithForgedSession.headers['set-cookie'],
+        'ck_guest',
+      ),
+    ).toBe('');
+
+    // Real active session is still unrevoked and works on GET /auth/me
+    const realSessionAfterForgedLogout = await db
+      .collection('auth_sessions')
+      .findOne({ _id: activeSessionDoc?._id });
+    expect(realSessionAfterForgedLogout?.revokedAt).toBeUndefined();
+
+    const meWithRealActiveSession = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `${activeSessionCookie}; ck_guest=${rawGuestToken}`)
+      .expect(200);
+    expect(meWithRealActiveSession.body.data.kind).toBe('user');
+
+    // Locked account with authenticated ck_session + valid ck_guest -> 403 ACCOUNT_LOCKED (no fallback)
+    await db
+      .collection('users')
+      .updateOne({ _id: userId }, { $set: { status: 'locked' } });
+
+    const meWithLockedUser = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `${activeSessionCookie}; ck_guest=${rawGuestToken}`)
+      .expect(403);
+    expect(meWithLockedUser.body.error.code).toBe('ACCOUNT_LOCKED');
+
+    // Stale authVersion ck_session + valid ck_guest -> 401 SESSION_EXPIRED (no fallback)
+    await db
+      .collection('users')
+      .updateOne(
+        { _id: userId },
+        { $set: { status: 'active' }, $inc: { authVersion: 1 } },
+      );
+
+    const meWithStaleAuthVersion = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `${activeSessionCookie}; ck_guest=${rawGuestToken}`)
+      .expect(401);
+    expect(meWithStaleAuthVersion.body.error.code).toBe('SESSION_EXPIRED');
+
+    // Guest session remains valid when ck_session is removed
+    const meGuestStillValid = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `ck_guest=${rawGuestToken}`)
+      .expect(200);
+    expect(meGuestStillValid.body.data.kind).toBe('guest');
+
+    // Empty ck_session (`Cookie: ck_session=; ck_guest=<valid>`) must also take the account branch:
+    // 1. GET /api/v1/auth/me returns 401 SESSION_EXPIRED
+    const meWithEmptyAuthCookie = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `ck_session=; ck_guest=${rawGuestToken}`)
+      .expect(401);
+    expect(meWithEmptyAuthCookie.body.error.code).toBe('SESSION_EXPIRED');
+
+    // 2. POST /api/v1/auth/logout with valid CSRF/Origin returns 204 and clears only ck_session
+    const logoutWithEmptyAuthCookie = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', `${csrfCookie}; ck_session=; ck_guest=${rawGuestToken}`)
+      .set('X-CSRF-Token', csrfToken)
+      .send({})
+      .expect(204);
+
+    expect(
+      extractCookiePair(
+        logoutWithEmptyAuthCookie.headers['set-cookie'],
+        'ck_session',
+      ),
+    ).toBe('ck_session=');
+    expect(
+      extractCookiePair(
+        logoutWithEmptyAuthCookie.headers['set-cookie'],
+        'ck_guest',
+      ),
+    ).toBe('');
+
+    const guestAfterEmptyAuthLogout = await db
+      .collection('guest_sessions')
+      .findOne({ _id: guestId });
+    expect(guestAfterEmptyAuthLogout?.revokedAt).toBeUndefined();
+
+    // 3. Sending only ck_guest (omitting ck_session completely) to GET /api/v1/auth/me returns 200 with kind: 'guest'
+    const meWithGuestAfterEmptyAuthCleared = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', `ck_guest=${rawGuestToken}`)
+      .expect(200);
+    expect(meWithGuestAfterEmptyAuthCleared.body.data.kind).toBe('guest');
   });
 
   it('enforces IP rate limit even when client spoofs X-Forwarded-For with different emails, and enforces email quota independently behind a configured trusted proxy', async () => {

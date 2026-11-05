@@ -188,11 +188,13 @@ export async function loginUser(
 
 /**
  * Revokes the current session credential (user or guest) in the database.
- * - If both user and guest cookies are present and the user cookie is active,
- *   the user account is the executing identity (07 §2.1), so only the user session
- *   is revoked and cleared while preserving the guest session.
- * - If a guest cookie is the executing identity, revokes the guest credential in
- *   `guest_sessions` (`revokedAt` + version increment) without deleting the root
+ * - When `ck_session` is present, logout handles the account cookie exclusively:
+ *   it revokes the verified `auth_sessions` record (if signature & structure are valid),
+ *   clears `ck_session`, and preserves any coexisting `ck_guest` cookie and guest credential.
+ *   Tokens with an invalid signature only trigger clearing `ck_session` on the client
+ *   and never touch the database.
+ * - When only `ck_guest` is present, revokes the guest credential in `guest_sessions`
+ *   (`revokedAt` + version increment) and clears `ck_guest` without deleting the root
  *   `guest_sessions` document or child learning/history records needed for cleanup.
  * - Repeated logout with an already-expired or already-revoked cookie remains safe (204).
  *
@@ -213,63 +215,15 @@ export async function logoutSession({
 }) {
   validateEmptyObjectInput(rawBody);
 
-  const hasAuthCookie =
-    typeof authCookie === 'string' && authCookie.trim().length > 0;
-  const hasGuestCookie =
-    typeof guestCookie === 'string' && guestCookie.trim().length > 0;
-
-  if (!hasAuthCookie && !hasGuestCookie) {
-    throw new AppError({
-      status: 401,
-      code: 'AUTH_REQUIRED',
-      message: 'Vui lòng đăng nhập để tiếp tục.',
-    });
-  }
-
-  const db = await connectDatabase();
-  const authEnv = readAuthEnv(envSource);
-  let activeUserRevoked = false;
-
-  if (hasAuthCookie) {
-    const activeClaims = verifyJwt(authCookie, authEnv.jwtSecret, {
+  if (authCookie !== undefined) {
+    const authEnv = readAuthEnv(envSource);
+    const decoded = verifyJwtIgnoreExpiration(authCookie, authEnv.jwtSecret, {
       issuer: authEnv.jwtIssuer,
       audience: authEnv.jwtAudience,
-      now,
     });
 
-    if (activeClaims) {
-      const sessionObjectId = new ObjectId(activeClaims.sid);
-      const userObjectId = new ObjectId(activeClaims.sub);
-      const [sessionDoc, userDoc] = await Promise.all([
-        db
-          .collection('auth_sessions')
-          .findOne({ _id: sessionObjectId, userId: userObjectId }),
-        db.collection('users').findOne({ _id: userObjectId }),
-      ]);
-
-      const isActiveUserSession =
-        Boolean(sessionDoc) &&
-        !sessionDoc?.revokedAt &&
-        sessionDoc?.expiresAt instanceof Date &&
-        sessionDoc.expiresAt.getTime() > now.getTime() &&
-        sessionDoc?.authVersion === activeClaims.authVersion &&
-        Boolean(userDoc) &&
-        userDoc?.status === 'active' &&
-        userDoc?.authVersion === activeClaims.authVersion;
-
-      if (isActiveUserSession) {
-        activeUserRevoked = true;
-      }
-    }
-
-    const decoded =
-      activeClaims ??
-      verifyJwtIgnoreExpiration(authCookie, authEnv.jwtSecret, {
-        issuer: authEnv.jwtIssuer,
-        audience: authEnv.jwtAudience,
-      });
-
     if (decoded) {
+      const db = await connectDatabase();
       await db.collection('auth_sessions').updateOne(
         {
           _id: new ObjectId(decoded.sid),
@@ -281,18 +235,23 @@ export async function logoutSession({
         },
       );
     }
-  }
 
-  // If the request had a valid active user session, user is the executing identity (07 §2.1):
-  // do not revoke or clear a coexisting guest session.
-  if (activeUserRevoked) {
     return {
       clearAuth: true,
       clearGuest: false,
     };
   }
 
-  if (hasGuestCookie) {
+  if (guestCookie === undefined) {
+    throw new AppError({
+      status: 401,
+      code: 'AUTH_REQUIRED',
+      message: 'Vui lòng đăng nhập để tiếp tục.',
+    });
+  }
+
+  if (guestCookie.trim().length > 0) {
+    const db = await connectDatabase();
     const credentialHash = hashGuestCredential(guestCookie);
     await db.collection('guest_sessions').updateOne(
       {
@@ -307,14 +266,17 @@ export async function logoutSession({
   }
 
   return {
-    clearAuth: hasAuthCookie,
-    clearGuest: hasGuestCookie,
+    clearAuth: false,
+    clearGuest: true,
   };
 }
 
 /**
  * Resolves the active caller identity (`user` or `guest`) from cookies and database state.
- * User cookie takes precedence if both user and guest cookies are present and user is valid (07 §2.1).
+ * - When `ck_session` is present, account identity is evaluated exclusively:
+ *   valid session -> `user`; invalid/expired/revoked/stale authVersion -> 401 `SESSION_EXPIRED`;
+ *   locked account with valid credential -> 403 `ACCOUNT_LOCKED` (never falls back to `ck_guest`).
+ * - `ck_guest` is evaluated only when `ck_session` is absent.
  *
  * @param {Object} params
  * @param {string | undefined} params.authCookie
@@ -328,25 +290,8 @@ export async function resolveIdentityFromCookies({
   now = new Date(),
   envSource = process.env,
 }) {
-  const hasAuthCookie =
-    typeof authCookie === 'string' && authCookie.trim().length > 0;
-  const hasGuestCookie =
-    typeof guestCookie === 'string' && guestCookie.trim().length > 0;
-
-  if (!hasAuthCookie && !hasGuestCookie) {
-    throw new AppError({
-      status: 401,
-      code: 'AUTH_REQUIRED',
-      message: 'Vui lòng đăng nhập để tiếp tục.',
-    });
-  }
-
-  const db = await connectDatabase();
-  const authEnv = readAuthEnv(envSource);
-  let hadInvalidUserCookie = false;
-  let hadInvalidGuestCookie = false;
-
-  if (hasAuthCookie) {
+  if (authCookie !== undefined) {
+    const authEnv = readAuthEnv(envSource);
     const claims = verifyJwt(authCookie, authEnv.jwtSecret, {
       issuer: authEnv.jwtIssuer,
       audience: authEnv.jwtAudience,
@@ -354,88 +299,79 @@ export async function resolveIdentityFromCookies({
     });
 
     if (!claims) {
-      hadInvalidUserCookie = true;
-    } else {
-      const sessionObjectId = new ObjectId(claims.sid);
-      const userObjectId = new ObjectId(claims.sub);
-      const sessionDoc = await db.collection('auth_sessions').findOne({
-        _id: sessionObjectId,
-        userId: userObjectId,
+      throw new AppError({
+        status: 401,
+        code: 'SESSION_EXPIRED',
+        message:
+          'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
       });
-
-      const isSessionActive =
-        sessionDoc &&
-        !sessionDoc.revokedAt &&
-        sessionDoc.expiresAt instanceof Date &&
-        sessionDoc.expiresAt.getTime() > now.getTime() &&
-        sessionDoc.authVersion === claims.authVersion;
-
-      if (!isSessionActive) {
-        hadInvalidUserCookie = true;
-      } else {
-        const userDoc = await db
-          .collection('users')
-          .findOne({ _id: userObjectId });
-        if (!userDoc) {
-          hadInvalidUserCookie = true;
-        } else if (userDoc.status === 'locked') {
-          throw new AppError({
-            status: 403,
-            code: 'ACCOUNT_LOCKED',
-            message: 'Tài khoản của bạn đã bị khóa.',
-          });
-        } else if (userDoc.authVersion !== claims.authVersion) {
-          hadInvalidUserCookie = true;
-        } else {
-          return {
-            kind: /** @type {const} */ ('user'),
-            actorKey: `user:${userDoc._id.toHexString()}`,
-            userId: userDoc._id,
-            sessionId: sessionDoc._id,
-            role:
-              userDoc.role === 'admin'
-                ? /** @type {const} */ ('admin')
-                : /** @type {const} */ ('learner'),
-            user: userDoc,
-          };
-        }
-      }
     }
+
+    const db = await connectDatabase();
+    const sessionObjectId = new ObjectId(claims.sid);
+    const userObjectId = new ObjectId(claims.sub);
+    const sessionDoc = await db.collection('auth_sessions').findOne({
+      _id: sessionObjectId,
+      userId: userObjectId,
+    });
+
+    const isSessionActive =
+      sessionDoc &&
+      !sessionDoc.revokedAt &&
+      sessionDoc.expiresAt instanceof Date &&
+      sessionDoc.expiresAt.getTime() > now.getTime() &&
+      sessionDoc.authVersion === claims.authVersion;
+
+    if (!isSessionActive) {
+      throw new AppError({
+        status: 401,
+        code: 'SESSION_EXPIRED',
+        message:
+          'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
+      });
+    }
+
+    const userDoc = await db.collection('users').findOne({ _id: userObjectId });
+
+    if (!userDoc || userDoc.authVersion !== claims.authVersion) {
+      throw new AppError({
+        status: 401,
+        code: 'SESSION_EXPIRED',
+        message:
+          'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
+      });
+    }
+
+    if (userDoc.status === 'locked') {
+      throw new AppError({
+        status: 403,
+        code: 'ACCOUNT_LOCKED',
+        message: 'Tài khoản của bạn đã bị khóa.',
+      });
+    }
+
+    return {
+      kind: /** @type {const} */ ('user'),
+      actorKey: `user:${userDoc._id.toHexString()}`,
+      userId: userDoc._id,
+      sessionId: sessionDoc._id,
+      role:
+        userDoc.role === 'admin'
+          ? /** @type {const} */ ('admin')
+          : /** @type {const} */ ('learner'),
+      user: userDoc,
+    };
   }
 
-  if (hasGuestCookie) {
-    const credentialHash = hashGuestCredential(guestCookie);
-    const guestDoc = await db
-      .collection('guest_sessions')
-      .findOne({ credentialHash });
-
-    if (!guestDoc || guestDoc.revokedAt) {
-      hadInvalidGuestCookie = true;
-    } else {
-      const isExpired =
-        guestDoc.status === 'expired' ||
-        (guestDoc.expiresAt instanceof Date &&
-          guestDoc.expiresAt.getTime() <= now.getTime());
-
-      if (isExpired) {
-        throw new AppError({
-          status: 410,
-          code: 'GUEST_EXPIRED',
-          message: 'Quyền truy cập tạm của khách đã hết hạn.',
-        });
-      }
-
-      return {
-        kind: /** @type {const} */ ('guest'),
-        actorKey: `guest:${guestDoc._id.toHexString()}`,
-        guestId: guestDoc._id,
-        role: /** @type {const} */ ('guest'),
-        guestSession: guestDoc,
-      };
-    }
+  if (guestCookie === undefined) {
+    throw new AppError({
+      status: 401,
+      code: 'AUTH_REQUIRED',
+      message: 'Vui lòng đăng nhập để tiếp tục.',
+    });
   }
 
-  if (hadInvalidUserCookie || hadInvalidGuestCookie) {
+  if (guestCookie.trim().length === 0) {
     throw new AppError({
       status: 401,
       code: 'SESSION_EXPIRED',
@@ -444,11 +380,41 @@ export async function resolveIdentityFromCookies({
     });
   }
 
-  throw new AppError({
-    status: 401,
-    code: 'AUTH_REQUIRED',
-    message: 'Vui lòng đăng nhập để tiếp tục.',
-  });
+  const db = await connectDatabase();
+  const credentialHash = hashGuestCredential(guestCookie);
+  const guestDoc = await db
+    .collection('guest_sessions')
+    .findOne({ credentialHash });
+
+  if (!guestDoc || guestDoc.revokedAt) {
+    throw new AppError({
+      status: 401,
+      code: 'SESSION_EXPIRED',
+      message:
+        'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
+    });
+  }
+
+  const isExpired =
+    guestDoc.status === 'expired' ||
+    (guestDoc.expiresAt instanceof Date &&
+      guestDoc.expiresAt.getTime() <= now.getTime());
+
+  if (isExpired) {
+    throw new AppError({
+      status: 410,
+      code: 'GUEST_EXPIRED',
+      message: 'Quyền truy cập tạm của khách đã hết hạn.',
+    });
+  }
+
+  return {
+    kind: /** @type {const} */ ('guest'),
+    actorKey: `guest:${guestDoc._id.toHexString()}`,
+    guestId: guestDoc._id,
+    role: /** @type {const} */ ('guest'),
+    guestSession: guestDoc,
+  };
 }
 
 /**
