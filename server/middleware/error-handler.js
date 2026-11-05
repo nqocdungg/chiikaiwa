@@ -1,5 +1,26 @@
+import { AppError } from './http-error.js';
+
 /** @type {import('express').ErrorRequestHandler} */
 export function errorHandler(error, _request, response, _next) {
+  if (error instanceof AppError) {
+    if (error.headers) {
+      for (const [headerName, headerValue] of Object.entries(error.headers)) {
+        response.set(headerName, headerValue);
+      }
+    }
+    /** @type {{ code: string, message: string, details?: Record<string, unknown> }} */
+    const errorPayload = {
+      code: error.code,
+      message: error.message,
+    };
+    if (error.details && Object.keys(error.details).length > 0) {
+      errorPayload.details = error.details;
+    }
+    return response
+      .status(error.status)
+      .json({ error: errorPayload, meta: response.locals.meta });
+  }
+
   const malformed = error?.type === 'entity.parse.failed';
   const tooLarge = error?.type === 'entity.too.large';
   const keyPattern = error?.keyPattern;
