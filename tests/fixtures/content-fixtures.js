@@ -32,10 +32,12 @@ export const CONTENT_FIXTURES = {
   knowledge: {
     _id: new ObjectId(FIXTURE_CONTENT_IDS.knowledgeA),
     kind: /** @type {const} */ ('knowledge'),
-    currentVersionId: new ObjectId(FIXTURE_VERSION_IDS.knowledgeAVersion),
-    publishedVersionId: new ObjectId(FIXTURE_VERSION_IDS.knowledgeAVersion),
     status: /** @type {const} */ ('published'),
+    publishedVersionId: new ObjectId(FIXTURE_VERSION_IDS.knowledgeAVersion),
+    latestRevision: 1,
     version: 1,
+    createdBy: new ObjectId(FIXTURE_USER_IDS.admin),
+    updatedBy: new ObjectId(FIXTURE_USER_IDS.admin),
     createdAt: new Date('2026-11-01T00:00:00.000Z'),
     updatedAt: new Date('2026-11-01T00:00:00.000Z'),
   },
@@ -44,17 +46,21 @@ export const CONTENT_FIXTURES = {
     _id: new ObjectId(FIXTURE_VERSION_IDS.knowledgeAVersion),
     contentId: new ObjectId(FIXTURE_CONTENT_IDS.knowledgeA),
     kind: /** @type {const} */ ('knowledge'),
-    versionNumber: 1,
-    expression: 'こんにちは',
-    reading: 'konnichiwa',
-    meaning: 'Xin chào (buổi trưa)',
-    type: 'expression',
-    examples: [
-      {
-        japanese: '皆さん、こんにちは。',
-        vietnamese: 'Xin chào mọi người.',
-      },
-    ],
+    revision: 1,
+    payload: {
+      type: /** @type {const} */ ('vocabulary'),
+      expression: 'こんにちは',
+      reading: 'konnichiwa',
+      meaning: 'Xin chào (buổi trưa)',
+      examples: [
+        {
+          japanese: '皆さん、こんにちは。',
+          vietnamese: 'Xin chào mọi người.',
+        },
+      ],
+    },
+    publishedAt: new Date('2026-11-01T00:00:00.000Z'),
+    publishedBy: new ObjectId(FIXTURE_USER_IDS.admin),
     createdAt: new Date('2026-11-01T00:00:00.000Z'),
   },
 
@@ -65,6 +71,7 @@ export const CONTENT_FIXTURES = {
       ownerKey: `user:${FIXTURE_USER_IDS.learnerA}`,
       front: 'Front text for learner A',
       back: 'Back text for learner A',
+      status: /** @type {const} */ ('active'),
       version: 0,
       createdAt: new Date('2026-11-01T00:00:00.000Z'),
       updatedAt: new Date('2026-11-01T00:00:00.000Z'),
@@ -74,6 +81,7 @@ export const CONTENT_FIXTURES = {
       ownerKey: `user:${FIXTURE_USER_IDS.learnerB}`,
       front: 'Front text for learner B',
       back: 'Back text for learner B',
+      status: /** @type {const} */ ('active'),
       version: 0,
       createdAt: new Date('2026-11-01T00:00:00.000Z'),
       updatedAt: new Date('2026-11-01T00:00:00.000Z'),
@@ -85,29 +93,54 @@ export const CONTENT_FIXTURES = {
     _id: new ObjectId(FIXTURE_CONTENT_IDS.deckA),
     ownerKey: `user:${FIXTURE_USER_IDS.learnerA}`,
     name: 'Personal Deck with Version 3',
+    status: /** @type {const} */ ('active'),
     version: 3,
     expectedStaleVersion: 2,
     createdAt: new Date('2026-11-01T00:00:00.000Z'),
     updatedAt: new Date('2026-11-01T00:00:00.000Z'),
   },
 
-  // Active Session with two members (learnerA and learnerB)
+  // Active Session with two members conforming strictly to 06 §6.1
   sessionWithMembers: {
     _id: new ObjectId(FIXTURE_CONTENT_IDS.sessionPractice),
-    status: 'inSession',
+    originKind: /** @type {const} */ ('match'),
+    originId: new ObjectId('807f1f77bcf86cd799439099'),
+    roomName: 'room-fixture-practice-01',
+    status: /** @type {const} */ ('active'),
     version: 5,
     members: [
       {
         actorKey: `user:${FIXTURE_USER_IDS.learnerA}`,
-        role: 'initiator',
+        kind: /** @type {const} */ ('user'),
+        userId: new ObjectId(FIXTURE_USER_IDS.learnerA),
       },
       {
         actorKey: `user:${FIXTURE_USER_IDS.learnerB}`,
-        role: 'partner',
+        kind: /** @type {const} */ ('user'),
+        userId: new ObjectId(FIXTURE_USER_IDS.learnerB),
       },
     ],
+    controllerKey: `user:${FIXTURE_USER_IDS.learnerA}`,
     startedAt: new Date('2026-11-05T08:00:00.000Z'),
     activeDurationMs: 120000,
+    presence: [
+      {
+        actorKey: `user:${FIXTURE_USER_IDS.learnerA}`,
+        connected: true,
+      },
+      {
+        actorKey: `user:${FIXTURE_USER_IDS.learnerB}`,
+        connected: true,
+      },
+    ],
+    screenShare: {
+      state: /** @type {const} */ ('idle'),
+      version: 0,
+    },
+    mediaCleanup: {
+      state: /** @type {const} */ ('none'),
+      attempts: 0,
+    },
     createdAt: new Date('2026-11-05T08:00:00.000Z'),
     updatedAt: new Date('2026-11-05T08:00:00.000Z'),
   },

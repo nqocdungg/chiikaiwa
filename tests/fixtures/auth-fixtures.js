@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
-import { signJwt } from '../../server/modules/identity/crypto.js';
+import {
+  hashGuestCredential,
+  signJwt,
+} from '../../server/modules/identity/crypto.js';
 
 const { ObjectId } = mongoose.Types;
 
@@ -47,8 +50,8 @@ export const USER_FIXTURES = {
     avatarKey: 'chiikawa',
     profile: {
       level: 'N5',
-      goal: 'kaiwa_fluency',
-      interests: ['daily_life'],
+      goal: 'dailyCommunication',
+      interests: ['music'],
       nativeLanguageCode: 'vi',
     },
     authVersion: 0,
@@ -120,44 +123,70 @@ export const USER_FIXTURES = {
   },
 };
 
+const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
- * Baseline auth sessions corresponding to users.
+ * Creates dynamic auth session fixtures relative to a base reference date.
+ * Prevents fixtures from naturally expiring and breaking tests over time.
+ *
+ * @param {Date} [now]
+ */
+export function createAuthSessionFixtures(now = new Date()) {
+  const activeExpiresAt = new Date(now.getTime() + SESSION_LIFETIME_MS);
+  const expiredIssuedAt = new Date(now.getTime() - 2 * SESSION_LIFETIME_MS);
+  const expiredExpiresAt = new Date(now.getTime() - SESSION_LIFETIME_MS);
+
+  return {
+    learnerA: {
+      _id: new ObjectId(FIXTURE_SESSION_IDS.learnerA),
+      userId: new ObjectId(FIXTURE_USER_IDS.learnerA),
+      authVersion: 0,
+      issuedAt: now,
+      expiresAt: activeExpiresAt,
+      purgeAt: activeExpiresAt,
+    },
+    learnerB: {
+      _id: new ObjectId(FIXTURE_SESSION_IDS.learnerB),
+      userId: new ObjectId(FIXTURE_USER_IDS.learnerB),
+      authVersion: 0,
+      issuedAt: now,
+      expiresAt: activeExpiresAt,
+      purgeAt: activeExpiresAt,
+    },
+    admin: {
+      _id: new ObjectId(FIXTURE_SESSION_IDS.admin),
+      userId: new ObjectId(FIXTURE_USER_IDS.admin),
+      authVersion: 0,
+      issuedAt: now,
+      expiresAt: activeExpiresAt,
+      purgeAt: activeExpiresAt,
+    },
+    expired: {
+      _id: new ObjectId(FIXTURE_SESSION_IDS.expired),
+      userId: new ObjectId(FIXTURE_USER_IDS.learnerA),
+      authVersion: 0,
+      issuedAt: expiredIssuedAt,
+      expiresAt: expiredExpiresAt,
+      purgeAt: expiredExpiresAt,
+    },
+  };
+}
+
+/**
+ * Baseline auth sessions corresponding to users, dynamically evaluated relative to test execution time.
  */
 export const AUTH_SESSION_FIXTURES = {
-  learnerA: {
-    _id: new ObjectId(FIXTURE_SESSION_IDS.learnerA),
-    userId: new ObjectId(FIXTURE_USER_IDS.learnerA),
-    authVersion: 0,
-    issuedAt: new Date('2026-11-05T00:00:00.000Z'),
-    expiresAt: new Date('2026-11-12T00:00:00.000Z'),
-    purgeAt: new Date('2026-11-12T00:00:00.000Z'),
+  get learnerA() {
+    return createAuthSessionFixtures().learnerA;
   },
-
-  learnerB: {
-    _id: new ObjectId(FIXTURE_SESSION_IDS.learnerB),
-    userId: new ObjectId(FIXTURE_USER_IDS.learnerB),
-    authVersion: 0,
-    issuedAt: new Date('2026-11-05T00:00:00.000Z'),
-    expiresAt: new Date('2026-11-12T00:00:00.000Z'),
-    purgeAt: new Date('2026-11-12T00:00:00.000Z'),
+  get learnerB() {
+    return createAuthSessionFixtures().learnerB;
   },
-
-  admin: {
-    _id: new ObjectId(FIXTURE_SESSION_IDS.admin),
-    userId: new ObjectId(FIXTURE_USER_IDS.admin),
-    authVersion: 0,
-    issuedAt: new Date('2026-11-05T00:00:00.000Z'),
-    expiresAt: new Date('2026-11-12T00:00:00.000Z'),
-    purgeAt: new Date('2026-11-12T00:00:00.000Z'),
+  get admin() {
+    return createAuthSessionFixtures().admin;
   },
-
-  expired: {
-    _id: new ObjectId(FIXTURE_SESSION_IDS.expired),
-    userId: new ObjectId(FIXTURE_USER_IDS.learnerA),
-    authVersion: 0,
-    issuedAt: new Date('2026-10-01T00:00:00.000Z'),
-    expiresAt: new Date('2026-10-08T00:00:00.000Z'),
-    purgeAt: new Date('2026-10-08T00:00:00.000Z'),
+  get expired() {
+    return createAuthSessionFixtures().expired;
   },
 };
 
@@ -167,32 +196,50 @@ export const RAW_GUEST_TOKENS = {
 };
 
 export const GUEST_CREDENTIAL_HASHES = {
-  active: '54b9f074d287bb7b76251b68bbbc5122ea55cb992ce58f1262d1d0f508a8e1e3',
-  expired: 'd9b897368ce4626dc31db00f7b06850c9f116515c0e1db4268e376e104f2ee9b',
+  active: hashGuestCredential(RAW_GUEST_TOKENS.active),
+  expired: hashGuestCredential(RAW_GUEST_TOKENS.expired),
 };
 
-export const GUEST_SESSION_FIXTURES = {
-  active: {
-    _id: new ObjectId(FIXTURE_GUEST_IDS.active),
-    credentialHash: GUEST_CREDENTIAL_HASHES.active,
-    invitationId: new ObjectId(FIXTURE_INVITATION_ID),
-    practiceSessionId: new ObjectId(FIXTURE_PRACTICE_SESSION_ID),
-    status: /** @type {const} */ ('active'),
-    expiresAt: new Date('2026-11-12T00:00:00.000Z'),
-    version: 0,
-    cleanupState: /** @type {const} */ ('pending'),
-    createdAt: new Date('2026-11-05T00:00:00.000Z'),
-  },
+/**
+ * Creates dynamic guest session fixtures relative to a base reference date.
+ * @param {Date} [now]
+ */
+export function createGuestSessionFixtures(now = new Date()) {
+  const activeExpiresAt = new Date(now.getTime() + SESSION_LIFETIME_MS);
+  const expiredCreatedAt = new Date(now.getTime() - 2 * SESSION_LIFETIME_MS);
+  const expiredExpiresAt = new Date(now.getTime() - SESSION_LIFETIME_MS);
 
-  expired: {
-    _id: new ObjectId(FIXTURE_GUEST_IDS.expired),
-    credentialHash: GUEST_CREDENTIAL_HASHES.expired,
-    invitationId: new ObjectId(FIXTURE_INVITATION_ID),
-    status: /** @type {const} */ ('expired'),
-    expiresAt: new Date('2026-10-01T00:00:00.000Z'),
-    version: 0,
-    cleanupState: /** @type {const} */ ('complete'),
-    createdAt: new Date('2026-09-30T00:00:00.000Z'),
+  return {
+    active: {
+      _id: new ObjectId(FIXTURE_GUEST_IDS.active),
+      credentialHash: GUEST_CREDENTIAL_HASHES.active,
+      invitationId: new ObjectId(FIXTURE_INVITATION_ID),
+      practiceSessionId: new ObjectId(FIXTURE_PRACTICE_SESSION_ID),
+      status: /** @type {const} */ ('active'),
+      expiresAt: activeExpiresAt,
+      version: 0,
+      cleanupState: /** @type {const} */ ('pending'),
+      createdAt: now,
+    },
+    expired: {
+      _id: new ObjectId(FIXTURE_GUEST_IDS.expired),
+      credentialHash: GUEST_CREDENTIAL_HASHES.expired,
+      invitationId: new ObjectId(FIXTURE_INVITATION_ID),
+      status: /** @type {const} */ ('expired'),
+      expiresAt: expiredExpiresAt,
+      version: 0,
+      cleanupState: /** @type {const} */ ('complete'),
+      createdAt: expiredCreatedAt,
+    },
+  };
+}
+
+export const GUEST_SESSION_FIXTURES = {
+  get active() {
+    return createGuestSessionFixtures().active;
+  },
+  get expired() {
+    return createGuestSessionFixtures().expired;
   },
 };
 

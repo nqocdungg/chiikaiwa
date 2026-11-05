@@ -21,16 +21,44 @@ export const CONTRACT_COLLECTIONS = [
 ];
 
 /**
+ * Asserts that the provided database instance is strictly a dedicated test database.
+ * Protects development (chiikaiwa_dev), demo, and production databases against accidental data wipe per AC2.
+ *
+ * @param {import('mongoose').mongo.Db} db
+ */
+export function assertTestDatabase(db) {
+  if (!db || typeof db.databaseName !== 'string') {
+    throw new Error('A valid MongoDB database instance is required.');
+  }
+
+  const name = db.databaseName;
+  const isProtectedDatabase =
+    name === 'chiikaiwa_dev' ||
+    name === 'chiikaiwa_demo' ||
+    name === 'chiikaiwa' ||
+    name.includes('demo') ||
+    name.includes('prod');
+
+  const isTestDatabase = name.endsWith('_test') || name.includes('test');
+
+  if (isProtectedDatabase || !isTestDatabase) {
+    throw new Error(
+      `Refusing to reset or seed protected/non-test database: "${name}". Test operations are strictly restricted to dedicated test databases (*_test).`,
+    );
+  }
+}
+
+/**
  * Resets all test collections to a clean, empty state without dropping design indexes.
+ * Protects non-test databases and surfaces any underlying deletion errors.
+ *
  * @param {import('mongoose').mongo.Db} db
  */
 export async function resetContractCollections(db) {
+  assertTestDatabase(db);
+
   for (const collectionName of CONTRACT_COLLECTIONS) {
-    try {
-      await db.collection(collectionName).deleteMany({});
-    } catch {
-      // Collection may not exist yet on initial run
-    }
+    await db.collection(collectionName).deleteMany({});
   }
 }
 

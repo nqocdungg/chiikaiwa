@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../server/app.js';
 import {
+  AUTH_SESSION_FIXTURES,
   BOUNDARY_FIXTURES,
   DEFAULT_JWT_SECRET,
   FIXTURE_USER_IDS,
+  GUEST_CREDENTIAL_HASHES,
+  GUEST_SESSION_FIXTURES,
+  RAW_GUEST_TOKENS,
+  createAuthSessionFixtures,
   createFixtureJwt,
+  createGuestSessionFixtures,
 } from '../fixtures/auth-fixtures.js';
 import {
   assertErrorEnvelope,
@@ -20,7 +26,10 @@ import {
   validateEmailField,
   validatePasswordField,
 } from '../../server/modules/identity/validation.js';
-import { verifyJwt } from '../../server/modules/identity/crypto.js';
+import {
+  hashGuestCredential,
+  verifyJwt,
+} from '../../server/modules/identity/crypto.js';
 
 describe('QA-001 Contract Testing Skeleton & Fixtures Unit Suite', () => {
   const app = createApp({ checkHealth: async () => {} });
@@ -107,6 +116,7 @@ describe('QA-001 Contract Testing Skeleton & Fixtures Unit Suite', () => {
         text: '',
         headers: {
           'cache-control': 'no-store',
+          'x-request-id': 'test-req-123',
         },
       };
       assertNoContentEnvelope(mockResponse);
@@ -163,6 +173,7 @@ describe('QA-001 Contract Testing Skeleton & Fixtures Unit Suite', () => {
         },
         headers: {
           'cache-control': 'no-store',
+          'x-request-id': 'test-req-123',
         },
         text: '{"error":{...}}',
       };
@@ -272,6 +283,43 @@ describe('QA-001 Contract Testing Skeleton & Fixtures Unit Suite', () => {
         audience: 'chiikaiwa-web',
       });
       expect(expiredClaims).toBeNull();
+    });
+
+    it('generates consistent and verifiable guest credential hashes with hashGuestCredential', () => {
+      expect(GUEST_CREDENTIAL_HASHES.active).toBe(
+        hashGuestCredential(RAW_GUEST_TOKENS.active),
+      );
+      expect(GUEST_CREDENTIAL_HASHES.expired).toBe(
+        hashGuestCredential(RAW_GUEST_TOKENS.expired),
+      );
+      expect(GUEST_CREDENTIAL_HASHES.active).toMatch(/^[0-9a-f]{64}$/u);
+    });
+
+    it('generates dynamic relative session expiration dates preventing self-expiring fixture failures', () => {
+      const now = new Date();
+      const authSessions = createAuthSessionFixtures(now);
+      expect(authSessions.learnerA.expiresAt.getTime()).toBeGreaterThan(
+        now.getTime(),
+      );
+      expect(authSessions.expired.expiresAt.getTime()).toBeLessThan(
+        now.getTime(),
+      );
+
+      const guestSessions = createGuestSessionFixtures(now);
+      expect(guestSessions.active.expiresAt.getTime()).toBeGreaterThan(
+        now.getTime(),
+      );
+      expect(guestSessions.expired.expiresAt.getTime()).toBeLessThan(
+        now.getTime(),
+      );
+
+      // Verify getter dynamically produces future expiration
+      expect(
+        AUTH_SESSION_FIXTURES.learnerA.expiresAt.getTime(),
+      ).toBeGreaterThan(Date.now());
+      expect(GUEST_SESSION_FIXTURES.active.expiresAt.getTime()).toBeGreaterThan(
+        Date.now(),
+      );
     });
   });
 });

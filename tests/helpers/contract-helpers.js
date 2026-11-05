@@ -162,6 +162,7 @@ export function assertErrorEnvelope(
   const meta = response.body.meta;
   expect(meta).toBeTypeOf('object');
   expect(meta.requestId).toBeDefined();
+  expect(response.headers['x-request-id']).toBe(meta.requestId);
   expect(meta.serverTime).toMatch(ISO_8601_UTC_REGEX);
 
   expect(response.headers['cache-control']).toBe('no-store');
@@ -225,6 +226,7 @@ export function assertVersionConflict(
 export function assertNoSensitiveLeaks(response) {
   const rawText = String(response.text ?? '');
   expect(rawText).not.toContain('mongodb://');
+  expect(rawText).not.toContain('mongodb+srv://');
   expect(rawText).not.toContain('scrypt$');
   expect(rawText).not.toContain('node_modules');
   expect(rawText).not.toContain('at Function.');
