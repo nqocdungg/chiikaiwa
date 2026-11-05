@@ -19,6 +19,7 @@ import { DEFAULT_AVATAR_KEY, toSelfDto } from './dto.js';
 import {
   validateEmptyObjectInput,
   validateLoginInput,
+  validateProfileUpdateInput,
   validateRegisterInput,
 } from './validation.js';
 
@@ -449,4 +450,101 @@ export function formatAuthMeDto(identity) {
     kind: 'guest',
     guest: guestDto,
   };
+}
+
+/**
+ * Partially updates the authenticated learner/admin user's profile using atomic CAS on `expectedVersion` (06 §4.1, 07 §2.2, 07 §4).
+ * - Only updates fields explicitly sent in the request body; omitted fields inside `profile` remain untouched.
+ * - Optional nested `profile` fields set to `null` are unset in MongoDB.
+ * - Increments `version` by 1 on commit; returns 409 `VERSION_CONFLICT` with `currentVersion` if stale.
+ *
+ * @param {Object} params
+ * @param {import('mongoose').Types.ObjectId | string} params.userId
+ * @param {unknown} params.rawBody
+ * @param {Date} [params.now]
+ * @returns {Promise<ReturnType<typeof toSelfDto>>}
+ */
+export async function updateUserProfile({ userId, rawBody, now = new Date() }) {
+  const { expectedVersion, displayName, avatarKey, profileUpdates } =
+    validateProfileUpdateInput(rawBody);
+
+  const userObjectId =
+    userId instanceof ObjectId ? userId : new ObjectId(String(userId));
+
+  /** @type {Record<string, unknown>} */
+  const setFields = {
+    updatedAt: now,
+  };
+  /** @type {Record<string, ''>} */
+  const unsetFields = {};
+
+  if (displayName !== undefined) {
+    setFields.displayName = displayName;
+  }
+  if (avatarKey !== undefined) {
+    setFields.avatarKey = avatarKey;
+  }
+
+  for (const [key, value] of Object.entries(profileUpdates)) {
+    if (value === null) {
+      unsetFields[`profile.${key}`] = '';
+    } else {
+      setFields[`profile.${key}`] = value;
+    }
+  }
+
+  /** @type {Record<string, unknown>} */
+  const updateDoc = {
+    $set: setFields,
+    $inc: { version: 1 },
+  };
+  if (Object.keys(unsetFields).length > 0) {
+    updateDoc.$unset = unsetFields;
+  }
+
+  const db = await connectDatabase();
+  const updatedUser = await db.collection('users').findOneAndUpdate(
+    {
+      _id: userObjectId,
+      status: 'active',
+      version: expectedVersion,
+    },
+    updateDoc,
+    { returnDocument: 'after' },
+  );
+
+  if (!updatedUser) {
+    const currentUser = await db
+      .collection('users')
+      .findOne({ _id: userObjectId });
+
+    if (!currentUser) {
+      throw new AppError({
+        status: 401,
+        code: 'SESSION_EXPIRED',
+        message:
+          'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
+      });
+    }
+
+    if (currentUser.status === 'locked') {
+      throw new AppError({
+        status: 403,
+        code: 'ACCOUNT_LOCKED',
+        message: 'Tài khoản của bạn đã bị khóa.',
+      });
+    }
+
+    throw new AppError({
+      status: 409,
+      code: 'VERSION_CONFLICT',
+      message: 'Dữ liệu đã thay đổi. Vui lòng tải lại.',
+      details: {
+        currentVersion:
+          typeof currentUser.version === 'number' ? currentUser.version : 0,
+      },
+    });
+  }
+
+  return toSelfDto(updatedUser);
 }
