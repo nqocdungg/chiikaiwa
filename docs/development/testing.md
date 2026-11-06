@@ -40,13 +40,20 @@ Chạy kiểm tra mục tiêu khi phát triển, rồi `npm run check` trước 
 
 ## Continuous integration
 
-[Workflow CI](../../.github/workflows/ci.yml) chạy trên pull request, push vào `main` và khi được kích hoạt thủ công. Job `check` dùng Node theo `.nvmrc`, cài npm theo `packageManager` trong `package.json`, chạy `npm ci` rồi `npm run check`. Giữ cùng bộ kiểm tra cho PR của thành viên và Dependabot.
+[Workflow CI](../../.github/workflows/ci.yml) chạy trên pull request, push vào `main`/`develop` và khi được kích hoạt thủ công. Job `check` dùng Node theo `.nvmrc`, cài npm theo `packageManager` trong `package.json`, chạy `npm ci` rồi `npm run check`. Giữ cùng bộ kiểm tra cho PR của thành viên và Dependabot.
 
-Khi chuyển sang Git Flow, bổ sung trigger push `develop` theo [checklist chuyển đổi](git-workflow.md#chuyển-sang-git-flow). CI hiện chưa kiểm tra quy ước tên branch, commit hoặc tiêu đề PR; reviewer đối chiếu Git workflow.
+Hai job bảo mật chạy độc lập với `check`:
+
+- `Dependency audit`: cài dependency theo lockfile rồi chạy `npm audit --audit-level=high`, chặn advisory high/critical cho cả runtime và development tools. Lỗi truy cập registry cũng làm job thất bại; không tự dùng `audit fix` hoặc bỏ qua lỗi để làm xanh CI.
+- `Secret scan`: Gitleaks quét lịch sử Git đã checkout với `--all` và che giá trị trong log. Binary được pin phiên bản và kiểm SHA-256 trước khi chạy. Secret thật cần được thu hồi/rotate, không chỉ xóa dòng ở commit mới. Không thêm allowlist rộng để bỏ qua phát hiện.
+
+`.gitleaksignore` chỉ bỏ qua fingerprint đã xác minh: hai khóa JWT tổng hợp trong unit test và UUID `Idempotency-Key` trong ví dụ API. Ngoại lệ gắn commit/file/rule/dòng, không bỏ qua toàn bộ thư mục test hoặc tài liệu; phát hiện mới vẫn phải review riêng.
+
+Actions được pin bằng commit SHA; khi cập nhật cần xác minh SHA từ repository chính thức. Khi nâng Gitleaks, cập nhật cả phiên bản và checksum của archive Linux x64. Dependabot tiếp tục theo dõi Actions; phiên bản Gitleaks được rà soát riêng. CI hiện chưa kiểm tra quy ước tên branch, commit hoặc tiêu đề PR; reviewer đối chiếu [Git workflow](git-workflow.md).
 
 CI chỉ cần quyền đọc source, không cần secret, Atlas hoặc dịch vụ thật. Integration tests tự tải binary MongoDB và tạo replica set tạm trên runner; lỗi tải binary cần được phân biệt với lỗi test. Không bỏ integration tests hoặc cấp thêm quyền để làm PR của bot pass.
 
-Khi thay đổi dependency hoặc workflow, kiểm tra cài mới bằng `npm ci` và toàn bộ `npm run check`. Kết quả local không thay thế lần chạy Actions trên GitHub; trước merge cần job `check` thành công trên PR. CI không tự triển khai sản phẩm và không chứng minh các tích hợp trên Vercel hoặc dịch vụ ngoài đã được nghiệm thu.
+Khi thay đổi dependency hoặc workflow, kiểm tra cài mới bằng `npm ci` và toàn bộ `npm run check`; thay đổi bảo mật cần kiểm audit/secret scan tương ứng. Kết quả local không thay thế lần chạy Actions trên GitHub; trước merge cần `check`, `Dependency audit` và `Secret scan` thành công trên PR. Required checks phải được cấu hình riêng trong ruleset sau khi xác nhận tên job; sửa YAML không tự bật điều kiện chặn merge. CI không tự triển khai sản phẩm và không chứng minh các tích hợp trên Vercel hoặc dịch vụ ngoài đã được nghiệm thu.
 
 ## Nguyên tắc viết test
 
