@@ -2,8 +2,8 @@
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Phiên bản | 1.1 |
-| Ngày | 06/11/2026 |
+| Phiên bản | 1.0 |
+| Ngày | 27/10/2026 |
 | Phạm vi | MVP cho nhóm 5 người, triển khai trong 3–4 tuần |
 | Tài liệu liên quan | Tổng quan dự án (01-project-overview.md) |
 
@@ -364,20 +364,6 @@ $$
 Ở $r=0.9$, khoảng cơ sở bằng $S'_g$. Các công thức này chỉ giải thích khoảng dài hạn, không thay toàn bộ thuật toán cập nhật difficulty/stability, learning steps hoặc relearning steps. Khoảng ôn cuối cùng phải lấy từ scheduler đã cấu hình; không gán cố định một số ngày cho mỗi nút.
 
 Thư viện FSRS phải được ghim phiên bản và chọn rõ FSRS-6. Các chi tiết kỹ thuật còn lại như làm tròn, giới hạn khoảng tối đa và chính sách chuyển bước phải được ghi trong cấu hình triển khai và khóa trước khi tạo bộ kết quả kiểm chứng. Chúng phải dùng nhất quán giữa preview và review; không thay ngầm theo lần nâng dependency.
-
-Quyết định cấu hình BE-006 ngày 06/11/2026, bổ sung cho mục 6.1:
-
-| Chi tiết | Giá trị đã chốt |
-|---|---|
-| Thư viện/mô hình | `ts-fsrs@6.0.0`, chọn rõ `FSRS6Model`; không dùng mô hình mặc định FSRS-7. |
-| Khoảng ôn tối đa | 36.500 ngày; đây là giới hạn kỹ thuật, không phải lịch cố định theo rating. |
-| Tính ngày | `dateChrono`, `fractionalDays: false`: chênh lệch ngày lịch UTC. Cùng ngày UTC là 0; 23:00 → 01:00 UTC hôm sau là 1 ngày. `dueAt` vẫn là thời điểm tuyệt đối. |
-| Làm tròn | Native của phiên bản đã ghim: các phép tính trung gian D/S và retrievability làm tròn đến 8 chữ số thập phân; khoảng dài hạn dùng `Math.round`, tối thiểu 1 ngày. Adapter không làm tròn thêm. |
-| Chuyển bước | `enableShortTerm: true`, learning/relearning như mục 6.1; `graduatingInterval: 1`, `allowModelOverride: false`; giữ policy monotonic và maximum interval của v6. |
-
-Ví dụ policy: thẻ mới Again/Hard/Good lần lượt sau 1 phút/5 phút 30 giây/10 phút. Learning ở bước cuối chọn Hard vẫn là 5 phút 30 giây theo native v6; Good tốt nghiệp sang khoảng dài hạn do scheduler tính. Review chọn Again chuyển sang relearning sau 10 phút. `scheduledDays` lưu phần ngày nguyên nên bước trong ngày có giá trị 0, trong khi `dueAt` vẫn giữ đúng độ trễ.
-
-Các lựa chọn này giữ policy native của bản đã ghim, không bổ sung cách tính thời gian hoặc làm tròn riêng trong adapter. Thay đổi chúng phải tạo cấu hình bất biến mới và kiểm chứng lại fixture trước khi sử dụng. Nguồn đối chiếu ngày 06/11/2026: [Date chrono](https://open-spaced-repetition.github.io/ts-fsrs/guide/chrono/date) và source/type declarations trong npm package `ts-fsrs@6.0.0`.
 
 ### 6.3. Cách dùng chung tiến độ
 

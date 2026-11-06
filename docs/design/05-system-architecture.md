@@ -2,10 +2,10 @@
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Phiên bản | 1.2 |
-| Ngày | 06/11/2026 |
+| Phiên bản | 1.1 |
+| Ngày | 28/10/2026 |
 | Phạm vi | MVP cho nhóm 5 thành viên, triển khai trong 3–4 tuần |
-| Cơ sở yêu cầu | Tổng quan dự án 1.0, SRS 1.1 và Product Backlog 1.0 |
+| Cơ sở yêu cầu | Tổng quan dự án 1.0, SRS 1.0 và Product Backlog 1.0 |
 | Mô hình | Frontend SPA; backend phân module, triển khai trên Vercel Functions |
 | Dịch vụ | Vercel Hobby, MongoDB Atlas Free, LiveKit Cloud, Brevo HTTPS API |
 | Ngân sách | Sử dụng trong hạn mức miễn phí |
@@ -348,9 +348,7 @@ Gợi ý dùng cùng nguồn kiến thức của tình huống nhưng hiển th�
 
 ### 9.2. FSRS
 
-Adapter FSRS nhận trạng thái hiện tại, thời điểm server, rating và cấu hình. Trả trạng thái mới cùng lịch sử đánh giá; service mới là nơi kiểm tra quyền và commit. Dùng `ts-fsrs@6.0.0` với mô hình FSRS-6 trên Node.js 24.x. Chọn rõ `FSRS6Model` qua `defineScheduler` và `dateChrono`; không dùng mặc định FSRS-7. Cấu hình chi tiết được chốt tại SRS mục 6.2. [REF-13], [REF-14]
-
-Các policy đăng ký theo thứ tự: retention → statistics → scheduled days → learning steps → maximum interval → monotonic interval. Không đăng ký fuzz middleware hoặc optimizer. Adapter không ghi database; preview tính qua cùng luồng review với ba rating, service tính lại tại thời điểm commit thực tế.
+Adapter FSRS nhận trạng thái hiện tại, thời điểm server, rating và cấu hình. Trả trạng thái mới cùng lịch sử đánh giá; service mới là nơi kiểm tra quyền và commit. Dùng `ts-fsrs` với mô hình FSRS-6 trên Node.js 24.x. Ghim phiên bản thư viện tương thích với runtime và cấu hình tại mục 11.2. [REF-13], [REF-14]
 
 Cấu hình thuật toán tuân SRS mục 6 và được lưu bất biến trong `scheduler_configs` theo Database Design mục 8.4. Preview và review dùng cùng cấu hình; không phụ thuộc mặc định của thư viện.
 
@@ -412,7 +410,7 @@ Atlas cần IP access list cho nguồn kết nối. Khi cấu hình phải kiể
 | Frontend | React, Vite, React Router, Tailwind CSS và LiveKit React SDK tương thích với nhau. |
 | Backend | Express, Mongoose, thư viện JWT/băm mật khẩu, LiveKit server SDK và adapter FSRS. |
 | Khóa dependency | Commit lockfile và cài đặt tái lập; không để build tự lấy bản mới nhất ngoài lockfile. |
-| FSRS | `ts-fsrs@6.0.0`, chọn rõ FSRS-6; cấu hình làm tròn, thời gian, chuyển bước và khoảng tối đa theo SRS mục 6.2. Nâng dependency phải kiểm chứng lại. |
+| FSRS | Ghim chính xác bản thư viện đã qua bộ kiểm chứng FSRS-6, gồm chính sách làm tròn và khoảng ôn tối đa. |
 
 Vercel cho chọn nhánh major Node.js và có thể cập nhật minor/patch của runtime. Vì vậy, khóa dependency không đồng nghĩa khóa toàn bộ runtime managed ở một patch cố định. Ghi nhận phiên bản thực tế khi kiểm thử và sau thay đổi môi trường. [REF-14]
 
