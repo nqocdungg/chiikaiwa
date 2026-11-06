@@ -180,15 +180,40 @@ describe('coordination persistence', () => {
         actorKey: 'user:projection',
         expectedVersion: claimed.version - 1,
         mode: 'searching',
-        resourceId: claimed.resourceId,
+        searchRequestId: claimed.search.requestId,
       }),
     ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+
+    await expect(
+      releaseActorState({
+        actorKey: 'user:projection',
+        expectedVersion: claimed.version,
+        mode: 'searching',
+      }),
+    ).rejects.toThrow(TypeError);
+
+    await expect(
+      releaseActorState({
+        actorKey: 'user:projection',
+        expectedVersion: claimed.version,
+        mode: 'searching',
+        searchRequestId: 'search-other',
+      }),
+    ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+
+    expect(
+      await actorStateCollection().findOne({ _id: 'user:projection' }),
+    ).toMatchObject({
+      mode: 'searching',
+      version: claimed.version,
+      search: { requestId: 'search-2' },
+    });
 
     const released = await releaseActorState({
       actorKey: 'user:projection',
       expectedVersion: claimed.version,
       mode: 'searching',
-      resourceId: claimed.resourceId,
+      searchRequestId: claimed.search.requestId,
     });
     expect(released).toMatchObject({ mode: 'idle', version: 2 });
     expect(released?.search).toBeUndefined();

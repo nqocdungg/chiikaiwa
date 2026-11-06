@@ -96,7 +96,14 @@ export async function claimActorState({
       'A valid actorKey and active coordination mode are required',
     );
   }
-  if (!resourceId && !(mode === 'searching' && search?.requestId)) {
+  const searchRequestId = search?.requestId;
+  if (
+    mode === 'searching' &&
+    (typeof searchRequestId !== 'string' || searchRequestId.length === 0)
+  ) {
+    throw new TypeError('A searching actor state requires a search request ID');
+  }
+  if (mode !== 'searching' && !resourceId) {
     throw new TypeError('An active actor state requires a resource identifier');
   }
 
@@ -148,22 +155,44 @@ export async function claimActorState({
  * Releases a reservation only if the caller still owns the current version.
  * Pass a transaction session to combine the release with related writes.
  *
- * @param {{actorKey: string, expectedVersion: number, mode: string, resourceId: string, session?: import('mongoose').ClientSession, now?: Date}} input
+ * Searching reservations are identified by `search.requestId`; every other
+ * active mode is identified by `resourceId`.
+ *
+ * @param {{actorKey: string, expectedVersion: number, mode: string, resourceId?: string, searchRequestId?: string, session?: import('mongoose').ClientSession, now?: Date}} input
  */
 export async function releaseActorState({
   actorKey,
   expectedVersion,
   mode,
   resourceId,
+  searchRequestId,
   session,
   now = new Date(),
 }) {
+  /** @type {Record<string, string>} */
+  let resourceFilter;
+  if (mode === 'searching') {
+    if (!searchRequestId) {
+      throw new TypeError(
+        'A searching actor state requires a search request ID',
+      );
+    }
+    resourceFilter = { 'search.requestId': searchRequestId };
+  } else {
+    if (!resourceId) {
+      throw new TypeError(
+        'An active actor state requires a resource identifier',
+      );
+    }
+    resourceFilter = { resourceId };
+  }
+
   /** @param {import('mongoose').ClientSession} transactionSession */
   const release = async (transactionSession) => {
     const db = await connectDatabase();
     const collection = actorStates(db);
     const result = await collection.updateOne(
-      { _id: actorKey, mode, resourceId, version: expectedVersion },
+      { _id: actorKey, mode, ...resourceFilter, version: expectedVersion },
       {
         $set: { mode: 'idle', updatedAt: now },
         $unset: { resourceId: '', search: '' },
