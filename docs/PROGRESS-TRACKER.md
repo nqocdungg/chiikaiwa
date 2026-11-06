@@ -86,6 +86,17 @@ Fixture có 27 kết quả cho chín tình huống, được tạo từ công th
 
 Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettier --write tests/fixtures/fsrs-reference.json`; chạy `npx vitest run --project server tests/server/fsrs.test.js`. Test/CI thông thường chỉ đọc JSON, không cần Python. Thay fixture phải review config, input và công thức; không sinh lại expected để bỏ qua sai khác chưa giải thích. Nguồn công thức và ngày đối chiếu được ghi trong fixture; policy nguồn được kiểm tra từ npm package `ts-fsrs@6.0.0`.
 
+### BE-010 — Cấp token LiveKit cho đúng thành viên
+
+- Ngày cập nhật: 2026-11-06
+- Trạng thái: Đã triển khai và self-test; chờ tích hợp BE-009, LiveKit thật và review.
+- PR: Chưa có; branch `feature/BE-010-livekit-media-token`, chưa commit/push.
+- Đã làm: API cấp token đúng room/identity, kiểm tra quyền và deadline trước/sau ký; auth/CSRF/rate limit, receipt không lưu token; gom lỗi lặp trong module Sessions.
+- File liên quan: `server/modules/sessions/`, `server/integrations/livekit/media-token.js`, `server/config/env.js`, `server/app.js`, manifest/lockfile và hai file test media-token.
+- Kiểm chứng: `npm run check` pass: 135 unit/HTTP/component tests, 45 integration tests và hai build; `git diff --check` pass. Review độc lập không còn Must fix. Tests dùng DB tạm/credential giả, chưa thử Atlas hoặc LiveKit thật.
+- Tiếp theo: Review/CI; tích hợp phiên BE-009 và kiểm tra hai thành viên kết nối LiveKit. OPS-003 cấu hình ba env LiveKit; BE-011 xử lý webhook, BE-012 quản lý vòng đời/thu hồi.
+- Lưu ý: Token tối đa 10 phút, giới hạn theo deadline quyền; kiểm tra lại không thay thế thu hồi media. Receipt hiện theo API 07 §2.2; việc miễn media-token cần nhóm chốt contract trước khi bỏ.
+
 ## Sprint 2
 
 Chưa có cập nhật.
