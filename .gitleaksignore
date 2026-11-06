@@ -1,0 +1,5 @@
+# Synthetic JWT signing keys used only by auth unit tests.
+b7a93203b88ae862eaf39970c78a023821a245ef:tests/server/auth.test.js:generic-api-key:224
+b7a93203b88ae862eaf39970c78a023821a245ef:tests/server/auth.test.js:generic-api-key:265
+# Example Idempotency-Key UUID in the API specification, not a credential.
+3e99b31c141d2f17bb9b54379f71ff30f63eba9c:docs/design/07-api-specification.md:generic-api-key:317
