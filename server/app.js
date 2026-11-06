@@ -7,7 +7,6 @@ import { createCsrfMiddleware } from './middleware/csrf.js';
 import { AppError } from './middleware/http-error.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createAuthRouter } from './modules/identity/auth-router.js';
-import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
 
 /** @param {{checkHealth?: () => Promise<void>}} [options] */
 export function createApp({ checkHealth = checkDatabase } = {}) {
@@ -77,7 +76,6 @@ export function createApp({ checkHealth = checkDatabase } = {}) {
   );
 
   app.use('/api/v1/auth', createAuthRouter());
-  app.use('/api/v1', createCoordinationRouter());
 
   app.use((_request, response) => {
     response.status(404).json({
