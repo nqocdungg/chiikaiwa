@@ -169,6 +169,27 @@ describe('pinned FSRS-6 scheduler', () => {
     ).toThrow();
   });
 
+  it.each([
+    'state',
+    'dueAt',
+    'stability',
+    'difficulty',
+    'elapsedDays',
+    'scheduledDays',
+    'reps',
+    'lapses',
+    'learningSteps',
+    'lastReviewAt',
+    'schedulerConfigId',
+  ])('rejects existing review progress without %s', (field) => {
+    const input = /** @type {CardState} */ (hydrate(fixture.cases[3].progress));
+    const now = new Date(fixture.cases[3].now);
+    Reflect.deleteProperty(input, field);
+    expect(Object.hasOwn(input, field)).toBe(false);
+    expect(() => reviewCard(input, now, 3)).toThrow();
+    expect(() => previewCard(input, now)).toThrow();
+  });
+
   it('accepts an explicit empty new state and rejects inconsistent memory', () => {
     const now = new Date('2026-01-01T12:00:00Z');
     const empty = reviewCard(null, now, 1).log.beforeState;
