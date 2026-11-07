@@ -8,6 +8,7 @@ import { AppError } from './middleware/http-error.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createAuthRouter } from './modules/identity/auth-router.js';
 import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
+import { createSessionsRouter } from './modules/sessions/sessions-router.js';
 
 /**
  * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler}} [options]
@@ -113,6 +114,7 @@ export function createApp({
 
   app.use('/api/v1/auth', createAuthRouter());
   app.use('/api/v1', createCoordinationRouter());
+  app.use('/api/v1/sessions', createSessionsRouter());
 
   app.use((_request, response) => {
     response.status(404).json({

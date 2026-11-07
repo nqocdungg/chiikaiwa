@@ -130,3 +130,33 @@ function integer(raw, fallback, maximum, name) {
   }
   return value;
 }
+
+// Chỉ đọc khi xin vé media, tránh làm auth/health phụ thuộc cấu hình LiveKit.
+/** @param {NodeJS.ProcessEnv} [source] */
+export function readLiveKitEnv(source = process.env) {
+  const url = source.LIVEKIT_URL;
+  if (!url || !URL.canParse(url)) {
+    throw new Error('LIVEKIT_URL must be a WebSocket origin');
+  }
+  const parsed = new URL(url);
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+  if (
+    !['ws:', 'wss:'].includes(parsed.protocol) ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.pathname !== '/' ||
+    (parsed.protocol === 'ws:' && (!local || source.NODE_ENV === 'production'))
+  ) {
+    throw new Error(
+      'LIVEKIT_URL must use WSS (WS only for local development) without credentials or a path',
+    );
+  }
+  const apiKey = source.LIVEKIT_API_KEY;
+  const apiSecret = source.LIVEKIT_API_SECRET;
+  if (!apiKey?.trim() || !apiSecret?.trim()) {
+    throw new Error('LIVEKIT_API_KEY and LIVEKIT_API_SECRET are required');
+  }
+  return { url: parsed.origin, apiKey, apiSecret };
+}
