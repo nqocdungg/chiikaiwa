@@ -2,8 +2,41 @@ import {
   createMalformedRequestError,
   createValidationError,
 } from '../../middleware/http-error.js';
+import {
+  AGE_GROUP_CODES,
+  AVATAR_CODES,
+  COUNTRY_CODES,
+  GENDER_CODES,
+  GOAL_CODES,
+  INTEREST_CODES,
+  LANGUAGE_CODES,
+  LEVEL_CODES,
+  MAX_PROFILE_INTERESTS,
+} from './catalogs.js';
 
 const EMAIL_SYNTAX_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+export const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+/**
+ * Validates and normalizes `Idempotency-Key` as a canonical lowercase UUID (07 §1, §2.2, §12).
+ * Rejects missing, empty, whitespace-only, or malformed UUID values with 422 `VALIDATION_FAILED`.
+ *
+ * @param {unknown} rawKey
+ * @returns {string}
+ */
+export function validateIdempotencyKey(rawKey) {
+  if (typeof rawKey !== 'string' || !UUID_REGEX.test(rawKey)) {
+    throw createValidationError([
+      {
+        path: 'Idempotency-Key',
+        code: 'INVALID_UUID',
+        message: 'Idempotency-Key phải là UUID.',
+      },
+    ]);
+  }
+  return rawKey.toLowerCase();
+}
 
 /**
  * Checks whether a value is a plain JSON object (and not null, an array, or a custom class instance).
@@ -282,4 +315,270 @@ export function validateEmptyObjectInput(body) {
       })),
     );
   }
+}
+
+/** @type {Array<{ key: string, codes: Set<string> }>} */
+const PROFILE_OPTIONAL_ENUM_FIELDS = [
+  { key: 'level', codes: LEVEL_CODES },
+  { key: 'nativeLanguageCode', codes: LANGUAGE_CODES },
+  { key: 'goal', codes: GOAL_CODES },
+  { key: 'countryCode', codes: COUNTRY_CODES },
+  { key: 'ageGroup', codes: AGE_GROUP_CODES },
+  { key: 'gender', codes: GENDER_CODES },
+];
+
+const ALLOWED_PROFILE_TOP_KEYS = new Set([
+  'expectedVersion',
+  'displayName',
+  'avatarKey',
+  'profile',
+]);
+
+const ALLOWED_PROFILE_NESTED_KEYS = new Set([
+  'level',
+  'nativeLanguageCode',
+  'goal',
+  'interests',
+  'countryCode',
+  'ageGroup',
+  'gender',
+]);
+
+/**
+ * Validates PATCH /me/profile request payload (06 §2.2, 06 §4.1, 07 §2.3, 07 §4).
+ * - Requires `expectedVersion` (non-negative integer).
+ * - Rejects unknown fields (`role`, `status`, `authVersion`, `id`, `userId`, etc.) at root and inside `profile`.
+ * - Rejects `null` on required fields (`expectedVersion`, `displayName`, `avatarKey`, `profile`, `profile.interests`).
+ * - Allows `null` on optional nested `profile` fields (`level`, `nativeLanguageCode`, `goal`, `countryCode`, `ageGroup`, `gender`) to clear them.
+ * - Preserves omitted fields by only recording explicitly supplied fields.
+ *
+ * @param {unknown} body
+ * @returns {{
+ *   expectedVersion: number,
+ *   displayName?: string,
+ *   avatarKey?: string,
+ *   profileUpdates: Record<string, string | string[] | null>
+ * }}
+ */
+export function validateProfileUpdateInput(body) {
+  if (!isPlainObject(body)) {
+    throw createMalformedRequestError();
+  }
+
+  /** @type {Array<{ path: string, code: string, message: string }>} */
+  const fields = [];
+
+  for (const key of Object.keys(body)) {
+    if (!ALLOWED_PROFILE_TOP_KEYS.has(key)) {
+      fields.push({
+        path: key,
+        code: 'UNKNOWN_FIELD',
+        message: `Trường "${key}" không được phép trong yêu cầu này.`,
+      });
+    }
+  }
+
+  const rawExpectedVersion = body.expectedVersion;
+  /** @type {number | undefined} */
+  let expectedVersion;
+  if (
+    !Object.hasOwn(body, 'expectedVersion') ||
+    rawExpectedVersion === undefined
+  ) {
+    fields.push({
+      path: 'expectedVersion',
+      code: 'REQUIRED',
+      message:
+        'Vui lòng cung cấp phiên bản dữ liệu hiện tại (expectedVersion).',
+    });
+  } else if (
+    typeof rawExpectedVersion !== 'number' ||
+    !Number.isInteger(rawExpectedVersion) ||
+    rawExpectedVersion < 0
+  ) {
+    fields.push({
+      path: 'expectedVersion',
+      code: 'INVALID_VERSION',
+      message: 'expectedVersion phải là số nguyên không âm.',
+    });
+  } else {
+    expectedVersion = rawExpectedVersion;
+  }
+
+  /** @type {string | undefined} */
+  let displayName;
+  if (Object.hasOwn(body, 'displayName')) {
+    const displayNameRes = validateDisplayNameField(
+      body.displayName,
+      'displayName',
+    );
+    if ('error' in displayNameRes) {
+      fields.push(displayNameRes.error);
+    } else {
+      displayName = displayNameRes.displayName;
+    }
+  }
+
+  /** @type {string | undefined} */
+  let avatarKey;
+  if (Object.hasOwn(body, 'avatarKey')) {
+    const rawAvatarKey = body.avatarKey;
+    if (typeof rawAvatarKey !== 'string') {
+      fields.push({
+        path: 'avatarKey',
+        code: 'INVALID_TYPE',
+        message: 'Mã ảnh đại diện phải là chuỗi ký tự.',
+      });
+    } else if (!AVATAR_CODES.has(rawAvatarKey)) {
+      fields.push({
+        path: 'avatarKey',
+        code: 'INVALID_ENUM',
+        message: 'Ảnh đại diện không nằm trong danh mục cho phép.',
+      });
+    } else {
+      avatarKey = rawAvatarKey;
+    }
+  }
+
+  /** @type {Record<string, string | string[] | null>} */
+  const profileUpdates = Object.create(null);
+
+  if (Object.hasOwn(body, 'profile')) {
+    const rawProfile = body.profile;
+    if (!isPlainObject(rawProfile)) {
+      fields.push({
+        path: 'profile',
+        code: 'INVALID_TYPE',
+        message: 'Thông tin hồ sơ phải là một đối tượng hợp lệ.',
+      });
+    } else {
+      for (const key of Object.keys(rawProfile)) {
+        if (!ALLOWED_PROFILE_NESTED_KEYS.has(key)) {
+          fields.push({
+            path: `profile.${key}`,
+            code: 'UNKNOWN_FIELD',
+            message: `Trường "profile.${key}" không được phép trong yêu cầu này.`,
+          });
+        }
+      }
+
+      for (const { key, codes } of PROFILE_OPTIONAL_ENUM_FIELDS) {
+        if (!Object.hasOwn(rawProfile, key)) {
+          continue;
+        }
+        const val = rawProfile[key];
+        if (val === null) {
+          profileUpdates[key] = null;
+        } else if (typeof val !== 'string') {
+          fields.push({
+            path: `profile.${key}`,
+            code: 'INVALID_TYPE',
+            message: `Trường "profile.${key}" phải là chuỗi ký tự hoặc null.`,
+          });
+        } else if (!codes.has(val)) {
+          fields.push({
+            path: `profile.${key}`,
+            code: 'INVALID_ENUM',
+            message: `Giá trị của "profile.${key}" không nằm trong danh mục hợp lệ.`,
+          });
+        } else {
+          profileUpdates[key] = val;
+        }
+      }
+
+      if (Object.hasOwn(rawProfile, 'interests')) {
+        const rawInterests = rawProfile.interests;
+        if (!Array.isArray(rawInterests)) {
+          fields.push({
+            path: 'profile.interests',
+            code: 'INVALID_TYPE',
+            message: 'Danh sách sở thích phải là một mảng.',
+          });
+        } else {
+          let interestsValid = true;
+          if (rawInterests.length > MAX_PROFILE_INTERESTS) {
+            interestsValid = false;
+            fields.push({
+              path: 'profile.interests',
+              code: 'MAX_ITEMS_EXCEEDED',
+              message: `Chỉ được chọn tối đa ${MAX_PROFILE_INTERESTS} sở thích.`,
+            });
+          }
+
+          let hasInvalidType = false;
+          let hasInvalidEnum = false;
+          let hasDuplicate = false;
+          /** @type {Set<string>} */
+          const seenInterests = new Set();
+
+          for (const item of rawInterests) {
+            if (typeof item !== 'string') {
+              hasInvalidType = true;
+            } else if (!INTEREST_CODES.has(item)) {
+              hasInvalidEnum = true;
+            } else if (seenInterests.has(item)) {
+              hasDuplicate = true;
+            } else {
+              seenInterests.add(item);
+            }
+          }
+
+          if (hasInvalidType) {
+            interestsValid = false;
+            fields.push({
+              path: 'profile.interests',
+              code: 'INVALID_TYPE',
+              message: 'Mỗi sở thích phải là chuỗi mã danh mục.',
+            });
+          }
+          if (hasInvalidEnum) {
+            interestsValid = false;
+            fields.push({
+              path: 'profile.interests',
+              code: 'INVALID_ENUM',
+              message: 'Sở thích không nằm trong danh mục hợp lệ.',
+            });
+          }
+          if (hasDuplicate) {
+            interestsValid = false;
+            fields.push({
+              path: 'profile.interests',
+              code: 'DUPLICATE_ITEM',
+              message: 'Danh sách sở thích không được chứa mục trùng lặp.',
+            });
+          }
+
+          if (interestsValid) {
+            profileUpdates.interests = /** @type {string[]} */ ([
+              ...rawInterests,
+            ]);
+          }
+        }
+      }
+    }
+  }
+
+  if (fields.length > 0 || expectedVersion === undefined) {
+    throw createValidationError(fields);
+  }
+
+  /**
+   * @type {{
+   *   expectedVersion: number,
+   *   displayName?: string,
+   *   avatarKey?: string,
+   *   profileUpdates: Record<string, string | string[] | null>
+   * }}
+   */
+  const result = {
+    expectedVersion,
+    profileUpdates,
+  };
+  if (displayName !== undefined) {
+    result.displayName = displayName;
+  }
+  if (avatarKey !== undefined) {
+    result.avatarKey = avatarKey;
+  }
+  return result;
 }

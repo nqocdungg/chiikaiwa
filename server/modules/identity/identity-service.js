@@ -6,6 +6,7 @@ import {
   connectDatabase,
   withTransaction,
 } from '../../persistence/database.js';
+import { runIdempotentOperation } from '../coordination/coordination-service.js';
 import {
   hashGuestCredential,
   hashPassword,
@@ -18,7 +19,9 @@ import {
 import { DEFAULT_AVATAR_KEY, toSelfDto } from './dto.js';
 import {
   validateEmptyObjectInput,
+  validateIdempotencyKey,
   validateLoginInput,
+  validateProfileUpdateInput,
   validateRegisterInput,
 } from './validation.js';
 
@@ -449,4 +452,162 @@ export function formatAuthMeDto(identity) {
     kind: 'guest',
     guest: guestDto,
   };
+}
+
+/**
+ * Partially updates the authenticated learner/admin user's profile using atomic CAS on `expectedVersion`
+ * and mandatory `operation_receipts` idempotency tracking (06 §4.1, 06 §4.3, 07 §2.2, 07 §4).
+ * - Requires a valid UUID `idempotencyKey` (`operationId`) and records/replays via `runIdempotentOperation`.
+ * - Only updates fields explicitly sent in the request body; omitted fields inside `profile` remain untouched.
+ * - Optional nested `profile` fields set to `null` are unset in MongoDB.
+ * - Increments `version` by 1 on commit; returns 409 `VERSION_CONFLICT` with `currentVersion` if stale.
+ *
+ * @param {Object} params
+ * @param {import('mongoose').Types.ObjectId | string} params.userId
+ * @param {unknown} params.rawBody
+ * @param {string} params.idempotencyKey
+ * @param {Date} [params.now]
+ * @returns {Promise<ReturnType<typeof toSelfDto>>}
+ */
+export async function updateUserProfile({
+  userId,
+  rawBody,
+  idempotencyKey,
+  now = new Date(),
+}) {
+  const operationId = validateIdempotencyKey(idempotencyKey);
+  const { expectedVersion, displayName, avatarKey, profileUpdates } =
+    validateProfileUpdateInput(rawBody);
+
+  const userObjectId =
+    userId instanceof ObjectId ? userId : new ObjectId(String(userId));
+  const actorKey = `user:${userObjectId.toHexString()}`;
+
+  /** @type {Record<string, unknown>} */
+  const setFields = {
+    updatedAt: now,
+  };
+  /** @type {Record<string, ''>} */
+  const unsetFields = {};
+
+  if (displayName !== undefined) {
+    setFields.displayName = displayName;
+  }
+  if (avatarKey !== undefined) {
+    setFields.avatarKey = avatarKey;
+  }
+
+  for (const [key, value] of Object.entries(profileUpdates)) {
+    if (value === null) {
+      unsetFields[`profile.${key}`] = '';
+    } else {
+      setFields[`profile.${key}`] = value;
+    }
+  }
+
+  /** @type {Record<string, unknown>} */
+  const updateDoc = {
+    $set: setFields,
+    $inc: { version: 1 },
+  };
+  if (Object.keys(unsetFields).length > 0) {
+    updateDoc.$unset = unsetFields;
+  }
+
+  /**
+   * @param {import('mongoose').mongo.Db} db
+   * @param {import('mongoose').ClientSession} session
+   */
+  const assertActiveUser = async (db, session) => {
+    const currentUser = await db
+      .collection('users')
+      .findOne({ _id: userObjectId }, { session });
+
+    if (!currentUser) {
+      throw new AppError({
+        status: 401,
+        code: 'SESSION_EXPIRED',
+        message:
+          'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
+      });
+    }
+
+    if (currentUser.status === 'locked') {
+      throw new AppError({
+        status: 403,
+        code: 'ACCOUNT_LOCKED',
+        message: 'Tài khoản của bạn đã bị khóa.',
+      });
+    }
+
+    if (currentUser.status !== 'active') {
+      throw new AppError({
+        status: 401,
+        code: 'SESSION_EXPIRED',
+        message:
+          'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
+      });
+    }
+
+    return currentUser;
+  };
+
+  /**
+   * @param {import('mongoose').mongo.Db} db
+   * @param {import('mongoose').ClientSession} session
+   */
+  const applyCasUpdate = async (db, session) => {
+    const updatedUser = await db.collection('users').findOneAndUpdate(
+      {
+        _id: userObjectId,
+        status: 'active',
+        version: expectedVersion,
+      },
+      updateDoc,
+      { returnDocument: 'after', session },
+    );
+
+    if (!updatedUser) {
+      const currentUser = await assertActiveUser(db, session);
+
+      throw new AppError({
+        status: 409,
+        code: 'VERSION_CONFLICT',
+        message: 'Dữ liệu đã thay đổi. Vui lòng tải lại.',
+        details: {
+          currentVersion:
+            typeof currentUser.version === 'number' ? currentUser.version : 0,
+        },
+      });
+    }
+
+    return toSelfDto(updatedUser);
+  };
+
+  const db = await connectDatabase();
+
+  const result = await runIdempotentOperation({
+    actorKey,
+    method: 'PATCH',
+    path: '/api/v1/me/profile',
+    operationId,
+    payload: rawBody,
+    authorize: async ({ session }) => {
+      await assertActiveUser(db, session);
+    },
+    execute: async ({ session }) => {
+      const selfDto = await applyCasUpdate(db, session);
+      return {
+        resultRef: userObjectId.toHexString(),
+        value: selfDto,
+      };
+    },
+    replay: async ({ session }) => {
+      const currentUser = await assertActiveUser(db, session);
+      return toSelfDto(currentUser);
+    },
+    now,
+  });
+
+  return /** @type {ReturnType<typeof toSelfDto>} */ (result);
 }
