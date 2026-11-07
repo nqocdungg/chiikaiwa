@@ -3,3 +3,5 @@ b7a93203b88ae862eaf39970c78a023821a245ef:tests/server/auth.test.js:generic-api-k
 b7a93203b88ae862eaf39970c78a023821a245ef:tests/server/auth.test.js:generic-api-key:265
 # Example Idempotency-Key UUID in the API specification, not a credential.
 3e99b31c141d2f17bb9b54379f71ff30f63eba9c:docs/design/07-api-specification.md:generic-api-key:317
+# Synthetic Idempotency-Key UUID v1 fixture in profile integration test, not a credential.
+1e5bbaac368e165dfdf92a20ed6b26ade3419106:tests/integration/profile-catalogs.integration.test.js:generic-api-key:676
