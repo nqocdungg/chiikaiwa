@@ -15,6 +15,28 @@ import {
 } from './catalogs.js';
 
 const EMAIL_SYNTAX_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+export const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+/**
+ * Validates and normalizes `Idempotency-Key` as a canonical lowercase UUID (07 §1, §2.2, §12).
+ * Rejects missing, empty, whitespace-only, or malformed UUID values with 422 `VALIDATION_FAILED`.
+ *
+ * @param {unknown} rawKey
+ * @returns {string}
+ */
+export function validateIdempotencyKey(rawKey) {
+  if (typeof rawKey !== 'string' || !UUID_REGEX.test(rawKey)) {
+    throw createValidationError([
+      {
+        path: 'Idempotency-Key',
+        code: 'INVALID_UUID',
+        message: 'Idempotency-Key phải là UUID.',
+      },
+    ]);
+  }
+  return rawKey.toLowerCase();
+}
 
 /**
  * Checks whether a value is a plain JSON object (and not null, an array, or a custom class instance).

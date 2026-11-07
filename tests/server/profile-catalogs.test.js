@@ -6,7 +6,11 @@ import {
   DEFAULT_AVATAR_KEY,
 } from '../../server/modules/identity/catalogs.js';
 import { toPartnerDto, toSelfDto } from '../../server/modules/identity/dto.js';
-import { validateProfileUpdateInput } from '../../server/modules/identity/validation.js';
+import { updateUserProfile } from '../../server/modules/identity/identity-service.js';
+import {
+  validateIdempotencyKey,
+  validateProfileUpdateInput,
+} from '../../server/modules/identity/validation.js';
 
 describe('BE-002 Profile & Catalogs unit and HTTP contract tests', () => {
   const app = createApp({ checkHealth: async () => {} });
@@ -85,6 +89,71 @@ describe('BE-002 Profile & Catalogs unit and HTTP contract tests', () => {
       const avatarCodes = data.avatars.map((x) => x.code);
       expect(avatarCodes).toContain(DEFAULT_AVATAR_KEY);
     });
+  });
+
+  describe('validateIdempotencyKey & updateUserProfile runtime key guard', () => {
+    it('accepts valid UUIDs across RFC versions (v1, v4, v7) and normalizes to lowercase', () => {
+      // v1 UUID
+      expect(
+        validateIdempotencyKey('6ba7b810-9dad-11d1-80b4-00c04fd430c8'),
+      ).toBe('6ba7b810-9dad-11d1-80b4-00c04fd430c8');
+      // v4 UUID (uppercase)
+      expect(
+        validateIdempotencyKey('550E8400-E29B-41D4-A716-446655440000'),
+      ).toBe('550e8400-e29b-41d4-a716-446655440000');
+      // v7 UUID
+      expect(
+        validateIdempotencyKey('018f4a7c-8d32-7000-8000-000000000001'),
+      ).toBe('018f4a7c-8d32-7000-8000-000000000001');
+    });
+
+    it.each([
+      undefined,
+      null,
+      '',
+      '   ',
+      'not-a-uuid',
+      '550e8400-e29b-01d4-a716-446655440000',
+      '550e8400-e29b-41d4-c716-446655440000',
+      ' 550e8400-e29b-41d4-a716-446655440000 ',
+    ])(
+      'rejects invalid Idempotency-Key (%s) in both validateIdempotencyKey and direct updateUserProfile calls with 422 INVALID_UUID',
+      async (invalidKey) => {
+        try {
+          validateIdempotencyKey(invalidKey);
+          expect.fail('Expected validateIdempotencyKey to throw 422');
+        } catch (err) {
+          const appErr = /** @type {any} */ (err);
+          expect(appErr.status).toBe(422);
+          expect(appErr.code).toBe('VALIDATION_FAILED');
+          expect(appErr.details.fields).toEqual([
+            expect.objectContaining({
+              path: 'Idempotency-Key',
+              code: 'INVALID_UUID',
+            }),
+          ]);
+        }
+
+        await expect(
+          updateUserProfile({
+            userId: '507f1f77bcf86cd799439011',
+            rawBody: { expectedVersion: 0, displayName: 'Hạnh Nhi' },
+            idempotencyKey: /** @type {any} */ (invalidKey),
+          }),
+        ).rejects.toMatchObject({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          details: {
+            fields: [
+              expect.objectContaining({
+                path: 'Idempotency-Key',
+                code: 'INVALID_UUID',
+              }),
+            ],
+          },
+        });
+      },
+    );
   });
 
   describe('validateProfileUpdateInput unit validation', () => {

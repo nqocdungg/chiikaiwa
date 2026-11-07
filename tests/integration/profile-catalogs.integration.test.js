@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
 import {
   afterAll,
@@ -18,6 +19,8 @@ import {
 import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 import { hashGuestCredential } from '../../server/modules/identity/crypto.js';
 import { toPartnerDto } from '../../server/modules/identity/dto.js';
+import { updateUserProfile } from '../../server/modules/identity/identity-service.js';
+import { assertValidationError } from '../helpers/contract-helpers.js';
 
 const { ObjectId } = mongoose.Types;
 const DEFAULT_ORIGIN = 'http://127.0.0.1:5173';
@@ -119,6 +122,7 @@ beforeEach(async () => {
     db.collection('auth_sessions').deleteMany({}),
     db.collection('guest_sessions').deleteMany({}),
     db.collection('actor_states').deleteMany({}),
+    db.collection('operation_receipts').deleteMany({}),
     db.collection('statistics').deleteMany({}),
     db.collection('rate_limits').deleteMany({}),
   ]);
@@ -153,6 +157,7 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
       .set('Origin', DEFAULT_ORIGIN)
       .set('Cookie', combinedCookie)
       .set('X-CSRF-Token', csrfToken)
+      .set('Idempotency-Key', randomUUID())
       .send({
         expectedVersion: 0,
         displayName: '  Hạnh Nhi Nguyễn  ',
@@ -203,6 +208,7 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
       .set('Origin', DEFAULT_ORIGIN)
       .set('Cookie', combinedCookie)
       .set('X-CSRF-Token', csrfToken)
+      .set('Idempotency-Key', randomUUID())
       .send({
         expectedVersion: 1,
         profile: {
@@ -235,6 +241,7 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
       .set('Origin', DEFAULT_ORIGIN)
       .set('Cookie', combinedCookie)
       .set('X-CSRF-Token', csrfToken)
+      .set('Idempotency-Key', randomUUID())
       .send({
         expectedVersion: 2,
         profile: {
@@ -292,6 +299,7 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
       .set('Origin', DEFAULT_ORIGIN)
       .set('Cookie', combinedCookie)
       .set('X-CSRF-Token', csrfToken)
+      .set('Idempotency-Key', randomUUID())
       .send({
         expectedVersion: 0,
         avatarKey: 'usagi',
@@ -373,6 +381,7 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
         .set('Origin', DEFAULT_ORIGIN)
         .set('Cookie', combinedCookie)
         .set('X-CSRF-Token', csrfToken)
+        .set('Idempotency-Key', randomUUID())
         .send(payload)
         .expect(422);
 
@@ -431,12 +440,14 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
         .set('Origin', DEFAULT_ORIGIN)
         .set('Cookie', combinedCookie)
         .set('X-CSRF-Token', csrfToken)
+        .set('Idempotency-Key', randomUUID())
         .send(payloadTabA),
       request(app)
         .patch('/api/v1/me/profile')
         .set('Origin', DEFAULT_ORIGIN)
         .set('Cookie', combinedCookie)
         .set('X-CSRF-Token', csrfToken)
+        .set('Idempotency-Key', randomUUID())
         .send(payloadTabB),
     ]);
 
@@ -531,6 +542,7 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
       .set('Origin', DEFAULT_ORIGIN)
       .set('Cookie', userA.combinedCookie)
       .set('X-CSRF-Token', userA.csrfToken)
+      .set('Idempotency-Key', randomUUID())
       .send({
         expectedVersion: 0,
         displayName: 'User A Updated',
@@ -544,6 +556,7 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
       .set('Origin', DEFAULT_ORIGIN)
       .set('Cookie', userA.combinedCookie)
       .set('X-CSRF-Token', userA.csrfToken)
+      .set('Idempotency-Key', randomUUID())
       .send({
         expectedVersion: 1,
         userId: userB.user.id,
@@ -571,8 +584,241 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
       .set('Origin', DEFAULT_ORIGIN)
       .set('Cookie', userA.combinedCookie)
       .set('X-CSRF-Token', userA.csrfToken)
+      .set('Idempotency-Key', randomUUID())
       .send({ expectedVersion: 1, displayName: 'Locked Update' })
       .expect(403);
     expect(lockedRes.body.error.code).toBe('ACCOUNT_LOCKED');
+  });
+
+  it('rejects missing, empty, whitespace-only, and non-UUID Idempotency-Key headers on HTTP and direct service calls without modifying profile/version or operation_receipts', async () => {
+    const { csrfToken, combinedCookie, sessionCookie, user } =
+      await registerAndLogin({
+        email: 'idempotency.guard@example.com',
+        displayName: 'Before Guard Test',
+      });
+
+    // 1. Missing Idempotency-Key header
+    const missingKeyRes = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', combinedCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        expectedVersion: 0,
+        displayName: 'Should Not Commit',
+      });
+    assertValidationError(missingKeyRes, [
+      { path: 'Idempotency-Key', code: 'INVALID_UUID' },
+    ]);
+
+    // 2. Empty, whitespace-only, and non-UUID Idempotency-Key headers
+    for (const invalidHeader of [
+      '',
+      '   ',
+      'not-a-uuid',
+      '12345',
+      '550e8400-e29b-01d4-a716-446655440000',
+    ]) {
+      const res = await request(app)
+        .patch('/api/v1/me/profile')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', combinedCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Idempotency-Key', invalidHeader)
+        .send({
+          expectedVersion: 0,
+          displayName: 'Should Not Commit',
+        });
+      assertValidationError(res, [
+        { path: 'Idempotency-Key', code: 'INVALID_UUID' },
+      ]);
+    }
+
+    // 3. Direct service calls with missing, empty, whitespace, or non-UUID idempotencyKey
+    for (const invalidServiceKey of [undefined, '', '   ', 'invalid-uuid']) {
+      await expect(
+        updateUserProfile({
+          userId: user.id,
+          rawBody: {
+            expectedVersion: 0,
+            displayName: 'Direct Call Bypass Attempt',
+          },
+          idempotencyKey: /** @type {any} */ (invalidServiceKey),
+        }),
+      ).rejects.toMatchObject({
+        status: 422,
+        code: 'VALIDATION_FAILED',
+      });
+    }
+
+    // Verify neither users nor operation_receipts was modified
+    const meRes = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', sessionCookie)
+      .expect(200);
+    expect(meRes.body.data.user.displayName).toBe('Before Guard Test');
+    expect(meRes.body.data.user.version).toBe(0);
+
+    const receiptCount = await db
+      .collection('operation_receipts')
+      .countDocuments({});
+    expect(receiptCount).toBe(0);
+  });
+
+  it('replays committed PATCH /me/profile on same Idempotency-Key without double-incrementing version, rejects modified payload with 409 IDEMPOTENCY_CONFLICT, handles concurrent identical retries atomically, and rejects replay after account is locked', async () => {
+    const { csrfToken, combinedCookie, sessionCookie, user } =
+      await registerAndLogin({
+        email: 'idempotent.profile@example.com',
+        displayName: 'Initial Name',
+      });
+
+    // Use a valid non-v4 UUID (v1) to verify any RFC UUID version 1..8 is accepted
+    const idempotencyKey = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+
+    // 1. Initial PATCH with Idempotency-Key commits and increments version to 1
+    const firstRes = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', combinedCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .set('Idempotency-Key', idempotencyKey)
+      .send({
+        expectedVersion: 0,
+        displayName: 'Idempotent Updated',
+        profile: { level: 'N3', nativeLanguageCode: 'vi' },
+      })
+      .expect(200);
+
+    expect(firstRes.body.data).toMatchObject({
+      id: user.id,
+      displayName: 'Idempotent Updated',
+      version: 1,
+      profile: {
+        level: 'N3',
+        nativeLanguageCode: 'vi',
+        interests: [],
+      },
+    });
+
+    // 2. Retry same intent with same Idempotency-Key (even uppercase UUID and reordered JSON keys) replays 200 without incrementing version
+    const replayRes = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', combinedCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .set('Idempotency-Key', idempotencyKey.toUpperCase())
+      .send({
+        profile: { nativeLanguageCode: 'vi', level: 'N3' },
+        displayName: 'Idempotent Updated',
+        expectedVersion: 0,
+      })
+      .expect(200);
+
+    expect(replayRes.body.data).toEqual(firstRes.body.data);
+
+    // 3. Reusing the same Idempotency-Key with a different payload returns 409 IDEMPOTENCY_CONFLICT
+    const conflictRes = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', combinedCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .set('Idempotency-Key', idempotencyKey)
+      .send({
+        expectedVersion: 0,
+        displayName: 'Different Intent',
+        profile: { level: 'N2' },
+      })
+      .expect(409);
+
+    expect(conflictRes.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
+
+    // 4. New Idempotency-Key with stale expectedVersion: 0 returns 409 VERSION_CONFLICT
+    const staleRes = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', combinedCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .set('Idempotency-Key', '660e8400-e29b-41d4-a716-446655440001')
+      .send({
+        expectedVersion: 0,
+        displayName: 'Stale Intent',
+      })
+      .expect(409);
+
+    expect(staleRes.body.error.code).toBe('VERSION_CONFLICT');
+    expect(staleRes.body.error.details).toEqual({ currentVersion: 1 });
+
+    // 5. Two concurrent requests with the SAME Idempotency-Key and SAME payload:
+    //    exactly one update occurs (version 1 -> 2), one receipt is stored, and both return 200 with version 2
+    const concurrentKey = '550e8400-e29b-41d4-a716-446655440099';
+    const concurrentPayload = {
+      expectedVersion: 1,
+      displayName: 'Concurrent Same Intent',
+      profile: { level: 'N2', goal: 'studyAndWork' },
+    };
+
+    const [concRes1, concRes2] = await Promise.all([
+      request(app)
+        .patch('/api/v1/me/profile')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', combinedCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Idempotency-Key', concurrentKey)
+        .send(concurrentPayload),
+      request(app)
+        .patch('/api/v1/me/profile')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', combinedCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Idempotency-Key', concurrentKey)
+        .send(concurrentPayload),
+    ]);
+
+    expect(concRes1.status).toBe(200);
+    expect(concRes2.status).toBe(200);
+    expect(concRes1.body.data.version).toBe(2);
+    expect(concRes2.body.data).toEqual(concRes1.body.data);
+
+    const concurrentReceipts = await db
+      .collection('operation_receipts')
+      .find({ operationId: concurrentKey })
+      .toArray();
+    expect(concurrentReceipts).toHaveLength(1);
+
+    // 6. Coexistence check: GET /api/v1/me/coordination works alongside /me/profile
+    const coordRes = await request(app)
+      .get('/api/v1/me/coordination')
+      .set('Cookie', sessionCookie)
+      .expect(200);
+    expect(coordRes.body.data).toEqual({ mode: 'idle', version: 0 });
+
+    // 7. Replay after account is locked is rejected with 403 ACCOUNT_LOCKED (both HTTP and direct service call)
+    await db
+      .collection('users')
+      .updateOne(
+        { _id: new ObjectId(user.id) },
+        { $set: { status: 'locked' } },
+      );
+
+    const lockedReplayHttp = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', combinedCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .set('Idempotency-Key', concurrentKey)
+      .send(concurrentPayload)
+      .expect(403);
+    expect(lockedReplayHttp.body.error.code).toBe('ACCOUNT_LOCKED');
+
+    await expect(
+      updateUserProfile({
+        userId: user.id,
+        rawBody: concurrentPayload,
+        idempotencyKey: concurrentKey,
+      }),
+    ).rejects.toMatchObject({
+      status: 403,
+      code: 'ACCOUNT_LOCKED',
+    });
   });
 });
