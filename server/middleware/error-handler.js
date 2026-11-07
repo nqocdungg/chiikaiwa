@@ -21,6 +21,16 @@ export function errorHandler(error, _request, response, _next) {
       .json({ error: errorPayload, meta: response.locals.meta });
   }
 
+  if (error?.type === 'encoding.unsupported') {
+    return response.status(415).json({
+      error: {
+        code: 'UNSUPPORTED_MEDIA_TYPE',
+        message: 'Định dạng nén không được hỗ trợ.',
+      },
+      meta: response.locals.meta,
+    });
+  }
+
   const malformed = error?.type === 'entity.parse.failed';
   const tooLarge = error?.type === 'entity.too.large';
   const keyPattern = error?.keyPattern;

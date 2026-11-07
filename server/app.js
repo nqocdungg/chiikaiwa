@@ -9,8 +9,13 @@ import { errorHandler } from './middleware/error-handler.js';
 import { createAuthRouter } from './modules/identity/auth-router.js';
 import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
 
-/** @param {{checkHealth?: () => Promise<void>}} [options] */
-export function createApp({ checkHealth = checkDatabase } = {}) {
+/**
+ * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler}} [options]
+ */
+export function createApp({
+  checkHealth = checkDatabase,
+  handleLivekitWebhook,
+} = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
@@ -33,6 +38,36 @@ export function createApp({ checkHealth = checkDatabase } = {}) {
     });
     next();
   });
+  // Signature verification needs the original bytes, before any JSON parser.
+  app.post(
+    '/api/v1/webhooks/livekit',
+    express.raw({
+      type: 'application/webhook+json',
+      limit: '1mb',
+      inflate: false,
+    }),
+    (request, response, next) => {
+      if (!request.is('application/webhook+json')) {
+        return next(
+          new AppError({
+            status: 415,
+            code: 'UNSUPPORTED_MEDIA_TYPE',
+            message: 'Webhook phải sử dụng application/webhook+json.',
+          }),
+        );
+      }
+      if (!handleLivekitWebhook) {
+        return next(
+          new AppError({
+            status: 503,
+            code: 'SERVICE_UNAVAILABLE',
+            message: 'Dịch vụ webhook chưa sẵn sàng.',
+          }),
+        );
+      }
+      return handleLivekitWebhook(request, response, next);
+    },
+  );
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/api/v1/health', async (_request, response) => {
