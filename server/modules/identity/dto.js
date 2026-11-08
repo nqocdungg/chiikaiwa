@@ -1,4 +1,6 @@
-export const DEFAULT_AVATAR_KEY = 'chiikawa';
+import { DEFAULT_AVATAR_KEY } from './catalogs.js';
+
+export { DEFAULT_AVATAR_KEY };
 
 /**
  * Projects a user document's profile fields into a clean API object, omitting unset optional fields.
@@ -10,7 +12,7 @@ export function toProfileDto(rawProfile) {
   /** @type {Record<string, unknown>} */
   const profile = {
     interests: Array.isArray(rawProfile?.interests)
-      ? [...rawProfile.interests]
+      ? rawProfile.interests.filter((item) => typeof item === 'string')
       : [],
   };
   const optionalKeys = [

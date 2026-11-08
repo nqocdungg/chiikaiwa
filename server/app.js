@@ -1,14 +1,17 @@
-import { randomUUID } from 'node:crypto';
 import express from 'express';
 import helmet from 'helmet';
+import { randomUUID } from 'node:crypto';
 import { readAuthEnv } from './config/env.js';
-import { checkDatabase } from './persistence/database.js';
 import { createCsrfMiddleware } from './middleware/csrf.js';
-import { AppError } from './middleware/http-error.js';
 import { errorHandler } from './middleware/error-handler.js';
-import { createAuthRouter } from './modules/identity/auth-router.js';
+import { AppError } from './middleware/http-error.js';
+import { createAdminContentRouter } from './modules/content/content-admin-router.js';
 import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
+import { createAuthRouter } from './modules/identity/auth-router.js';
+import { createProfileRouter } from './modules/identity/profile-router.js';
 import { createInvitationRouter } from './modules/invitations/invitation-router.js';
+import { createSessionsRouter } from './modules/sessions/sessions-router.js';
+import { checkDatabase } from './persistence/database.js';
 
 /**
  * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler, assertPairCanEnterSession?: (input: Record<string, any>) => Promise<void>}} [options]
@@ -114,8 +117,12 @@ export function createApp({
   );
 
   app.use('/api/v1/auth', createAuthRouter());
+  app.use('/api/v1', createProfileRouter());
   app.use('/api/v1', createCoordinationRouter());
   app.use('/api/v1', createInvitationRouter({ assertPairCanEnterSession }));
+
+  app.use('/api/v1/sessions', createSessionsRouter());
+  app.use('/api/v1/admin/content', createAdminContentRouter());
 
   app.use((_request, response) => {
     response.status(404).json({
