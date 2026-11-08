@@ -20,12 +20,14 @@ import {
   getInvitation,
   respondToInviteRequest,
 } from '../../server/modules/invitations/invitation-service.js';
+import { issueMediaToken } from '../../server/modules/sessions/media-token-service.js';
 import {
   connectDatabase,
   disconnectDatabase,
 } from '../../server/persistence/database.js';
 import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 
+/** @typedef {Awaited<ReturnType<typeof import('../../server/modules/identity/identity-service.js').resolveIdentityFromCookies>>} Identity */
 /** @type {MongoMemoryReplSet} */
 let replicaSet;
 /** @type {import('mongoose').mongo.Db} */
@@ -36,6 +38,24 @@ const app = createApp();
 /** @param {mongoose.Types.ObjectId} id */
 function userIdentity(id) {
   return { kind: 'user', actorKey: `user:${id.toHexString()}`, userId: id };
+}
+
+/**
+ * @param {mongoose.Types.ObjectId} userId
+ * @param {mongoose.Types.ObjectId} sessionId
+ * @returns {Promise<Identity>}
+ */
+async function authenticatedUserIdentity(userId, sessionId) {
+  const user = await db.collection('users').findOne({ _id: userId });
+  if (!user) throw new Error('Expected seeded user');
+  return {
+    kind: 'user',
+    actorKey: `user:${userId.toHexString()}`,
+    userId,
+    sessionId,
+    role: 'learner',
+    user,
+  };
 }
 
 /** @param {mongoose.Types.ObjectId} id @param {string} displayName */
@@ -237,6 +257,100 @@ describe('BE-009 invitation persistence', () => {
     expect(
       requests.filter((request) => request.status === 'expired'),
     ).toHaveLength(1);
+  });
+
+  it('issues BE-010 media credentials to both members of a BE-009 session', async () => {
+    const now = new Date('2026-11-08T00:00:00.000Z');
+    const hostId = new ObjectId();
+    const requesterId = new ObjectId();
+    const hostLoginId = new ObjectId();
+    const requesterLoginId = new ObjectId();
+    const loginExpiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+    await Promise.all([
+      seedUser(hostId, 'Host'),
+      seedUser(requesterId, 'Requester'),
+      db.collection('auth_sessions').insertMany([
+        {
+          _id: hostLoginId,
+          userId: hostId,
+          expiresAt: loginExpiresAt,
+        },
+        {
+          _id: requesterLoginId,
+          userId: requesterId,
+          expiresAt: loginExpiresAt,
+        },
+      ]),
+    ]);
+    const host = await authenticatedUserIdentity(hostId, hostLoginId);
+    const requester = await authenticatedUserIdentity(
+      requesterId,
+      requesterLoginId,
+    );
+    const invitation = await createInvitation({
+      identity: host,
+      operationId: randomUUID(),
+      now,
+    });
+    const inviteRequest = await createInviteRequest({
+      identity: requester,
+      code: invitation.code,
+      operationId: randomUUID(),
+      now,
+    });
+    const pairGuard = vi.fn(async () => {});
+    const accepted = await respondToInviteRequest({
+      requestId: inviteRequest.id,
+      hostKey: host.actorKey,
+      expectedVersion: inviteRequest.version,
+      decision: 'accept',
+      operationId: randomUUID(),
+      assertPairCanEnterSession: pairGuard,
+      now,
+    });
+    const practiceSession = await db
+      .collection('practice_sessions')
+      .findOne({ _id: new ObjectId(accepted.sessionId) });
+    const expectedRoomName = `session-${accepted.sessionId}`;
+    expect(pairGuard).toHaveBeenCalledOnce();
+    expect(practiceSession).toMatchObject({
+      roomName: expectedRoomName,
+      status: 'preparing',
+      members: [{ actorKey: host.actorKey }, { actorKey: requester.actorKey }],
+    });
+
+    const sign = vi.fn(async ({ actorKey, expiresAt }) => ({
+      token: `token-for-${actorKey}`,
+      url: 'wss://media.example.test',
+      expiresAt,
+    }));
+    for (const identity of [host, requester]) {
+      const credential = await issueMediaToken(
+        {
+          sessionId: accepted.sessionId,
+          getIdentity: async () => identity,
+        },
+        { sign, now: () => now },
+      );
+      expect(credential).toMatchObject({
+        token: `token-for-${identity.actorKey}`,
+        url: 'wss://media.example.test',
+      });
+    }
+    expect(sign.mock.calls).toEqual([
+      [
+        expect.objectContaining({
+          actorKey: host.actorKey,
+          roomName: expectedRoomName,
+        }),
+      ],
+      [
+        expect.objectContaining({
+          actorKey: requester.actorKey,
+          roomName: expectedRoomName,
+        }),
+      ],
+    ]);
   });
 
   it('rejects acceptance at the exact deadline and releases reservations', async () => {
