@@ -259,6 +259,35 @@ async function reconcileInvitationForRequest(requestId, now) {
   });
 }
 
+/** @param {import('mongoose').mongo.Db} db @param {string} actorKey @param {Date} now @param {import('mongoose').ClientSession} session */
+async function reconcileActorInvitationReservation(db, actorKey, now, session) {
+  const state = await actorStates(db).findOne({ _id: actorKey }, { session });
+  if (
+    !state ||
+    !['inviting', 'requestingInvite'].includes(state.mode) ||
+    typeof state.resourceId !== 'string' ||
+    !ObjectId.isValid(state.resourceId)
+  ) {
+    return;
+  }
+  let invitation;
+  if (state.mode === 'inviting') {
+    invitation = await db
+      .collection('invitations')
+      .findOne({ _id: new ObjectId(state.resourceId) }, { session });
+  } else {
+    const request = await db
+      .collection('invite_requests')
+      .findOne({ _id: new ObjectId(state.resourceId) }, { session });
+    if (request) {
+      invitation = await db
+        .collection('invitations')
+        .findOne({ _id: request.invitationId }, { session });
+    }
+  }
+  if (invitation) await expireInvitation(db, invitation, now, session);
+}
+
 /** @param {import('mongoose').mongo.Db} db @param {any} invitation @param {string} actorKey @param {import('mongoose').ClientSession} session */
 async function mayReadInvitation(db, invitation, actorKey, session) {
   if (invitation.hostKey === actorKey) return true;
@@ -293,6 +322,12 @@ export async function createInvitation({
         authorize: async () => {},
         execute: async ({ session }) => {
           const db = await connectDatabase();
+          await reconcileActorInvitationReservation(
+            db,
+            identity.actorKey,
+            now,
+            session,
+          );
           await claimActorState({
             actorKey: identity.actorKey,
             mode: 'inviting',
@@ -454,6 +489,12 @@ export async function createInviteRequest({
           { session },
         );
       const effectiveId = existing?._id ?? requestId;
+      await reconcileActorInvitationReservation(
+        db,
+        identity.actorKey,
+        now,
+        session,
+      );
       await claimActorState({
         actorKey: identity.actorKey,
         mode: 'requestingInvite',

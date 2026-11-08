@@ -18,6 +18,7 @@ import {
   createInvitation,
   createInviteRequest,
   getInvitation,
+  INVITATION_TTL_MS,
   respondToInviteRequest,
 } from '../../server/modules/invitations/invitation-service.js';
 import { issueMediaToken } from '../../server/modules/sessions/media-token-service.js';
@@ -34,6 +35,12 @@ let replicaSet;
 let db;
 const { ObjectId } = mongoose.Types;
 const app = createApp();
+
+function actorStates() {
+  return /** @type {import('mongoose').mongo.Collection<any>} */ (
+    db.collection('actor_states')
+  );
+}
 
 /** @param {mongoose.Types.ObjectId} id */
 function userIdentity(id) {
@@ -191,6 +198,91 @@ describe('BE-009 invitation persistence', () => {
     await expect(
       getInvitation({ invitationId: created.id, actorKey: 'user:outsider' }),
     ).rejects.toMatchObject({ status: 404, code: 'RESOURCE_NOT_FOUND' });
+  });
+
+  it('releases an expired host reservation before creating another invitation', async () => {
+    const now = new Date('2026-11-08T00:00:00.000Z');
+    const hostId = new ObjectId();
+    await seedUser(hostId, 'Host');
+    const host = userIdentity(hostId);
+    const expired = await createInvitation({
+      identity: host,
+      operationId: randomUUID(),
+      generateCode: () => 'AAAAAAAAAA',
+      now,
+    });
+
+    const current = await createInvitation({
+      identity: host,
+      operationId: randomUUID(),
+      generateCode: () => 'BBBBBBBBBB',
+      now: new Date(now.getTime() + INVITATION_TTL_MS),
+    });
+
+    expect(current.id).not.toBe(expired.id);
+    expect(
+      await db
+        .collection('invitations')
+        .findOne({ _id: new ObjectId(expired.id) }),
+    ).toMatchObject({ status: 'expired' });
+    expect(await actorStates().findOne({ _id: host.actorKey })).toMatchObject({
+      mode: 'inviting',
+      resourceId: current.id,
+    });
+  });
+
+  it('releases an expired request reservation before requesting another invitation', async () => {
+    const now = new Date('2026-11-08T00:00:00.000Z');
+    const later = new Date(now.getTime() + INVITATION_TTL_MS);
+    const hostAId = new ObjectId();
+    const hostBId = new ObjectId();
+    const requesterId = new ObjectId();
+    await Promise.all([
+      seedUser(hostAId, 'Host A'),
+      seedUser(hostBId, 'Host B'),
+      seedUser(requesterId, 'Requester'),
+    ]);
+    const hostA = userIdentity(hostAId);
+    const hostB = userIdentity(hostBId);
+    const requester = userIdentity(requesterId);
+    const expiredInvitation = await createInvitation({
+      identity: hostA,
+      operationId: randomUUID(),
+      generateCode: () => 'AAAAAAAAAA',
+      now,
+    });
+    const expiredRequest = await createInviteRequest({
+      identity: requester,
+      code: expiredInvitation.code,
+      operationId: randomUUID(),
+      now,
+    });
+    const currentInvitation = await createInvitation({
+      identity: hostB,
+      operationId: randomUUID(),
+      generateCode: () => 'BBBBBBBBBB',
+      now: later,
+    });
+
+    const currentRequest = await createInviteRequest({
+      identity: requester,
+      code: currentInvitation.code,
+      operationId: randomUUID(),
+      now: later,
+    });
+
+    expect(currentRequest.id).not.toBe(expiredRequest.id);
+    expect(
+      await db
+        .collection('invite_requests')
+        .findOne({ _id: new ObjectId(expiredRequest.id) }),
+    ).toMatchObject({ status: 'expired' });
+    expect(
+      await actorStates().findOne({ _id: requester.actorKey }),
+    ).toMatchObject({
+      mode: 'requestingInvite',
+      resourceId: currentRequest.id,
+    });
   });
 
   it('accepts only one concurrent requester and creates one two-member session', async () => {
