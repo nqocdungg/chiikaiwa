@@ -298,4 +298,95 @@ describe('content-dto and cursor encoding (BE-003)', () => {
     expect(decodeContentCursor(null)).toBeNull();
     expect(decodeContentCursor('')).toBeNull();
   });
+
+  it('rejects legacy cursor {c, i} and cursors missing required filter/order fields', () => {
+    const id = new ObjectId().toHexString();
+    const c = new Date('2026-11-07T10:00:00.000Z').toISOString();
+
+    /** @param {Record<string, any>} obj */
+    const makeCursor = (obj) =>
+      Buffer.from(JSON.stringify(obj), 'utf8').toString('base64url');
+
+    // 1. Cursor cũ chỉ chứa { c, i } không có ngữ cảnh bộ lọc
+    const legacyCursor = makeCursor({ c, i: id });
+    expect(decodeContentCursor(legacyCursor, {})).toBeNull();
+    expect(decodeContentCursor(legacyCursor, { kind: 'deck' })).toBeNull();
+    expect(decodeContentCursor(legacyCursor, { kind: 'question' })).toBeNull();
+
+    // 2. Cursor thiếu từng trường bắt buộc: k, s, l, o
+    const fullPayload = {
+      c,
+      i: id,
+      k: 'deck',
+      s: null,
+      l: null,
+      o: 'createdAt_desc_id_desc',
+    };
+
+    // Thiếu k
+    const missingK = {
+      c,
+      i: id,
+      s: null,
+      l: null,
+      o: 'createdAt_desc_id_desc',
+    };
+    expect(
+      decodeContentCursor(makeCursor(missingK), { kind: 'deck' }),
+    ).toBeNull();
+
+    // Thiếu s
+    const missingS = {
+      c,
+      i: id,
+      k: 'deck',
+      l: null,
+      o: 'createdAt_desc_id_desc',
+    };
+    expect(
+      decodeContentCursor(makeCursor(missingS), { kind: 'deck' }),
+    ).toBeNull();
+
+    // Thiếu l
+    const missingL = {
+      c,
+      i: id,
+      k: 'deck',
+      s: null,
+      o: 'createdAt_desc_id_desc',
+    };
+    expect(
+      decodeContentCursor(makeCursor(missingL), { kind: 'deck' }),
+    ).toBeNull();
+
+    // Thiếu o
+    const missingO = {
+      c,
+      i: id,
+      k: 'deck',
+      s: null,
+      l: null,
+    };
+    expect(
+      decodeContentCursor(makeCursor(missingO), { kind: 'deck' }),
+    ).toBeNull();
+
+    // Sai thứ tự sắp xếp o
+    const wrongOrder = { ...fullPayload, o: 'createdAt_asc' };
+    expect(
+      decodeContentCursor(makeCursor(wrongOrder), { kind: 'deck' }),
+    ).toBeNull();
+
+    // Đủ trường nhưng không khớp bộ lọc hiện tại (kind=deck != question)
+    expect(
+      decodeContentCursor(makeCursor(fullPayload), { kind: 'question' }),
+    ).toBeNull();
+
+    // Đủ trường và khớp hoàn toàn bộ lọc hiện tại
+    const decodedValid = decodeContentCursor(makeCursor(fullPayload), {
+      kind: 'deck',
+    });
+    expect(decodedValid).not.toBeNull();
+    expect(decodedValid?.id.toHexString()).toBe(id);
+  });
 });

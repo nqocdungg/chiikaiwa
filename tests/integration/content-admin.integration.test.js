@@ -1003,6 +1003,52 @@ describe('BE-003: Admin Content Draft API', () => {
 
       expect(res.body.error.code).toBe('INVALID_CURSOR');
     });
+
+    it('returns 400 INVALID_CURSOR when legacy cursor {c, i} or cursor missing required fields is sent', async () => {
+      const adminCookie = createAuthCookie(adminId, adminSessionId);
+      const c = new Date().toISOString();
+      const i = new ObjectId().toHexString();
+
+      /** @param {Record<string, any>} obj */
+      const makeCursor = (obj) =>
+        Buffer.from(JSON.stringify(obj), 'utf8').toString('base64url');
+
+      // 1. Cursor cũ chỉ chứa { c, i } không có bộ lọc
+      const legacyCursor = makeCursor({ c, i });
+      const legacyRes = await request(app)
+        .get(`/api/v1/admin/content?kind=deck&cursor=${legacyCursor}`)
+        .set('Cookie', adminCookie)
+        .expect(400);
+      expect(legacyRes.body.error.code).toBe('INVALID_CURSOR');
+
+      // 2. Cursor thiếu trường k
+      const missingKCursor = makeCursor({
+        c,
+        i,
+        s: null,
+        l: null,
+        o: 'createdAt_desc_id_desc',
+      });
+      const missingKRes = await request(app)
+        .get(`/api/v1/admin/content?kind=deck&cursor=${missingKCursor}`)
+        .set('Cookie', adminCookie)
+        .expect(400);
+      expect(missingKRes.body.error.code).toBe('INVALID_CURSOR');
+
+      // 3. Cursor thiếu trường o
+      const missingOCursor = makeCursor({
+        c,
+        i,
+        k: 'deck',
+        s: null,
+        l: null,
+      });
+      const missingORes = await request(app)
+        .get(`/api/v1/admin/content?kind=deck&cursor=${missingOCursor}`)
+        .set('Cookie', adminCookie)
+        .expect(400);
+      expect(missingORes.body.error.code).toBe('INVALID_CURSOR');
+    });
   });
 
   describe('GET detail by ID', () => {

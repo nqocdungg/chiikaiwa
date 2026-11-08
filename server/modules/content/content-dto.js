@@ -113,19 +113,37 @@ export function decodeContentCursor(cursor, expectedFilters = {}) {
   try {
     const raw = Buffer.from(cursor, 'base64url').toString('utf8');
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+
+    // Bắt buộc đủ các trường: c, i, k, s, l, o (API Specification §1)
+    if (
+      !('c' in parsed) ||
+      !('i' in parsed) ||
+      !('k' in parsed) ||
+      !('s' in parsed) ||
+      !('l' in parsed) ||
+      !('o' in parsed)
+    ) {
+      return null;
+    }
+
     const { c, i, k, s, l, o } = parsed;
     if (typeof c !== 'string' || typeof i !== 'string') return null;
     if (!isValidObjectId(i)) return null;
-    if (o !== undefined && o !== 'createdAt_desc_id_desc') return null;
 
+    // Bắt buộc thứ tự sắp xếp cố định của truy vấn
+    if (o !== 'createdAt_desc_id_desc') return null;
+
+    // Bộ lọc không đặt dùng null; bắt buộc khớp với truy vấn hiện tại
     const expectedKind = expectedFilters.kind ?? null;
     const expectedStatus = expectedFilters.status ?? null;
     const expectedLevel = expectedFilters.level ?? null;
 
-    if (k !== undefined && k !== expectedKind) return null;
-    if (s !== undefined && s !== expectedStatus) return null;
-    if (l !== undefined && l !== expectedLevel) return null;
+    if (k !== expectedKind || s !== expectedStatus || l !== expectedLevel) {
+      return null;
+    }
 
     const createdAt = new Date(c);
     if (Number.isNaN(createdAt.getTime())) return null;
