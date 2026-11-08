@@ -29,7 +29,7 @@ describe('OPS-004 CI Workflow Contract & Security Assertions', () => {
   });
 
   it('pins runtime to Node 24 via .nvmrc and uses pinned npm release from package.json', () => {
-    expect(nvmrc).toBe('22');
+    expect(nvmrc).toBe('24');
     expect(packageJson.engines?.node).toBe('24.x');
     expect(packageJson.packageManager).toMatch(/^npm@11\./u);
 
