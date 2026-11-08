@@ -23,6 +23,17 @@ File này giúp agent hoặc thành viên tiếp theo nắm nhanh task đã làm
 
 ## Sprint 1
 
+### OPS-004 — Thiết lập CI cho pull request
+
+- Ngày cập nhật: 2026-11-08
+- Trạng thái: Đã cấu hình và kiểm chứng workflow local; chờ nghiệm thu pass/fail trên PR.
+- PR: Chưa có; branch `chore/OPS-004-update-ci`, base `develop`.
+- Đã làm: Rà soát `.github/workflows/ci.yml`; ghim Node.js theo `.nvmrc` (Node 24.x) và npm theo `packageManager` trong `package.json` (`npm@11.21.1`); cài đặt sạch bằng `npm ci`; cấu hình job `check` chạy `npm run check` trên `pull_request` và push `develop`/`main`. Hai job bảo mật `dependency-audit` (`npm audit --audit-level=high`) và `secret-scan` (Gitleaks `v8.30.1` SHA-256 pinned) chạy song song độc lập. Workflow không sử dụng secrets, không kết nối database ngoài và không tự deploy.
+- File liên quan: `.github/workflows/ci.yml`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng: `npm ci` và `npm run check` pass 100% cục bộ: Prettier format check, ESLint zero warnings, TypeScript typecheck 0 errors, 217 unit tests pass, 57 integration tests pass trên MongoDB Replica Set tạm, build website Vite và Storybook pass. Job `dependency-audit` pass với 0 cảnh báo mức high/critical. Job `secret-scan` được bảo vệ theo `.gitleaksignore`.
+- Tiếp theo: Mở PR về `develop`, thực hiện kịch bản kiểm chứng: 1 check cố ý fail để chứng minh CI chặn lỗi, sau đó sửa lại để CI pass xanh toàn bộ; nhờ Minh Xuân review.
+- Lưu ý/blocker: Không dùng secret hay database demo cho integration test. Giữ nguyên các ruleset và cấm skip bước trong `npm run check`.
+
 ### OPS-003 — Khởi tạo môi trường tích hợp HTTPS và cấu hình dịch vụ
 
 - Ngày cập nhật: 2026-11-07
