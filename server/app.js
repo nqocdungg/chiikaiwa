@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import { randomUUID } from 'node:crypto';
+
 import { readAuthEnv } from './config/env.js';
 import { createCsrfMiddleware } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -11,6 +12,7 @@ import { createAuthRouter } from './modules/identity/auth-router.js';
 import { createProfileRouter } from './modules/identity/profile-router.js';
 import { createInvitationRouter } from './modules/invitations/invitation-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
+import { createOpenApiRouter } from './openapi.js';
 import { checkDatabase } from './persistence/database.js';
 
 /**
@@ -23,6 +25,7 @@ export function createApp({
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
+  app.use(createOpenApiRouter());
   app.use(helmet());
   app.use((_request, response, next) => {
     response.locals.meta = {
