@@ -4,6 +4,7 @@
 
 - Đọc [CONTRIBUTING.md](CONTRIBUTING.md), [coding conventions](docs/development/coding-conventions.md) và [testing guide](docs/development/testing.md). Khi nhận task, đọc [Scrum và quản lý công việc](docs/development/scrum.md); khi thao tác Git, đọc [Git workflow](docs/development/git-workflow.md).
 - Dùng [docs/README.md](docs/README.md) để chọn tài liệu thiết kế theo task. Task chức năng cần đọc SRS, backlog, kiến trúc và các phần UI/API/database liên quan; không cần đọc lại toàn bộ thiết kế cho một sửa đổi tài liệu nhỏ.
+- Khi thêm hoặc thay đổi REST endpoint, đọc [hướng dẫn OpenAPI](docs/api/README.md), đối chiếu [API specification](docs/design/07-api-specification.md) và cập nhật `docs/api/openapi.yaml` trong cùng thay đổi.
 - Kiểm tra trạng thái/diff Git, source hiện có, manifest và lockfile trước khi sửa. Giữ các thay đổi đang có của người khác.
 - Nếu yêu cầu hoặc thiết kế mâu thuẫn/thiếu thông tin ảnh hưởng triển khai, nêu điểm cần làm rõ, đưa lựa chọn cùng khuyến nghị có lý do; chờ câu trả lời cho phần phụ thuộc. Có thể tiếp tục phần độc lập đã đủ dữ liệu; không coi im lặng là đồng ý.
 

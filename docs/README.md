@@ -21,6 +21,7 @@
 - [Git workflow](development/git-workflow.md): branch, commit, PR và merge.
 - [Coding conventions](development/coding-conventions.md): tổ chức source và quy tắc triển khai.
 - [Testing](development/testing.md): lựa chọn kiểm thử và cách chạy check.
+- [OpenAPI và Swagger](api/README.md): xem tài liệu API, cập nhật endpoint/schema và hướng dẫn prompt cho AI.
 - [UI hiện hành](development/ui.md): giao diện Chiikaiwa, phòng ba vùng, thẻ Nhật/Việt và bản Storybook static.
 - [Migration guide](../server/persistence/migrations/README.md): tạo và vận hành migration.
 - [Agent instructions](../AGENTS.md): chỉ dẫn thực thi cho agent.

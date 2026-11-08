@@ -1,16 +1,18 @@
-import { randomUUID } from 'node:crypto';
 import express from 'express';
 import helmet from 'helmet';
+import { randomUUID } from 'node:crypto';
+
 import { readAuthEnv } from './config/env.js';
-import { checkDatabase } from './persistence/database.js';
 import { createCsrfMiddleware } from './middleware/csrf.js';
-import { AppError } from './middleware/http-error.js';
 import { errorHandler } from './middleware/error-handler.js';
+import { AppError } from './middleware/http-error.js';
+import { createAdminContentRouter } from './modules/content/content-admin-router.js';
+import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
 import { createAuthRouter } from './modules/identity/auth-router.js';
 import { createProfileRouter } from './modules/identity/profile-router.js';
-import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
-import { createAdminContentRouter } from './modules/content/content-admin-router.js';
+import { createOpenApiRouter } from './openapi.js';
+import { checkDatabase } from './persistence/database.js';
 
 /**
  * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler}} [options]
@@ -21,6 +23,7 @@ export function createApp({
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
+  app.use(createOpenApiRouter());
   app.use(helmet());
   app.use((_request, response, next) => {
     response.locals.meta = {
