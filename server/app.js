@@ -10,16 +10,18 @@ import { createAdminContentRouter } from './modules/content/content-admin-router
 import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
 import { createAuthRouter } from './modules/identity/auth-router.js';
 import { createProfileRouter } from './modules/identity/profile-router.js';
+import { createInvitationRouter } from './modules/invitations/invitation-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
 import { createOpenApiRouter } from './openapi.js';
 import { checkDatabase } from './persistence/database.js';
 
 /**
- * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler}} [options]
+ * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler, assertPairCanEnterSession?: (input: Record<string, any>) => Promise<void>}} [options]
  */
 export function createApp({
   checkHealth = checkDatabase,
   handleLivekitWebhook,
+  assertPairCanEnterSession,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -120,6 +122,7 @@ export function createApp({
   app.use('/api/v1/auth', createAuthRouter());
   app.use('/api/v1', createProfileRouter());
   app.use('/api/v1', createCoordinationRouter());
+  app.use('/api/v1', createInvitationRouter({ assertPairCanEnterSession }));
 
   app.use('/api/v1/sessions', createSessionsRouter());
   app.use('/api/v1/admin/content', createAdminContentRouter());

@@ -1,0 +1,546 @@
+openapi: 3.1.0
+
+info:
+  title: Chiikaiwa API
+  version: 0.1.0
+  description: >-
+    Contract máy đọc được cho API Chiikaiwa. Phạm vi ban đầu bao phủ health
+    check và BE-009; xem docs/api/README.md trước khi thêm endpoint.
+
+servers:
+  - url: /api/v1
+    description: Cùng origin với ứng dụng
+
+tags:
+  - name: System
+  - name: Invitations
+  - name: Invitation Requests
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Kiểm tra trạng thái API và database
+      responses:
+        '200':
+          description: Dịch vụ sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Database chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /invitations:
+    post:
+      tags: [Invitations]
+      operationId: createInvitation
+      summary: Tạo mã mời có hạn 10 phút
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+            example: {}
+      responses:
+        '201':
+          description: Invitation đã được tạo; chỉ host nhận code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /invitations/{invitationId}:
+    parameters:
+      - $ref: '#/components/parameters/InvitationId'
+    get:
+      tags: [Invitations]
+      operationId: getInvitation
+      summary: Đọc invitation trong phạm vi host hoặc requester liên quan
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      responses:
+        '200':
+          description: Invitation hiện tại; code chỉ xuất hiện với host khi còn open
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Invitations]
+      operationId: cancelInvitation
+      summary: Host hủy invitation
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ExpectedVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Invitation đã được hủy
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /invitations/{invitationId}/requests:
+    get:
+      tags: [Invitation Requests]
+      operationId: listInvitationRequests
+      summary: Host liệt kê request của invitation
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/InviteRequestStatus'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trang request theo thứ tự mới nhất
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteRequestListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /invitation-requests:
+    post:
+      tags: [Invitation Requests]
+      operationId: createInvitationRequest
+      summary: Người học gửi request bằng mã mời
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: '^[A-HJ-NP-Z2-9]{10}$'
+            example:
+              code: ABCD234567
+      responses:
+        '201':
+          description: Request đã được tạo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /invitation-requests/{requestId}:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    get:
+      tags: [Invitation Requests]
+      operationId: getInvitationRequest
+      summary: Host hoặc requester đọc invitation request
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      responses:
+        '200':
+          description: Invitation request hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Invitation Requests]
+      operationId: cancelInvitationRequest
+      summary: Requester hủy request đang chờ
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ExpectedVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Request đã được hủy
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /invitation-requests/{requestId}/responses:
+    post:
+      tags: [Invitation Requests]
+      operationId: respondToInvitationRequest
+      summary: Host chấp nhận hoặc từ chối request
+      description: >-
+        Accept fail-closed với SERVICE_UNAVAILABLE cho tới khi pair-safety guard
+        của BE-008 được nối vào ứng dụng.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, decision]
+              properties:
+                expectedVersion:
+                  type: integer
+                  minimum: 0
+                decision:
+                  type: string
+                  enum: [accept, reject]
+            example:
+              expectedVersion: 0
+              decision: accept
+      responses:
+        '200':
+          description: Request sau quyết định của host
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: ck_session
+      description: Cookie phiên tài khoản do server cấp
+    guestCookie:
+      type: apiKey
+      in: cookie
+      name: ck_guest
+      description: Cookie phiên khách do server cấp
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Phải khớp cookie CSRF và Origin được phép
+
+  parameters:
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    ExpectedVersion:
+      name: expectedVersion
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ObjectId:
+      type: string
+      pattern: '^[0-9a-fA-F]{24}$'
+      example: 507f1f77bcf86cd799439011
+    InvitationStatus:
+      type: string
+      enum: [open, used, cancelled, expired]
+    InviteRequestStatus:
+      type: string
+      enum: [pending, accepted, rejected, cancelled, expired]
+    Meta:
+      type: object
+      required: [requestId, serverTime]
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        serverTime:
+          type: string
+          format: date-time
+      additionalProperties: true
+    Partner:
+      type: object
+      required: [actorKey, displayName]
+      properties:
+        actorKey:
+          type: string
+        displayName:
+          type: string
+        avatarKey:
+          type: string
+        profile:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    Invitation:
+      type: object
+      required: [id, status, version, expiresAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        code:
+          type: string
+          pattern: '^[A-HJ-NP-Z2-9]{10}$'
+          description: Chỉ trả cho host khi invitation còn open
+        status:
+          $ref: '#/components/schemas/InvitationStatus'
+        version:
+          type: integer
+          minimum: 0
+        expiresAt:
+          type: string
+          format: date-time
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+      additionalProperties: false
+    InviteRequest:
+      type: object
+      required: [id, invitationId, requester, status, version, expiresAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        invitationId:
+          $ref: '#/components/schemas/ObjectId'
+        requester:
+          $ref: '#/components/schemas/Partner'
+        status:
+          $ref: '#/components/schemas/InviteRequestStatus'
+        version:
+          type: integer
+          minimum: 0
+        expiresAt:
+          type: string
+          format: date-time
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+      additionalProperties: false
+    InvitationResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Invitation'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    InviteRequestResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/InviteRequest'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    InviteRequestList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InviteRequest'
+        nextCursor:
+          type: string
+      additionalProperties: false
+    InviteRequestListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/InviteRequestList'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+      additionalProperties: false
+    HealthResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Health'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    FieldError:
+      type: object
+      required: [path, code, message]
+      properties:
+        path:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+      additionalProperties: false
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          properties:
+            fields:
+              type: array
+              items:
+                $ref: '#/components/schemas/FieldError'
+          additionalProperties: true
+      additionalProperties: false
+    ErrorResponse:
+      type: object
+      required: [error, meta]
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+
+  responses:
+    Unauthorized:
+      description: Thiếu hoặc không còn phiên xác thực hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Tài nguyên không tồn tại hoặc ngoài phạm vi truy cập
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Version conflict, actor busy hoặc invitation không khả dụng
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationFailed:
+      description: Request không đạt validation contract
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: Vượt giới hạn request; xem header Retry-After
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: Dependency an toàn chưa sẵn sàng; không tạo session
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
