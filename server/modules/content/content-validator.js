@@ -1,12 +1,15 @@
+import mongoose from 'mongoose';
+
 /**
  * Validator cho dữ liệu học liệu (DATA-001, BE-003, BE-013).
  *
  * Đáp ứng:
  * - docs/design/06-database-design.md §7.2
- * - docs/design/07-api-specification.md §9
+ * - docs/design/07-api-specification.md §9, §10
  * - docs/design/03-product-backlog.md PB-31
  */
 
+const { ObjectId } = mongoose.Types;
 const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 export const VALID_LEVELS = ['N5', 'N4', 'N3', 'N2', 'N1'];
 export const VALID_CONTENT_KINDS = [
@@ -744,4 +747,512 @@ export function validateSeedDataset(dataset) {
     isValid: allErrors.length === 0,
     errors: allErrors,
   };
+}
+
+/**
+ * @typedef {{ path: string, code: string, message: string }} FieldValidationError
+ */
+
+/**
+ * Validate input cho API tạo hoặc cập nhật nháp học liệu (BE-003).
+ * Trả về mảng các lỗi trường theo contract 07 §2.3.
+ *
+ * @param {{ kind?: unknown, draftPayload?: unknown }} input
+ * @returns {FieldValidationError[]}
+ */
+export function validateContentItemDraftInput({ kind, draftPayload }) {
+  /** @type {FieldValidationError[]} */
+  const fields = [];
+
+  if (
+    !kind ||
+    typeof kind !== 'string' ||
+    !VALID_CONTENT_KINDS.includes(kind)
+  ) {
+    fields.push({
+      path: 'kind',
+      code: 'INVALID_ENUM',
+      message: `Loại học liệu phải thuộc một trong các giá trị: ${VALID_CONTENT_KINDS.join(', ')}.`,
+    });
+  }
+
+  if (
+    !draftPayload ||
+    typeof draftPayload !== 'object' ||
+    Array.isArray(draftPayload)
+  ) {
+    fields.push({
+      path: 'draftPayload',
+      code: 'REQUIRED',
+      message: 'Dữ liệu nháp (draftPayload) phải là một object không rỗng.',
+    });
+    return fields;
+  }
+
+  if (kind === 'knowledge') {
+    validateKnowledgeDraftPayload(draftPayload, fields);
+  } else if (kind === 'question') {
+    validateQuestionDraftPayload(draftPayload, fields);
+  } else if (kind === 'scenario') {
+    validateScenarioDraftPayload(draftPayload, fields);
+  } else if (kind === 'deck') {
+    validateDeckDraftPayload(draftPayload, fields);
+  }
+
+  return fields;
+}
+
+/**
+ * @param {Record<string, any>} payload
+ * @param {FieldValidationError[]} fields
+ */
+export function validateKnowledgeDraftPayload(payload, fields) {
+  if (!['vocabulary', 'grammar'].includes(payload.type)) {
+    fields.push({
+      path: 'draftPayload.type',
+      code: 'INVALID_ENUM',
+      message: "Loại kiến thức phải là 'vocabulary' hoặc 'grammar'.",
+    });
+  }
+  if (typeof payload.expression !== 'string' || !payload.expression.trim()) {
+    fields.push({
+      path: 'draftPayload.expression',
+      code: 'REQUIRED',
+      message: 'Từ hoặc cấu trúc tiếng Nhật không được để trống.',
+    });
+  }
+  if (typeof payload.meaning !== 'string' || !payload.meaning.trim()) {
+    fields.push({
+      path: 'draftPayload.meaning',
+      code: 'REQUIRED',
+      message: 'Giải nghĩa tiếng Việt không được để trống.',
+    });
+  }
+  if (payload.reading !== undefined && typeof payload.reading !== 'string') {
+    fields.push({
+      path: 'draftPayload.reading',
+      code: 'INVALID_TYPE',
+      message: 'Cách đọc (reading) nếu có phải là chuỗi ký tự.',
+    });
+  }
+  if (!Array.isArray(payload.examples) || payload.examples.length === 0) {
+    fields.push({
+      path: 'draftPayload.examples',
+      code: 'REQUIRED',
+      message: 'Kiến thức phải có ít nhất một ví dụ minh họa.',
+    });
+  } else {
+    for (let i = 0; i < payload.examples.length; i++) {
+      const ex = payload.examples[i];
+      if (!ex || typeof ex !== 'object') {
+        fields.push({
+          path: `draftPayload.examples[${i}]`,
+          code: 'INVALID_TYPE',
+          message: 'Ví dụ minh họa phải là object chứa japanese và vietnamese.',
+        });
+        continue;
+      }
+      if (typeof ex.japanese !== 'string' || !ex.japanese.trim()) {
+        fields.push({
+          path: `draftPayload.examples[${i}].japanese`,
+          code: 'REQUIRED',
+          message: 'Câu tiếng Nhật của ví dụ không được để trống.',
+        });
+      }
+      if (typeof ex.vietnamese !== 'string' || !ex.vietnamese.trim()) {
+        fields.push({
+          path: `draftPayload.examples[${i}].vietnamese`,
+          code: 'REQUIRED',
+          message: 'Nghĩa tiếng Việt của ví dụ không được để trống.',
+        });
+      }
+    }
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} fieldPath
+ * @param {FieldValidationError[]} fields
+ */
+function validateVersionIdField(value, fieldPath, fields) {
+  if (!Array.isArray(value)) {
+    fields.push({
+      path: fieldPath,
+      code: 'INVALID_TYPE',
+      message: `${fieldPath} phải là một mảng chuỗi ObjectId.`,
+    });
+    return;
+  }
+  const seen = new Set();
+  for (let i = 0; i < value.length; i++) {
+    const id = value[i];
+    if (typeof id !== 'string' || !isValidObjectId(id)) {
+      fields.push({
+        path: `${fieldPath}[${i}]`,
+        code: 'INVALID_FORMAT',
+        message: `ID '${id}' không đúng chuẩn ObjectId 24 ký tự hex.`,
+      });
+    } else {
+      if (seen.has(id)) {
+        fields.push({
+          path: `${fieldPath}[${i}]`,
+          code: 'DUPLICATE',
+          message: `ID '${id}' bị trùng lặp trong mảng.`,
+        });
+      }
+      seen.add(id);
+    }
+  }
+}
+
+/**
+ * @param {Record<string, any>} payload
+ * @param {FieldValidationError[]} fields
+ */
+export function validateQuestionDraftPayload(payload, fields) {
+  if (typeof payload.prompt !== 'string' || !payload.prompt.trim()) {
+    fields.push({
+      path: 'draftPayload.prompt',
+      code: 'REQUIRED',
+      message: 'Câu hỏi (prompt) không được để trống.',
+    });
+  }
+  if (typeof payload.explanation !== 'string' || !payload.explanation.trim()) {
+    fields.push({
+      path: 'draftPayload.explanation',
+      code: 'REQUIRED',
+      message: 'Giải thích đáp án (explanation) không được để trống.',
+    });
+  }
+  if (payload.type === 'multipleChoice') {
+    if (!Array.isArray(payload.options) || payload.options.length < 2) {
+      fields.push({
+        path: 'draftPayload.options',
+        code: 'MIN_ITEMS',
+        message: 'Trắc nghiệm phải có ít nhất 2 lựa chọn trong options.',
+      });
+    } else {
+      /** @type {Set<string>} */
+      const optionIds = new Set();
+      for (let i = 0; i < payload.options.length; i++) {
+        const opt = payload.options[i];
+        if (!opt || typeof opt !== 'object') {
+          fields.push({
+            path: `draftPayload.options[${i}]`,
+            code: 'INVALID_TYPE',
+            message: 'Option phải là object có id và text.',
+          });
+          continue;
+        }
+        if (typeof opt.id !== 'string' || !opt.id.trim()) {
+          fields.push({
+            path: `draftPayload.options[${i}].id`,
+            code: 'REQUIRED',
+            message: 'ID của option không được để trống.',
+          });
+        } else {
+          if (optionIds.has(opt.id)) {
+            fields.push({
+              path: `draftPayload.options[${i}].id`,
+              code: 'DUPLICATE',
+              message: `ID option '${opt.id}' bị trùng lặp.`,
+            });
+          }
+          optionIds.add(opt.id);
+        }
+        if (typeof opt.text !== 'string' || !opt.text.trim()) {
+          fields.push({
+            path: `draftPayload.options[${i}].text`,
+            code: 'REQUIRED',
+            message: 'Nội dung option không được để trống.',
+          });
+        }
+      }
+      if (
+        !payload.correctOptionId ||
+        typeof payload.correctOptionId !== 'string'
+      ) {
+        fields.push({
+          path: 'draftPayload.correctOptionId',
+          code: 'REQUIRED',
+          message: 'Đáp án đúng (correctOptionId) không được để trống.',
+        });
+      } else if (!optionIds.has(payload.correctOptionId)) {
+        fields.push({
+          path: 'draftPayload.correctOptionId',
+          code: 'INVALID_REFERENCE',
+          message: `correctOptionId '${payload.correctOptionId}' phải nằm trong danh sách options.`,
+        });
+      }
+    }
+  } else if (payload.type === 'shortAnswer') {
+    if (
+      !Array.isArray(payload.acceptedAnswers) ||
+      payload.acceptedAnswers.length === 0
+    ) {
+      fields.push({
+        path: 'draftPayload.acceptedAnswers',
+        code: 'REQUIRED',
+        message:
+          'Câu hỏi điền ngắn phải có ít nhất một đáp án chấp nhận (acceptedAnswers).',
+      });
+    } else {
+      for (let i = 0; i < payload.acceptedAnswers.length; i++) {
+        const ans = payload.acceptedAnswers[i];
+        if (typeof ans !== 'string' || !ans.trim()) {
+          fields.push({
+            path: `draftPayload.acceptedAnswers[${i}]`,
+            code: 'REQUIRED',
+            message: 'Đáp án chấp nhận không được để trống.',
+          });
+        }
+      }
+    }
+  } else {
+    fields.push({
+      path: 'draftPayload.type',
+      code: 'INVALID_ENUM',
+      message: "Loại câu hỏi phải là 'multipleChoice' hoặc 'shortAnswer'.",
+    });
+  }
+
+  if (payload.knowledgeVersionIds !== undefined) {
+    validateVersionIdField(
+      payload.knowledgeVersionIds,
+      'draftPayload.knowledgeVersionIds',
+      fields,
+    );
+  }
+}
+
+/**
+ * @param {Record<string, any>} payload
+ * @param {FieldValidationError[]} fields
+ */
+export function validateScenarioDraftPayload(payload, fields) {
+  if (typeof payload.title !== 'string' || !payload.title.trim()) {
+    fields.push({
+      path: 'draftPayload.title',
+      code: 'REQUIRED',
+      message: 'Tiêu đề tình huống (title) không được để trống.',
+    });
+  }
+  if (typeof payload.context !== 'string' || !payload.context.trim()) {
+    fields.push({
+      path: 'draftPayload.context',
+      code: 'REQUIRED',
+      message: 'Bối cảnh (context) không được để trống.',
+    });
+  }
+  if (typeof payload.objective !== 'string' || !payload.objective.trim()) {
+    fields.push({
+      path: 'draftPayload.objective',
+      code: 'REQUIRED',
+      message: 'Mục tiêu giao tiếp (objective) không được để trống.',
+    });
+  }
+  if (typeof payload.roleA !== 'string' || !payload.roleA.trim()) {
+    fields.push({
+      path: 'draftPayload.roleA',
+      code: 'REQUIRED',
+      message: 'Vai A (roleA) không được để trống.',
+    });
+  }
+  if (typeof payload.roleB !== 'string' || !payload.roleB.trim()) {
+    fields.push({
+      path: 'draftPayload.roleB',
+      code: 'REQUIRED',
+      message: 'Vai B (roleB) không được để trống.',
+    });
+  }
+  if (!Array.isArray(payload.hints) || payload.hints.length === 0) {
+    fields.push({
+      path: 'draftPayload.hints',
+      code: 'REQUIRED',
+      message: 'Tình huống phải có ít nhất một gợi ý diễn đạt (hints).',
+    });
+  } else {
+    for (let i = 0; i < payload.hints.length; i++) {
+      const hint = payload.hints[i];
+      if (typeof hint !== 'string' || !hint.trim()) {
+        fields.push({
+          path: `draftPayload.hints[${i}]`,
+          code: 'REQUIRED',
+          message: 'Gợi ý diễn đạt không được để trống.',
+        });
+      }
+    }
+  }
+  if (payload.knowledgeVersionIds !== undefined) {
+    validateVersionIdField(
+      payload.knowledgeVersionIds,
+      'draftPayload.knowledgeVersionIds',
+      fields,
+    );
+  }
+  if (payload.questionVersionIds !== undefined) {
+    validateVersionIdField(
+      payload.questionVersionIds,
+      'draftPayload.questionVersionIds',
+      fields,
+    );
+  }
+}
+
+/**
+ * @param {Record<string, any>} payload
+ * @param {FieldValidationError[]} fields
+ */
+export function validateDeckDraftPayload(payload, fields) {
+  if (typeof payload.title !== 'string' || !payload.title.trim()) {
+    fields.push({
+      path: 'draftPayload.title',
+      code: 'REQUIRED',
+      message: 'Tiêu đề bộ chủ đề (title) không được để trống.',
+    });
+  }
+  if (typeof payload.topicKey !== 'string' || !payload.topicKey.trim()) {
+    fields.push({
+      path: 'draftPayload.topicKey',
+      code: 'REQUIRED',
+      message: 'Mã chủ đề (topicKey) không được để trống.',
+    });
+  }
+  if (!VALID_LEVELS.includes(payload.level)) {
+    fields.push({
+      path: 'draftPayload.level',
+      code: 'INVALID_ENUM',
+      message: `Cấp độ (level) phải thuộc một trong các giá trị: ${VALID_LEVELS.join(', ')}.`,
+    });
+  }
+  if (typeof payload.description !== 'string' || !payload.description.trim()) {
+    fields.push({
+      path: 'draftPayload.description',
+      code: 'REQUIRED',
+      message: 'Mô tả bộ chủ đề (description) không được để trống.',
+    });
+  }
+  if (payload.scenarioVersionIds !== undefined) {
+    validateVersionIdField(
+      payload.scenarioVersionIds,
+      'draftPayload.scenarioVersionIds',
+      fields,
+    );
+  }
+  if (payload.knowledgeVersionIds !== undefined) {
+    validateVersionIdField(
+      payload.knowledgeVersionIds,
+      'draftPayload.knowledgeVersionIds',
+      fields,
+    );
+  }
+  if (payload.questionVersionIds !== undefined) {
+    validateVersionIdField(
+      payload.questionVersionIds,
+      'draftPayload.questionVersionIds',
+      fields,
+    );
+  }
+}
+
+/**
+ * Kiểm tra các versionId tham chiếu trong draftPayload có tồn tại trong content_versions và đúng loại hay không.
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {string} kind
+ * @param {Record<string, any>} draftPayload
+ * @param {{ session?: import('mongoose').ClientSession }} [options]
+ * @returns {Promise<FieldValidationError[]>}
+ */
+export async function verifyDraftReferences(
+  db,
+  kind,
+  draftPayload,
+  { session } = {},
+) {
+  /** @type {FieldValidationError[]} */
+  const errors = [];
+  if (!draftPayload || typeof draftPayload !== 'object') return errors;
+
+  /** @type {Array<{ field: string, kind: string, ids: string[] }>} */
+  const checks = [];
+
+  if (kind === 'question') {
+    if (Array.isArray(draftPayload.knowledgeVersionIds)) {
+      checks.push({
+        field: 'draftPayload.knowledgeVersionIds',
+        kind: 'knowledge',
+        ids: draftPayload.knowledgeVersionIds.filter(isValidObjectId),
+      });
+    }
+  } else if (kind === 'scenario') {
+    if (Array.isArray(draftPayload.knowledgeVersionIds)) {
+      checks.push({
+        field: 'draftPayload.knowledgeVersionIds',
+        kind: 'knowledge',
+        ids: draftPayload.knowledgeVersionIds.filter(isValidObjectId),
+      });
+    }
+    if (Array.isArray(draftPayload.questionVersionIds)) {
+      checks.push({
+        field: 'draftPayload.questionVersionIds',
+        kind: 'question',
+        ids: draftPayload.questionVersionIds.filter(isValidObjectId),
+      });
+    }
+  } else if (kind === 'deck') {
+    if (Array.isArray(draftPayload.scenarioVersionIds)) {
+      checks.push({
+        field: 'draftPayload.scenarioVersionIds',
+        kind: 'scenario',
+        ids: draftPayload.scenarioVersionIds.filter(isValidObjectId),
+      });
+    }
+    if (Array.isArray(draftPayload.knowledgeVersionIds)) {
+      checks.push({
+        field: 'draftPayload.knowledgeVersionIds',
+        kind: 'knowledge',
+        ids: draftPayload.knowledgeVersionIds.filter(isValidObjectId),
+      });
+    }
+    if (Array.isArray(draftPayload.questionVersionIds)) {
+      checks.push({
+        field: 'draftPayload.questionVersionIds',
+        kind: 'question',
+        ids: draftPayload.questionVersionIds.filter(isValidObjectId),
+      });
+    }
+  }
+
+  for (const check of checks) {
+    if (check.ids.length === 0) continue;
+    const objectIds = check.ids.map((id) => new ObjectId(id));
+    const versions = await db
+      .collection('content_versions')
+      .find(
+        {
+          _id: { $in: objectIds },
+          kind: check.kind,
+        },
+        { projection: { _id: 1 }, ...(session ? { session } : {}) },
+      )
+      .toArray();
+
+    const foundIdSet = new Set(
+      versions.map((v) => v._id.toHexString().toLowerCase()),
+    );
+    for (let i = 0; i < check.ids.length; i++) {
+      const id = check.ids[i];
+      if (!foundIdSet.has(id.toLowerCase())) {
+        errors.push({
+          path: `${check.field}[${i}]`,
+          code: 'INVALID_REFERENCE',
+          message: `Tham chiếu tới phiên bản ${check.kind} '${id}' không tồn tại hoặc sai loại học liệu.`,
+        });
+      }
+    }
+  }
+
+  return errors;
 }
