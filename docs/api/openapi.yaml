@@ -17,6 +17,82 @@ tags:
   - name: Invitation Requests
 
 paths:
+  /webhooks/livekit:
+    post:
+      tags: [System]
+      operationId: receiveLivekitWebhook
+      summary: Xác minh webhook LiveKit và cập nhật hiện diện
+      description: >-
+        Server-to-server; không dùng cookie, CSRF hoặc Idempotency-Key.
+        Xác minh Authorization và hash của raw body bằng SDK LiveKit trước khi ghi.
+        Receipt eventId được giữ 7 ngày; SID, thời điểm và trạng thái vẫn bảo vệ
+        sau khi receipt bị dọn. Receipt, presence và consumer vòng đời dùng cùng
+        transaction. Sự kiện participant/room_finished của phiên đã biết trả 503
+        nếu chưa nối consumer BE-012; không ghi receipt thành công giả.
+        Không suy ra presence hoặc bắt đầu phiên từ room_started.
+      security:
+        - livekitWebhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/webhook+json:
+            schema:
+              type: object
+              required: [id, event, createdAt]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                event:
+                  type: string
+                createdAt:
+                  type: [string, integer]
+                  description: UNIX timestamp theo giây; SDK giải mã thành int64
+                room:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    sid:
+                      type: string
+                  additionalProperties: true
+                participant:
+                  type: object
+                  properties:
+                    identity:
+                      type: string
+                    sid:
+                      type: string
+                  additionalProperties: true
+              additionalProperties: true
+      responses:
+        '204':
+          description: Đã xử lý, bỏ qua an toàn hoặc eventId đã xử lý; không có body
+        '401':
+          description: WEBHOOK_UNAUTHORIZED — thiếu/sai chữ ký, hash hoặc payload không giải mã được
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: PAYLOAD_TOO_LARGE — raw body vượt 1 MiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE — sai Content-Type hoặc body nén
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: SERVICE_UNAVAILABLE — cấu hình, dữ liệu, đối soát hoặc consumer chưa sẵn sàng; retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /health:
     get:
       tags: [System]
@@ -288,6 +364,11 @@ paths:
 
 components:
   securitySchemes:
+    livekitWebhookSignature:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: JWT do LiveKit ký có hash raw body; dùng nguyên giá trị header của LiveKit
     sessionCookie:
       type: apiKey
       in: cookie

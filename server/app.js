@@ -12,15 +12,17 @@ import { createAuthRouter } from './modules/identity/auth-router.js';
 import { createProfileRouter } from './modules/identity/profile-router.js';
 import { createInvitationRouter } from './modules/invitations/invitation-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
+import { createLivekitWebhookHandler } from './modules/sessions/livekit-webhook-handler.js';
 import { createOpenApiRouter } from './openapi.js';
 import { checkDatabase } from './persistence/database.js';
 
 /**
- * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler, assertPairCanEnterSession?: (input: Record<string, any>) => Promise<void>}} [options]
+ * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler, onVerifiedPresence?: import('./modules/sessions/livekit-webhook-service.js').PresenceConsumer, assertPairCanEnterSession?: (input: Record<string, any>) => Promise<void>}} [options]
  */
 export function createApp({
   checkHealth = checkDatabase,
-  handleLivekitWebhook,
+  onVerifiedPresence,
+  handleLivekitWebhook = createLivekitWebhookHandler({ onVerifiedPresence }),
   assertPairCanEnterSession,
 } = {}) {
   const app = express();

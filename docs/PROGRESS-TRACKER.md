@@ -108,6 +108,19 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Tiếp theo: Review/CI; tích hợp phiên BE-009 và kiểm tra hai thành viên kết nối LiveKit. OPS-003 cấu hình ba env LiveKit; BE-011 xử lý webhook, BE-012 quản lý vòng đời/thu hồi.
 - Lưu ý: Token tối đa 10 phút, giới hạn theo deadline quyền; kiểm tra lại không thay thế thu hồi media. Receipt hiện theo API 07 §2.2; việc miễn media-token cần nhóm chốt contract trước khi bỏ.
 
+### BE-011 — Xử lý webhook LiveKit và xác nhận hiện diện
+
+- Ngày cập nhật: 2026-11-11
+- Trạng thái: Đã triển khai và kiểm thử local; chờ tích hợp consumer vòng đời BE-012, LiveKit thật, review nhóm và CI.
+- PR: Chưa có; branch `feature/BE-011-livekit-webhook`, chưa commit/push.
+- Đã làm: Nối handler mặc định cho `POST /api/v1/webhooks/livekit`; xác minh raw body/Authorization bằng SDK trước ghi DB. Dedup eventId 7 ngày bằng index đã migration; receipt/presence/consumer cùng transaction. Kiểm tra roomName/thành viên/SID/thời điểm/trạng thái, không tin connected từ client; SID đóng không mở lại sau khi receipt bị dọn. Đối soát participant active khi SID mâu thuẫn, không gọi mạng trong transaction và kiểm lại version sau đối soát. Không tự triển khai state machine bắt đầu/kết thúc.
+- File liên quan: `server/integrations/livekit/{webhook,room-service}.js`, `server/modules/sessions/livekit-webhook-{handler,service}.js`, `server/app.js`, chú thích `server/config/env.js`, `.env.example`, `docs/api/openapi.yaml`, `docs/development/local.md`, fixture/test webhook và test OpenAPI/transport.
+- Kiểm chứng: Lint, typecheck, `npm test` (260 ca) và `npm run test:integration` (111 ca trên MongoDB 8.2.7 replica set tạm) pass; `npm run openapi:check` pass 5 ca; `npm run build` và `npm run build-storybook` pass. Node 24.19.0/npm 11.21.1; Storybook còn cảnh báo chunk lớn, không chặn build. Nhóm mục tiêu webhook/transport/OpenAPI pass 43 ca, gồm 20 integration tests kiểm receipt tối thiểu, rollback/retry, hai join đồng thời, SID cũ/cùng giây, thiếu webhook join, race lúc đối soát và terminal/deadline. Fixture consumer mô phỏng bắt đầu một lần để kiểm tra ranh giới transaction, chưa chứng minh BE-012 thật. Format các file task, liên kết tài liệu local và `git diff --check` pass. Review độc lập bằng agent không còn Must fix; chưa có human approval hoặc CI.
+- Giới hạn check: `npm run check` đã chạy nhưng dừng tại format check của `.vscode/settings.json` chưa track có sẵn trước task. Giữ nguyên file này; chạy riêng các gate còn lại, không bỏ test hoặc sửa expected để pass.
+- Điểm nối BE-012: `createApp({ onVerifiedPresence })`; callback nhận `{event,before,after,presenceChanged,reason,session,observedAt}`, ghi nghiệp vụ bằng cùng Mongo session/version và không gọi dịch vụ ngoài. `presenceChanged=false` không công nhận kết nối; join vào ended/hết hạn và `room_finished` vẫn chuyển callback để xử lý deadline/cleanup. Consumer có thể bị driver chạy lại, nên tác dụng ngoài transaction phải lưu trạng thái bền cho BE-012 xử lý tiếp.
+- Tiếp theo: Nối consumer BE-012 và nghiệm thu state machine bắt đầu đúng một lần/thu hồi media thật. Cấu hình project LiveKit test, ba env và webhook qua HTTPS tunnel/Preview theo hướng dẫn local; kiểm media hai tài khoản, ghi build/environment/actual/evidence. Mở PR về `develop`, chạy CI và nhờ reviewer khác owner kiểm AC; chưa cập nhật Sheets hoặc đánh dấu Done.
+- Lưu ý: Khi thiếu consumer, sự kiện participant của thành viên/room_finished thuộc phiên đã biết trả 503 và rollback cả receipt/presence để không nuốt sự kiện. Entry mặc định hiện chưa nối BE-012; không cấu hình webhook thật vào build này để nghiệm thu vòng đời. Không thử credentials thật, Atlas/Vercel hoặc deploy trong task này; không sửa thiết kế 01–07, migration/index hay dependency.
+
 ## Sprint 2
 
 Chưa có cập nhật.
