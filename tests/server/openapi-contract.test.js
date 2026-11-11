@@ -8,6 +8,7 @@ import {
 } from '../../server/openapi.js';
 
 const expectedPaths = [
+  '/webhooks/livekit',
   '/health',
   '/invitations',
   '/invitations/{invitationId}',
@@ -27,6 +28,28 @@ const writeOperations = [
 
 describe('OpenAPI contract', () => {
   const document = /** @type {Record<string, any>} */ (readOpenApiDocument());
+
+  it('documents LiveKit signature auth, raw content type and response statuses without browser auth', () => {
+    const webhook = document.paths['/webhooks/livekit'].post;
+    expect(webhook.security).toEqual([{ livekitWebhookSignature: [] }]);
+    expect(Object.keys(webhook.requestBody.content)).toEqual([
+      'application/webhook+json',
+    ]);
+    expect(Object.keys(webhook.responses)).toEqual([
+      '204',
+      '401',
+      '413',
+      '415',
+      '503',
+    ]);
+    expect(webhook.responses['204']).not.toHaveProperty('content');
+    expect(webhook.parameters ?? []).not.toContainEqual({
+      $ref: '#/components/parameters/IdempotencyKey',
+    });
+    expect(
+      document.components.securitySchemes.livekitWebhookSignature,
+    ).toMatchObject({ in: 'header', name: 'Authorization' });
+  });
 
   it('parses the OpenAPI document and includes the implemented BE-009 paths', () => {
     expect(document.openapi).toBe('3.1.0');
