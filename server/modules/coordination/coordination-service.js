@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AppError } from '../../middleware/http-error.js';
+import { reconcileActorSessionMedia } from '../sessions/media-cleanup-service.js';
 import {
   connectDatabase,
   withTransaction,
@@ -222,6 +223,7 @@ export async function releaseActorState({
  * @param {string} actorKey
  */
 export async function getActorCoordination(actorKey) {
+  await reconcileActorSessionMedia(actorKey, new Date());
   const db = await connectDatabase();
   const state = await actorStates(db).findOne({ _id: actorKey });
   if (!state) return { mode: 'idle', version: 0 };

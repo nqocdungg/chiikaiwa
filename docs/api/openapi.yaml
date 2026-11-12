@@ -12,11 +12,147 @@ servers:
     description: Cùng origin với ứng dụng
 
 tags:
+  - name: Sessions
   - name: System
   - name: Invitations
   - name: Invitation Requests
 
 paths:
+  /sessions/{id}:
+    get:
+      tags:
+        - Sessions
+      operationId: getSession
+      summary: ??c phi?n theo quy?n th?nh vi?n
+      description: Reconcile deadline tr??c projection. GET kh?ng c?ng d?n
+        clock/counter v?o database. Disconnect d?ng clock; ph?c h?i ??y ?? thu?c
+        task ti?p theo.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - &a2
+          name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+      responses:
+        '200':
+          description: Session hi?n h?nh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400': &a1
+          description: L?i theo ErrorResponse v? API specification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401': *a1
+        '403': *a1
+        '404': *a1
+        '410': *a1
+        '503': *a1
+  /sessions/{id}/leave:
+    post:
+      tags:
+        - Sessions
+      operationId: leaveSession
+      summary: K?t th?c phi?n cho c? hai th?nh vi?n
+      description:
+        Body r?ng, kh?ng expectedVersion. Retry kh?ng k?t th?c l?n hai ho?c
+        gia h?n kh?ch. Commit ended tr??c thu h?i media; l?i d?ch v? gi? cleanup
+        pending, response v?n l? Session ended.
+      security: &a3
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: &a4
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              maxProperties: 0
+      responses:
+        '200':
+          description: Session ended; media c? th? ?ang retry thu h?i
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400': *a1
+        '401': *a1
+        '403': *a1
+        '404': *a1
+        '409': *a1
+        '410': *a1
+        '413': *a1
+        '415': *a1
+        '422': *a1
+        '429': *a1
+        '503': *a1
+  /sessions/{id}/media-token:
+    post:
+      tags:
+        - Sessions
+      operationId: issueSessionMediaToken
+      summary: C?p token ??ng room v? identity c?a th?nh vi?n
+      description:
+        TTL t?i ?a 10 ph?t, kh?ng v??t deadline quy?n. Ki?m tra l?i sau k?;
+        kh?ng cache token trong receipt. Ended t? ch?i SESSION_ENDED.
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: *a4
+      responses:
+        '200':
+          description: Credential ch? d?ng v?i SDK media
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                additionalProperties: false
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - url
+                      - token
+                      - expiresAt
+                    properties:
+                      url:
+                        type: string
+                      token:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400': *a1
+        '401': *a1
+        '403': *a1
+        '404': *a1
+        '409': *a1
+        '410': *a1
+        '413': *a1
+        '415': *a1
+        '422': *a1
+        '429': *a1
+        '503': *a1
   /webhooks/livekit:
     post:
       tags: [System]
@@ -414,6 +550,158 @@ components:
         format: uuid
 
   schemas:
+    Session:
+      type: object
+      required:
+        - id
+        - status
+        - version
+        - members
+        - activeDurationMs
+        - selectionRemainingMs
+        - slots
+        - screenShare
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum:
+            - preparing
+            - active
+            - reconnecting
+            - ended
+        version: &a2
+          type: integer
+          minimum: 0
+        controllerKey: &a3
+          type: string
+        members:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/Partner'
+        startedAt: &a1
+          type: string
+          format: date-time
+        endedAt: *a1
+        endReason:
+          type: string
+          enum:
+            - left
+            - connection_timeout
+            - selection_timeout
+            - blocked
+            - account_locked
+            - system_error
+        suggestedMinutes:
+          type: integer
+          enum:
+            - 10
+            - 20
+            - 30
+        activeDurationMs: *a2
+        selectionRemainingMs: *a2
+        reconnectUntil: *a1
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSlot'
+        currentCard:
+          $ref: '#/components/schemas/SessionCurrentCard'
+        pendingAction:
+          $ref: '#/components/schemas/SessionPendingAction'
+        screenShare:
+          $ref: '#/components/schemas/SessionScreenShare'
+      additionalProperties: false
+    SessionSlot:
+      type: object
+      required:
+        - slot
+        - status
+      properties:
+        slot: *a2
+        status:
+          type: string
+          enum:
+            - faceDown
+            - current
+            - completed
+            - skipped
+            - unfinished
+      additionalProperties: false
+    SessionCurrentCard:
+      type: object
+      required:
+        - id
+        - scenarioVersionId
+        - title
+        - context
+        - objective
+        - myRole
+        - status
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        scenarioVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        title: *a3
+        context: *a3
+        objective: *a3
+        myRole: *a3
+        status: *a3
+      additionalProperties: false
+    SessionPendingAction:
+      type: object
+      required:
+        - id
+        - kind
+        - cardId
+        - proposedBy
+        - proposedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - swapRoles
+            - skip
+            - completeAndNext
+        cardId:
+          $ref: '#/components/schemas/ObjectId'
+        proposedBy: *a3
+        proposedAt: *a1
+      additionalProperties: false
+    SessionScreenShare:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          type: string
+          enum:
+            - idle
+            - granting
+            - active
+            - revoking
+        ownerKey: *a3
+      additionalProperties: false
+    SessionResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: '#/components/schemas/Session'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
     ObjectId:
       type: string
       pattern: '^[0-9a-fA-F]{24}$'
