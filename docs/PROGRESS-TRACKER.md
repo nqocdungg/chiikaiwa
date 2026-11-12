@@ -121,6 +121,30 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Tiếp theo: Nối consumer BE-012 và nghiệm thu state machine bắt đầu đúng một lần/thu hồi media thật. Cấu hình project LiveKit test, ba env và webhook qua HTTPS tunnel/Preview theo hướng dẫn local; kiểm media hai tài khoản, ghi build/environment/actual/evidence. Mở PR về `develop`, chạy CI và nhờ reviewer khác owner kiểm AC; chưa cập nhật Sheets hoặc đánh dấu Done.
 - Lưu ý: Khi thiếu consumer, sự kiện participant của thành viên/room_finished thuộc phiên đã biết trả 503 và rollback cả receipt/presence để không nuốt sự kiện. Entry mặc định hiện chưa nối BE-012; không cấu hình webhook thật vào build này để nghiệm thu vòng đời. Không thử credentials thật, Atlas/Vercel hoặc deploy trong task này; không sửa thiết kế 01–07, migration/index hay dependency.
 
+### DATA-005 — Biên soạn dữ liệu seed tình huống và quiz N1
+
+- Ngày cập nhật: 2026-11-12
+- Trạng thái: Đã biên soạn và kiểm chứng schema bằng unit test; sẵn sàng trình duyệt và mở PR về `develop` để Minh Xuân review.
+- PR: Chưa có; branch `feature/DATA-005-seed-n1-content`, chưa commit/push.
+- Đã làm:
+  - Biên soạn bộ dữ liệu học liệu seed N1 tại `server/persistence/seed/n1-content.js` đáp ứng nghiêm ngặt Database Design §7.1, §7.2 và checklist PB-31:
+    - 01 Bộ chủ đề Deck N1: "Thương thảo & Quản trị Doanh nghiệp" (`business_negotiation_n1`), cấp độ `N1`.
+    - 05 Thẻ tình huống N1 hoàn chỉnh: Đàm phán tăng giá/điều khoản hợp đồng; Xử lý sự cố gián đoạn dịch vụ/khiếu nại; Tranh biện định hướng chiến lược ban điều hành; Giải trình chậm tiến độ/thỏa thuận gia hạn; Tái cơ cấu thỏa thuận liên minh. Mỗi tình huống có đầy đủ `title`, `context`, `objective`, 2 vai độc lập `roleA` - `roleB`, gợi ý diễn đạt `hints`, liên kết `knowledgeVersionIds` và $\ge 3$ `questionVersionIds`.
+    - 10 Mục kiến thức N1: Ngữ pháp N1 (`〜を余儀なくされる`, `〜極まりない`, `〜に至っては`, `〜を皮切りに`, `〜ならではの`) và từ vựng thương mại chuẩn mực (`折衝`, `不手際`, `見通し`, `前倒し`, `円満`), đầy đủ cách đọc `reading`, giải nghĩa `meaning` tiếng Việt và ví dụ song ngữ Nhật - Việt `examples`.
+    - 15 Câu hỏi Quiz N1: Đúng 3 câu hỏi cho mỗi tình huống (kết hợp trắc nghiệm `multipleChoice` $\ge 2$ options và điền ngắn `shortAnswer`), có đáp án đúng, giải thích chi tiết `explanation` và liên kết đúng `knowledgeVersionIds`.
+    - Chuẩn hóa toàn bộ ID theo định dạng 24 ký tự hex ObjectId và toàn vẹn tham chiếu chéo (không có reference mồ côi hoặc gãy).
+  - Viết bộ unit test `tests/server/content-seed-n1.test.js` kiểm tra tự động `validateSeedDataset(n1Dataset)` từ `content-validator.js` đạt 0 lỗi.
+- File liên quan:
+  - `server/persistence/seed/n1-content.js`
+  - `tests/server/content-seed-n1.test.js`
+  - `docs/PROGRESS-TRACKER.md`
+- Kiểm chứng:
+  - `npx vitest run tests/server/content-seed-n1.test.js`: **6/6 tests passed**.
+  - `npx eslint server/persistence/seed/n1-content.js tests/server/content-seed-n1.test.js`: Pass (0 errors, 0 warnings).
+  - `npx prettier --check server/persistence/seed/n1-content.js tests/server/content-seed-n1.test.js`: Pass.
+  - `npx tsc -p server/jsconfig.json`: Pass.
+- Tiếp theo: Trình người dùng duyệt nội dung, push nhánh `feature/DATA-005-seed-n1-content` và mở PR về `develop` để reviewer Minh Xuân rà soát chéo.
+
 ## Sprint 2
 
 Chưa có cập nhật.
