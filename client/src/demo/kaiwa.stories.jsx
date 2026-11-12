@@ -1,3 +1,5 @@
+import { MemoryRouter } from 'react-router';
+import { AuthProvider } from '../features/auth/AuthContext.jsx';
 import { KaiwaDemo } from './KaiwaDemo.jsx';
 /** @type {import('@storybook/react-vite').Meta<typeof KaiwaDemo>} */
 const meta = {
@@ -5,6 +7,15 @@ const meta = {
   title: 'Chiikaiwa/Giao diện Chiikaiwa',
   component: KaiwaDemo,
   tags: ['autodocs'],
+  decorators: [
+    (Story) => (
+      <MemoryRouter>
+        <AuthProvider skipInitialCheck={true}>
+          <Story />
+        </AuthProvider>
+      </MemoryRouter>
+    ),
+  ],
   parameters: {
     docs: {
       description: {
