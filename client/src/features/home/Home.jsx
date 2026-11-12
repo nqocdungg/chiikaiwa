@@ -19,10 +19,22 @@ export function Home({ onStart } = {}) {
   const [coordination, setCoordination] = useState(
     /** @type {{ mode: string, resourceId?: string } | null} */ (null),
   );
+  const [coordinationLoading, setCoordinationLoading] = useState(true);
   const [coordinationError, setCoordinationError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+
+  const [logoutError, setLogoutError] = useState('');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleRetryCoordination = () => {
+    setCoordinationLoading(true);
+    setCoordinationError(false);
+    setRetryKey((k) => k + 1);
+  };
 
   useEffect(() => {
     let isMounted = true;
+
     api
       .get('/me/coordination')
       .then((res) => {
@@ -40,12 +52,17 @@ export function Home({ onStart } = {}) {
       .catch(() => {
         if (!isMounted) return;
         setCoordinationError(true);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setCoordinationLoading(false);
+        }
       });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [retryKey]);
 
   const handleStart = () => {
     if (typeof onStart === 'function') {
@@ -55,7 +72,23 @@ export function Home({ onStart } = {}) {
     }
   };
 
+  const handleLogout = async () => {
+    setLogoutError('');
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } catch {
+      setLogoutError('Đăng xuất không thành công. Vui lòng thử lại.');
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const isBusy = Boolean(coordination && coordination.mode !== 'idle');
+  const isStartDisabled = onStart
+    ? false
+    : coordinationLoading || coordinationError || isBusy;
+
   const displayName = user?.displayName || 'Người học';
   const level = user?.profile?.level;
   const avatarLetter = (displayName[0] || 'U').toUpperCase();
@@ -78,7 +111,7 @@ export function Home({ onStart } = {}) {
             type="button"
             className="ck-nav-link"
             onClick={handleStart}
-            disabled={isBusy}
+            disabled={isStartDisabled}
           >
             Luyện hội thoại
           </button>
@@ -100,7 +133,8 @@ export function Home({ onStart } = {}) {
           <button
             type="button"
             className="text-xs text-muted hover:text-ink underline bg-transparent border-0 cursor-pointer p-1"
-            onClick={() => logout()}
+            onClick={handleLogout}
+            disabled={isLoggingOut}
             aria-label="Đăng xuất khỏi tài khoản"
           >
             Đăng xuất
@@ -109,11 +143,34 @@ export function Home({ onStart } = {}) {
       </header>
 
       <main id="ck-home" className="ck-home">
+        {logoutError && (
+          <div className="mb-4 text-xs text-danger" role="alert">
+            {logoutError}
+          </div>
+        )}
+
+        {/* Thông báo lỗi khi không thể tải trạng thái điều phối */}
         {coordinationError && (
-          <p className="text-xs text-muted mb-4" role="status">
-            Không thể đồng bộ trạng thái điều phối mới nhất. Bạn vẫn có thể
-            luyện tập bình thường.
-          </p>
+          <section
+            className="ck-home-preview mb-6"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex-1">
+              <h2 className="text-base font-semibold text-ink">
+                Không thể kiểm tra trạng thái điều phối
+              </h2>
+              <p className="text-sm text-muted mt-1">
+                Đã xảy ra lỗi khi đồng bộ trạng thái phòng luyện. Vui lòng thử
+                lại trước khi bắt đầu.
+              </p>
+            </div>
+            <div>
+              <Button variant="secondary" onClick={handleRetryCoordination}>
+                Thử lại
+              </Button>
+            </div>
+          </section>
         )}
 
         {/* Banner điều phối khi có luồng đang chiếm chỗ (SC-03 contract: không tạo luồng thứ hai) */}
@@ -141,26 +198,23 @@ export function Home({ onStart } = {}) {
             </div>
             <div>
               {coordination.mode === 'inSession' && coordination.resourceId && (
-                <Link to={`/room/${coordination.resourceId}`}>
-                  <Button variant="primary">
-                    Vào lại phòng <Icon name="arrow" />
-                  </Button>
+                <Link
+                  to={`/room/${coordination.resourceId}`}
+                  className="ck-button ck-button--primary"
+                >
+                  Vào lại phòng <Icon name="arrow" />
                 </Link>
               )}
               {(coordination.mode === 'searching' ||
                 coordination.mode === 'proposed') && (
-                <Link to="/match">
-                  <Button variant="primary">
-                    Xem trạng thái <Icon name="arrow" />
-                  </Button>
+                <Link to="/match" className="ck-button ck-button--primary">
+                  Xem trạng thái <Icon name="arrow" />
                 </Link>
               )}
               {(coordination.mode === 'inviting' ||
                 coordination.mode === 'requestingInvite') && (
-                <Link to="/invitation">
-                  <Button variant="primary">
-                    Xem phòng mời <Icon name="arrow" />
-                  </Button>
+                <Link to="/invitation" className="ck-button ck-button--primary">
+                  Xem phòng mời <Icon name="arrow" />
                 </Link>
               )}
             </div>
@@ -188,13 +242,13 @@ export function Home({ onStart } = {}) {
               <Button
                 variant="primary"
                 onClick={handleStart}
-                disabled={isBusy}
+                disabled={isStartDisabled}
                 aria-label="Tìm bạn luyện hội thoại"
               >
                 Tìm bạn luyện <Icon name="arrow" />
               </Button>
-              <Link to="/invitation">
-                <Button variant="secondary">Dùng mã mời</Button>
+              <Link to="/invitation" className="ck-button ck-button--secondary">
+                Dùng mã mời
               </Link>
             </div>
             <span className="ck-device-note">

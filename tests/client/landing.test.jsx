@@ -71,7 +71,9 @@ describe('FE-002: SC-01 Public Landing Page', () => {
     expect(
       screen.getAllByRole('link', { name: /Nhập mã mời|Dùng mã mời/i }).length,
     ).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: /Bắt đầu ngay/i })).toBeVisible();
+    const startCta = screen.getByRole('link', { name: /Bắt đầu ngay/i });
+    expect(startCta).toHaveAttribute('href', '/register');
+    expect(startCta).toBeVisible();
 
     // Ghi chú thiết bị mic/camera là tùy chọn
     expect(screen.getByText(/Mic và camera là tùy chọn/i)).toBeVisible();
@@ -82,7 +84,7 @@ describe('FE-002: SC-01 Public Landing Page', () => {
     expect(friendsImg).toHaveAttribute('alt', '');
   });
 
-  it('renders landing page with entry to Home when user is already logged in (04 SC-01)', () => {
+  it('renders landing page with entry to Home when learner is already logged in (04 SC-01)', () => {
     renderLandingWithAuth({
       kind: 'user',
       role: 'learner',
@@ -105,9 +107,35 @@ describe('FE-002: SC-01 Public Landing Page', () => {
       'href',
       '/home',
     );
+    const homeCta = screen.getByRole('link', { name: /Vào trang chính/i });
+    expect(homeCta).toHaveAttribute('href', '/home');
+    expect(homeCta).toBeVisible();
+  });
+
+  it('navigates admin user to /admin instead of /home (Task Handoff FE-002)', () => {
+    renderLandingWithAuth({
+      kind: 'user',
+      role: 'admin',
+      status: 'active',
+      user: {
+        id: 'admin999',
+        email: 'admin@chiikaiwa.internal',
+        displayName: 'Quản trị viên',
+        avatarKey: 'avatar-admin',
+        role: 'admin',
+        version: 1,
+      },
+    });
+
+    // Header nav link
     expect(
-      screen.getByRole('button', { name: /Vào trang chính/i }),
-    ).toBeVisible();
+      screen.getByRole('link', { name: 'Khu vực quản trị' }),
+    ).toHaveAttribute('href', '/admin');
+
+    // Welcome section CTA
+    const adminCta = screen.getByRole('link', { name: /Vào khu quản trị/i });
+    expect(adminCta).toHaveAttribute('href', '/admin');
+    expect(adminCta).toBeVisible();
   });
 
   it('does not contain fake metrics, testimonials, streak, or gamification elements (AC 1, AC 3)', () => {

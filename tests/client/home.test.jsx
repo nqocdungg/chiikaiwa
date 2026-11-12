@@ -131,6 +131,25 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     expect(screen.queryByText(/Bản demo · Dữ liệu mẫu/i)).toBeNull();
   });
 
+  it('keeps start button disabled while coordination check is pending', () => {
+    // Return a promise that does not resolve immediately
+    vi.spyOn(api, 'get').mockImplementationOnce(() => new Promise(() => {}));
+
+    renderHome();
+
+    // Heading exists
+    expect(screen.getByRole('heading', { name: 'Trang chính' })).toBeVisible();
+
+    // Nút tìm bạn luyện bị disabled khi đang chờ coordination check
+    const startBtn = screen.getByRole('button', { name: /Tìm bạn luyện/i });
+    expect(startBtn).toBeDisabled();
+
+    // Nút điều hướng "Luyện hội thoại" trên header cũng bị disabled
+    expect(
+      screen.getByRole('button', { name: 'Luyện hội thoại' }),
+    ).toBeDisabled();
+  });
+
   it('displays busy banner and prevents second flow when actor is inSession (SC-03 contract)', async () => {
     vi.spyOn(api, 'get').mockResolvedValueOnce({
       data: {
@@ -180,18 +199,42 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     expect(queueBtn).toHaveAttribute('href', '/match');
   });
 
-  it('degrades gracefully when coordination API fails without breaking home UI', async () => {
-    vi.spyOn(api, 'get').mockRejectedValueOnce(new Error('Network error'));
+  it('shows error banner with retry option and disables start button when coordination fails', async () => {
+    const apiGetSpy = vi
+      .spyOn(api, 'get')
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce({
+        data: { mode: 'idle', version: 1 },
+        meta: {},
+        epoch: getIdentityEpoch(),
+      });
 
     renderHome();
 
-    // Vẫn hiển thị trang chính bình thường
-    expect(screen.getByRole('heading', { name: 'Trang chính' })).toBeVisible();
     expect(
-      await screen.findByText(
-        /Không thể đồng bộ trạng thái điều phối mới nhất/i,
-      ),
+      await screen.findByRole('heading', {
+        name: 'Không thể kiểm tra trạng thái điều phối',
+      }),
     ).toBeVisible();
+
+    // Start button disabled during error
+    const startBtn = screen.getByRole('button', { name: /Tìm bạn luyện/i });
+    expect(startBtn).toBeDisabled();
+
+    // Click retry
+    const retryBtn = screen.getByRole('button', { name: 'Thử lại' });
+    fireEvent.click(retryBtn);
+
+    // After retry resolves idle, start button should be enabled
+    expect(apiGetSpy).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => {
+      expect(startBtn).not.toBeDisabled();
+    });
+    expect(
+      screen.queryByRole('heading', {
+        name: 'Không thể kiểm tra trạng thái điều phối',
+      }),
+    ).toBeNull();
   });
 
   it('triggers logout when clicking logout button', async () => {
@@ -209,6 +252,29 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     fireEvent.click(logoutBtn);
 
     expect(mockLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it('displays error alert when logout fails', async () => {
+    vi.spyOn(api, 'get').mockResolvedValueOnce({
+      data: { mode: 'idle', version: 1 },
+      meta: {},
+      epoch: getIdentityEpoch(),
+    });
+
+    renderHome({
+      authState: {
+        logout: vi.fn().mockRejectedValueOnce(new Error('Logout failed')),
+      },
+    });
+
+    const logoutBtn = screen.getByRole('button', {
+      name: 'Đăng xuất khỏi tài khoản',
+    });
+    fireEvent.click(logoutBtn);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Đăng xuất không thành công. Vui lòng thử lại.',
+    );
   });
 
   it('calls onStart prop when provided for backward compatibility with KaiwaDemo/Storybook', async () => {

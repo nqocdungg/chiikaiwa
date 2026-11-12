@@ -1,16 +1,20 @@
 import { Link } from 'react-router';
-import { Button, Icon } from '../../components/ui/controls.jsx';
+import { Icon } from '../../components/ui/controls.jsx';
 import { Friends } from '../../components/Friends.jsx';
 import { useAuth } from '../auth/use-auth.js';
 
 /**
  * SC-01: Landing Page công khai của Chiikaiwa (04 §5.1, §3.2).
  * Giới thiệu luyện hội thoại 1-1 theo vai và thẻ tình huống.
- * Không ép đăng nhập; người đã đăng nhập có lối vào trang chính (SC-03).
+ * Không ép đăng nhập; người đã đăng nhập có lối vào theo role (SC-03 cho learner, /admin cho admin).
  */
 export function Landing() {
-  const { kind, user } = useAuth();
+  const { kind, user, role } = useAuth();
   const isAuthenticated = kind === 'user' && Boolean(user);
+  const isAdmin = role === 'admin';
+  const ctaPath = isAdmin ? '/admin' : '/home';
+  const ctaNavLabel = isAdmin ? 'Khu vực quản trị' : 'Trang chính';
+  const ctaActionLabel = isAdmin ? 'Vào khu quản trị' : 'Vào trang chính';
 
   return (
     <div className="ck-landing">
@@ -27,16 +31,16 @@ export function Landing() {
             Nhập mã mời
           </Link>
           {isAuthenticated ? (
-            <Link to="/home" className="ck-nav-link" aria-current="page">
-              Trang chính
+            <Link to={ctaPath} className="ck-nav-link" aria-current="page">
+              {ctaNavLabel}
             </Link>
           ) : (
             <>
               <Link to="/login" className="ck-nav-link">
                 Đăng nhập
               </Link>
-              <Link to="/register">
-                <Button variant="primary">Đăng ký</Button>
+              <Link to="/register" className="ck-button ck-button--primary">
+                Đăng ký
               </Link>
             </>
           )}
@@ -63,20 +67,19 @@ export function Landing() {
             </p>
             <div className="ck-actions">
               {isAuthenticated ? (
-                <Link to="/home">
-                  <Button variant="primary">
-                    Vào trang chính <Icon name="arrow" />
-                  </Button>
+                <Link to={ctaPath} className="ck-button ck-button--primary">
+                  {ctaActionLabel} <Icon name="arrow" />
                 </Link>
               ) : (
                 <>
-                  <Link to="/register">
-                    <Button variant="primary">
-                      Bắt đầu ngay <Icon name="arrow" />
-                    </Button>
+                  <Link to="/register" className="ck-button ck-button--primary">
+                    Bắt đầu ngay <Icon name="arrow" />
                   </Link>
-                  <Link to="/invitation">
-                    <Button variant="secondary">Dùng mã mời</Button>
+                  <Link
+                    to="/invitation"
+                    className="ck-button ck-button--secondary"
+                  >
+                    Dùng mã mời
                   </Link>
                 </>
               )}
