@@ -1256,3 +1256,410 @@ export async function verifyDraftReferences(
 
   return errors;
 }
+
+/**
+ * Kiểm tra mức độ đầy đủ (completeness) và references của bản nháp trước khi xuất bản (BE-013, 07 §10, 02 BR-24, FR-ADM-03).
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {Record<string, any>} item
+ * @param {{ session?: import('mongoose').ClientSession }} [options]
+ * @returns {Promise<FieldValidationError[]>}
+ */
+export async function validatePublishCompleteness(db, item, { session } = {}) {
+  /** @type {FieldValidationError[]} */
+  const errors = [];
+  const draftPayload = item?.draftPayload;
+
+  if (
+    !draftPayload ||
+    typeof draftPayload !== 'object' ||
+    Array.isArray(draftPayload)
+  ) {
+    return [
+      {
+        path: 'draftPayload',
+        code: 'REQUIRED',
+        message: 'Học liệu chưa có nội dung nháp để xuất bản.',
+      },
+    ];
+  }
+
+  const kind = item.kind;
+
+  if (kind === 'knowledge') {
+    if (!['vocabulary', 'grammar'].includes(draftPayload.type)) {
+      errors.push({
+        path: 'draftPayload.type',
+        code: 'INVALID_ENUM',
+        message: "type phải là 'vocabulary' hoặc 'grammar'.",
+      });
+    }
+    if (
+      typeof draftPayload.expression !== 'string' ||
+      !draftPayload.expression.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.expression',
+        code: 'REQUIRED',
+        message: 'expression (từ/cấu trúc tiếng Nhật) không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.meaning !== 'string' ||
+      !draftPayload.meaning.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.meaning',
+        code: 'REQUIRED',
+        message: 'meaning (giải nghĩa tiếng Việt) không được để trống.',
+      });
+    }
+    if (
+      draftPayload.reading !== undefined &&
+      typeof draftPayload.reading !== 'string'
+    ) {
+      errors.push({
+        path: 'draftPayload.reading',
+        code: 'INVALID_TYPE',
+        message: 'reading phải là chuỗi.',
+      });
+    }
+    if (
+      !Array.isArray(draftPayload.examples) ||
+      draftPayload.examples.length === 0
+    ) {
+      errors.push({
+        path: 'draftPayload.examples',
+        code: 'REQUIRED',
+        message:
+          'examples phải là mảng chứa ít nhất 1 ví dụ câu tiếng Nhật và dịch nghĩa.',
+      });
+    } else {
+      for (let i = 0; i < draftPayload.examples.length; i++) {
+        const ex = draftPayload.examples[i];
+        if (!ex || typeof ex !== 'object') {
+          errors.push({
+            path: `draftPayload.examples[${i}]`,
+            code: 'INVALID_TYPE',
+            message: 'Mỗi ví dụ phải là một object.',
+          });
+          continue;
+        }
+        if (typeof ex.japanese !== 'string' || !ex.japanese.trim()) {
+          errors.push({
+            path: `draftPayload.examples[${i}].japanese`,
+            code: 'REQUIRED',
+            message: 'japanese không được để trống.',
+          });
+        }
+        if (typeof ex.vietnamese !== 'string' || !ex.vietnamese.trim()) {
+          errors.push({
+            path: `draftPayload.examples[${i}].vietnamese`,
+            code: 'REQUIRED',
+            message: 'vietnamese không được để trống.',
+          });
+        }
+      }
+    }
+  } else if (kind === 'question') {
+    if (!['multipleChoice', 'shortAnswer'].includes(draftPayload.type)) {
+      errors.push({
+        path: 'draftPayload.type',
+        code: 'INVALID_ENUM',
+        message: "type phải là 'multipleChoice' hoặc 'shortAnswer'.",
+      });
+    }
+    if (
+      typeof draftPayload.prompt !== 'string' ||
+      !draftPayload.prompt.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.prompt',
+        code: 'REQUIRED',
+        message: 'prompt (nội dung câu hỏi) không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.explanation !== 'string' ||
+      !draftPayload.explanation.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.explanation',
+        code: 'REQUIRED',
+        message: 'explanation (giải thích đáp án) không được để trống.',
+      });
+    }
+
+    if (draftPayload.type === 'multipleChoice') {
+      const optionIds = new Set();
+      if (
+        !Array.isArray(draftPayload.options) ||
+        draftPayload.options.length < 2
+      ) {
+        errors.push({
+          path: 'draftPayload.options',
+          code: 'THRESHOLD_NOT_MET',
+          message:
+            'options phải có ít nhất 2 lựa chọn cho câu hỏi trắc nghiệm.',
+        });
+      }
+      if (Array.isArray(draftPayload.options)) {
+        for (let i = 0; i < draftPayload.options.length; i++) {
+          const opt = draftPayload.options[i];
+          if (!opt || typeof opt !== 'object') {
+            errors.push({
+              path: `draftPayload.options[${i}]`,
+              code: 'INVALID_TYPE',
+              message: 'Lựa chọn phải là object.',
+            });
+            continue;
+          }
+          if (typeof opt.id !== 'string' || !opt.id.trim()) {
+            errors.push({
+              path: `draftPayload.options[${i}].id`,
+              code: 'REQUIRED',
+              message: 'id của lựa chọn không được để trống.',
+            });
+          } else {
+            optionIds.add(opt.id.trim());
+          }
+          if (typeof opt.text !== 'string' || !opt.text.trim()) {
+            errors.push({
+              path: `draftPayload.options[${i}].text`,
+              code: 'REQUIRED',
+              message: 'text của lựa chọn không được để trống.',
+            });
+          }
+        }
+      }
+      if (
+        typeof draftPayload.correctOptionId !== 'string' ||
+        !draftPayload.correctOptionId.trim() ||
+        !optionIds.has(draftPayload.correctOptionId.trim())
+      ) {
+        errors.push({
+          path: 'draftPayload.correctOptionId',
+          code: 'INVALID_REFERENCE',
+          message:
+            'correctOptionId phải khớp với một id trong danh sách options.',
+        });
+      }
+    } else if (draftPayload.type === 'shortAnswer') {
+      if (
+        !Array.isArray(draftPayload.acceptedAnswers) ||
+        draftPayload.acceptedAnswers.length === 0 ||
+        draftPayload.acceptedAnswers.some(
+          (/** @type {any} */ ans) => typeof ans !== 'string' || !ans.trim(),
+        )
+      ) {
+        errors.push({
+          path: 'draftPayload.acceptedAnswers',
+          code: 'REQUIRED',
+          message:
+            'acceptedAnswers phải có ít nhất một đáp án chuỗi không rỗng.',
+        });
+      }
+    }
+
+    // Verify knowledgeVersionIds references
+    const refErrors = await verifyDraftReferences(
+      db,
+      'question',
+      draftPayload,
+      { session },
+    );
+    errors.push(...refErrors);
+  } else if (kind === 'scenario') {
+    if (typeof draftPayload.title !== 'string' || !draftPayload.title.trim()) {
+      errors.push({
+        path: 'draftPayload.title',
+        code: 'REQUIRED',
+        message: 'title không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.context !== 'string' ||
+      !draftPayload.context.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.context',
+        code: 'REQUIRED',
+        message: 'context không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.objective !== 'string' ||
+      !draftPayload.objective.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.objective',
+        code: 'REQUIRED',
+        message: 'objective không được để trống.',
+      });
+    }
+    if (typeof draftPayload.roleA !== 'string' || !draftPayload.roleA.trim()) {
+      errors.push({
+        path: 'draftPayload.roleA',
+        code: 'REQUIRED',
+        message: 'roleA không được để trống.',
+      });
+    }
+    if (typeof draftPayload.roleB !== 'string' || !draftPayload.roleB.trim()) {
+      errors.push({
+        path: 'draftPayload.roleB',
+        code: 'REQUIRED',
+        message: 'roleB không được để trống.',
+      });
+    }
+    if (draftPayload.hints !== undefined) {
+      if (
+        !Array.isArray(draftPayload.hints) ||
+        draftPayload.hints.some(
+          (/** @type {any} */ h) => typeof h !== 'string' || !h.trim(),
+        )
+      ) {
+        errors.push({
+          path: 'draftPayload.hints',
+          code: 'INVALID_TYPE',
+          message: 'hints phải là mảng chuỗi không rỗng.',
+        });
+      }
+    }
+
+    // Ngưỡng: tối thiểu 3 câu hỏi quiz (02 FR-ADM-03, BR-24)
+    const questionIds = Array.isArray(draftPayload.questionVersionIds)
+      ? draftPayload.questionVersionIds.filter(isValidObjectId)
+      : [];
+    const distinctQuestionCount = new Set(
+      questionIds.map((/** @type {any} */ id) => id.toLowerCase()),
+    ).size;
+    if (distinctQuestionCount < 3) {
+      errors.push({
+        path: 'draftPayload.questionVersionIds',
+        code: 'THRESHOLD_NOT_MET',
+        message: 'Mỗi tình huống xuất bản phải có tối thiểu 3 câu hỏi quiz.',
+      });
+    }
+
+    // Verify references
+    const refErrors = await verifyDraftReferences(
+      db,
+      'scenario',
+      draftPayload,
+      { session },
+    );
+    errors.push(...refErrors);
+  } else if (kind === 'deck') {
+    if (typeof draftPayload.title !== 'string' || !draftPayload.title.trim()) {
+      errors.push({
+        path: 'draftPayload.title',
+        code: 'REQUIRED',
+        message: 'title không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.topicKey !== 'string' ||
+      !draftPayload.topicKey.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.topicKey',
+        code: 'REQUIRED',
+        message: 'topicKey không được để trống.',
+      });
+    }
+    if (!VALID_LEVELS.includes(draftPayload.level)) {
+      errors.push({
+        path: 'draftPayload.level',
+        code: 'INVALID_ENUM',
+        message: `level phải thuộc: ${VALID_LEVELS.join(', ')}.`,
+      });
+    }
+    if (
+      typeof draftPayload.description !== 'string' ||
+      !draftPayload.description.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.description',
+        code: 'REQUIRED',
+        message: 'description không được để trống.',
+      });
+    }
+
+    // Ngưỡng: tối thiểu 1 tình huống (02 FR-ADM-03)
+    const scenarioIds = Array.isArray(draftPayload.scenarioVersionIds)
+      ? draftPayload.scenarioVersionIds.filter(isValidObjectId)
+      : [];
+    const distinctScenarioCount = new Set(
+      scenarioIds.map((/** @type {any} */ id) => id.toLowerCase()),
+    ).size;
+    if (distinctScenarioCount < 1) {
+      errors.push({
+        path: 'draftPayload.scenarioVersionIds',
+        code: 'THRESHOLD_NOT_MET',
+        message: 'Bộ chủ đề xuất bản phải có ít nhất 1 tình huống hoàn chỉnh.',
+      });
+    }
+
+    // Verify references
+    const refErrors = await verifyDraftReferences(db, 'deck', draftPayload, {
+      session,
+    });
+    errors.push(...refErrors);
+  }
+
+  return errors;
+}
+
+/**
+ * Chuẩn hóa payload xuất bản, loại trùng các mảng ID tham chiếu và convert sang ObjectId (06 §7.2, TX-11).
+ *
+ * @param {string} kind
+ * @param {Record<string, any>} draftPayload
+ * @returns {Record<string, any>}
+ */
+export function normalizePublishPayload(kind, draftPayload) {
+  const normalized = { ...draftPayload };
+
+  if (kind === 'question') {
+    if (Array.isArray(normalized.knowledgeVersionIds)) {
+      const distinct = [...new Set(normalized.knowledgeVersionIds.map(String))];
+      normalized.knowledgeVersionIds = distinct.map((id) => new ObjectId(id));
+    } else {
+      normalized.knowledgeVersionIds = [];
+    }
+  } else if (kind === 'scenario') {
+    if (Array.isArray(normalized.knowledgeVersionIds)) {
+      const distinct = [...new Set(normalized.knowledgeVersionIds.map(String))];
+      normalized.knowledgeVersionIds = distinct.map((id) => new ObjectId(id));
+    } else {
+      normalized.knowledgeVersionIds = [];
+    }
+    if (Array.isArray(normalized.questionVersionIds)) {
+      const distinct = [...new Set(normalized.questionVersionIds.map(String))];
+      normalized.questionVersionIds = distinct.map((id) => new ObjectId(id));
+    } else {
+      normalized.questionVersionIds = [];
+    }
+  } else if (kind === 'deck') {
+    if (Array.isArray(normalized.scenarioVersionIds)) {
+      const distinct = [...new Set(normalized.scenarioVersionIds.map(String))];
+      normalized.scenarioVersionIds = distinct.map((id) => new ObjectId(id));
+    } else {
+      normalized.scenarioVersionIds = [];
+    }
+    if (Array.isArray(normalized.knowledgeVersionIds)) {
+      const distinct = [...new Set(normalized.knowledgeVersionIds.map(String))];
+      normalized.knowledgeVersionIds = distinct.map((id) => new ObjectId(id));
+    } else {
+      normalized.knowledgeVersionIds = [];
+    }
+    if (Array.isArray(normalized.questionVersionIds)) {
+      const distinct = [...new Set(normalized.questionVersionIds.map(String))];
+      normalized.questionVersionIds = distinct.map((id) => new ObjectId(id));
+    } else {
+      normalized.questionVersionIds = [];
+    }
+  }
+
+  return normalized;
+}

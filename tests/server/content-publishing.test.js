@@ -1,0 +1,252 @@
+import { describe, expect, it } from 'vitest';
+import mongoose from 'mongoose';
+import {
+  normalizePublishPayload,
+  validatePublishCompleteness,
+} from '../../server/modules/content/content-validator.js';
+import {
+  toKnowledgeItemDto,
+  toTopicSummaryDto,
+  toTopicVersionDetailDto,
+} from '../../server/modules/content/content-dto.js';
+
+const { ObjectId } = mongoose.Types;
+
+describe('BE-013: Unit validation and projections for content publishing', () => {
+  const dummyDb = /** @type {any} */ ({
+    collection: () => ({
+      find: () => ({
+        toArray: async () => [],
+      }),
+    }),
+  });
+
+  describe('validatePublishCompleteness', () => {
+    it('rejects item without draftPayload with 422 REQUIRED', async () => {
+      const item = { kind: 'deck', draftPayload: null };
+      const errors = await validatePublishCompleteness(dummyDb, item);
+      expect(errors).toEqual([
+        expect.objectContaining({
+          path: 'draftPayload',
+          code: 'REQUIRED',
+        }),
+      ]);
+    });
+
+    it('rejects deck with 0 scenarioVersionIds (FR-ADM-03 threshold requirement)', async () => {
+      const item = {
+        kind: 'deck',
+        draftPayload: {
+          title: 'Khách sạn',
+          topicKey: 'hotel',
+          level: 'N4',
+          description: 'Luyện hội thoại tại khách sạn',
+          scenarioVersionIds: [],
+        },
+      };
+      const errors = await validatePublishCompleteness(dummyDb, item);
+      expect(errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'draftPayload.scenarioVersionIds',
+            code: 'THRESHOLD_NOT_MET',
+          }),
+        ]),
+      );
+    });
+
+    it('rejects scenario with fewer than 3 questionVersionIds (FR-ADM-03, BR-24 threshold requirement)', async () => {
+      const item = {
+        kind: 'scenario',
+        draftPayload: {
+          title: 'Nhận phòng',
+          context: 'Tại quầy lễ tân',
+          objective: 'Lấy chìa khóa',
+          roleA: 'Khách',
+          roleB: 'Lễ tân',
+          questionVersionIds: [
+            new ObjectId().toHexString(),
+            new ObjectId().toHexString(),
+          ],
+        },
+      };
+      const errors = await validatePublishCompleteness(dummyDb, item);
+      expect(errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'draftPayload.questionVersionIds',
+            code: 'THRESHOLD_NOT_MET',
+          }),
+        ]),
+      );
+    });
+
+    it('rejects knowledge without examples or meaning', async () => {
+      const item = {
+        kind: 'knowledge',
+        draftPayload: {
+          type: 'vocabulary',
+          expression: 'チェックイン',
+          meaning: '',
+          examples: [],
+        },
+      };
+      const errors = await validatePublishCompleteness(dummyDb, item);
+      expect(errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'draftPayload.meaning',
+            code: 'REQUIRED',
+          }),
+          expect.objectContaining({
+            path: 'draftPayload.examples',
+            code: 'REQUIRED',
+          }),
+        ]),
+      );
+    });
+
+    it('rejects multiple choice question without options or matching correctOptionId', async () => {
+      const item = {
+        kind: 'question',
+        draftPayload: {
+          type: 'multipleChoice',
+          prompt: 'Chọn câu chào buổi sáng:',
+          explanation: 'おはようございます là câu chào buổi sáng lịch sự.',
+          options: [{ id: 'opt1', text: 'こんにちは' }],
+          correctOptionId: 'opt_non_exist',
+        },
+      };
+      const errors = await validatePublishCompleteness(dummyDb, item);
+      expect(errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'draftPayload.options',
+            code: 'THRESHOLD_NOT_MET',
+          }),
+          expect.objectContaining({
+            path: 'draftPayload.correctOptionId',
+            code: 'INVALID_REFERENCE',
+          }),
+        ]),
+      );
+    });
+  });
+
+  describe('normalizePublishPayload', () => {
+    it('deduplicates ID arrays and converts to ObjectId in transaction manifest', () => {
+      const id1 = new ObjectId().toHexString();
+      const id2 = new ObjectId().toHexString();
+      const raw = {
+        title: 'Chủ đề',
+        scenarioVersionIds: [id1, id1, id2],
+        knowledgeVersionIds: [id1, id2, id1],
+        questionVersionIds: [id2, id2],
+      };
+
+      const normalized = normalizePublishPayload('deck', raw);
+      expect(normalized.scenarioVersionIds).toHaveLength(2);
+      expect(normalized.scenarioVersionIds[0]).toBeInstanceOf(ObjectId);
+      expect(normalized.knowledgeVersionIds).toHaveLength(2);
+      expect(normalized.questionVersionIds).toHaveLength(1);
+    });
+  });
+
+  describe('Learner & Guest Projections (07 §7, 06 §12.1)', () => {
+    it('projects topic summary without scenario details or answers', () => {
+      const itemDoc = {
+        _id: new ObjectId(),
+        publishedVersionId: new ObjectId(),
+        title: 'Mua sắm',
+        level: 'N5',
+      };
+      const versionDoc = {
+        payload: {
+          description: 'Hội thoại mua đồ tại cửa hàng tiện lợi',
+          scenarioVersionIds: [new ObjectId()],
+          questionVersionIds: [new ObjectId()],
+        },
+      };
+
+      const dto = toTopicSummaryDto(itemDoc, versionDoc);
+      expect(dto).toEqual({
+        id: itemDoc._id.toHexString(),
+        versionId: itemDoc.publishedVersionId.toHexString(),
+        title: 'Mua sắm',
+        level: 'N5',
+        description: 'Hội thoại mua đồ tại cửa hàng tiện lợi',
+      });
+      expect(dto).not.toHaveProperty('scenarioVersionIds');
+      expect(dto).not.toHaveProperty('roleA');
+      expect(dto).not.toHaveProperty('roleB');
+    });
+
+    it('projects topic version detail with counts only', () => {
+      const q1 = new ObjectId();
+      const q2 = new ObjectId();
+      const k1 = new ObjectId();
+      const versionDoc = {
+        _id: new ObjectId(),
+        contentId: new ObjectId(),
+        payload: {
+          title: 'Khách sạn',
+          level: 'N4',
+          description: 'Mô tả',
+          knowledgeVersionIds: [k1],
+          questionVersionIds: [q1, q2],
+          roleA: 'Secret Role A',
+          roleB: 'Secret Role B',
+        },
+      };
+
+      const dto = toTopicVersionDetailDto(versionDoc);
+      expect(dto).toEqual({
+        id: versionDoc._id.toHexString(),
+        contentId: versionDoc.contentId.toHexString(),
+        title: 'Khách sạn',
+        level: 'N4',
+        description: 'Mô tả',
+        knowledgeCount: 1,
+        questionCount: 2,
+      });
+      expect(dto).not.toHaveProperty('roleA');
+      expect(dto).not.toHaveProperty('roleB');
+    });
+
+    it('projects knowledge item without role or answer leakage', () => {
+      const versionDoc = {
+        _id: new ObjectId(),
+        contentId: new ObjectId(),
+        payload: {
+          type: 'vocabulary',
+          expression: '予約',
+          reading: 'よやく',
+          meaning: 'Đặt trước, hẹn trước',
+          examples: [
+            {
+              japanese: '予約をしたいです。',
+              vietnamese: 'Tôi muốn đặt trước.',
+            },
+          ],
+          correctAnswer: 'leak',
+          roleA: 'leak',
+        },
+      };
+
+      const dto = toKnowledgeItemDto(versionDoc);
+      expect(dto).toEqual({
+        id: versionDoc.contentId.toHexString(),
+        versionId: versionDoc._id.toHexString(),
+        type: 'vocabulary',
+        expression: '予約',
+        reading: 'よやく',
+        meaning: 'Đặt trước, hẹn trước',
+        examples: [
+          { japanese: '予約をしたいです。', vietnamese: 'Tôi muốn đặt trước.' },
+        ],
+      });
+      expect(dto).not.toHaveProperty('correctAnswer');
+      expect(dto).not.toHaveProperty('roleA');
+    });
+  });
+});
