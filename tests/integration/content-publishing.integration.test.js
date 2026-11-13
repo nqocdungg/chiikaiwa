@@ -38,6 +38,8 @@ const adminSessionId = new ObjectId();
 const learnerSessionId = new ObjectId();
 
 const RAW_GUEST_TOKEN = randomBytes(24).toString('hex');
+const guestSessionId = new ObjectId();
+let guestPracticeSessionId = new ObjectId();
 
 /**
  * @param {import('mongoose').Types.ObjectId} userId
@@ -143,13 +145,14 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
     // Chuẩn bị tài khoản Guest
     const guestHash = hashGuestCredential(RAW_GUEST_TOKEN);
     await db.collection('guest_sessions').insertOne({
-      _id: new ObjectId(),
-      guestTokenHash: guestHash,
+      _id: guestSessionId,
+      credentialHash: guestHash,
       displayName: 'Khách thử nghiệm',
       status: 'active',
       startedSessions: 0,
       maxSessions: 3,
       version: 0,
+      practiceSessionId: guestPracticeSessionId,
       createdAt: new Date(),
       updatedAt: new Date(),
       expiresAt: new Date(Date.now() + 3600_000),
@@ -538,9 +541,32 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
         publishedAt: new Date(),
         publishedBy: adminId,
       });
+
+      // Gán phiên luyện tập của lượt thử cho guest với publishedDeckVersionId
+      guestPracticeSessionId = new ObjectId();
+      await db.collection('practice_sessions').deleteMany({});
+      await db
+        .collection('guest_sessions')
+        .updateOne(
+          { _id: guestSessionId },
+          { $set: { practiceSessionId: guestPracticeSessionId } },
+        );
+      await db.collection('practice_sessions').insertOne({
+        _id: guestPracticeSessionId,
+        originKind: 'invite',
+        originId: new ObjectId(),
+        deckVersionId: publishedDeckVersionId,
+        members: [
+          { actorKey: `guest:${guestSessionId.toHexString()}` },
+          { actorKey: `user:${learnerId.toHexString()}` },
+        ],
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
     });
 
-    it('GET /topics returns list of published decks without roles or answers (AC 2)', async () => {
+    it('GET /topics returns list of published decks without roles or answers (AC 2, 07 §1)', async () => {
       const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
 
       const res = await request(app)
@@ -548,10 +574,11 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
         .set('Cookie', learnerCookie);
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body.data)).toBe(true);
-      expect(res.body.data.length).toBe(1);
+      expect(res.body.data).toHaveProperty('items');
+      expect(Array.isArray(res.body.data.items)).toBe(true);
+      expect(res.body.data.items.length).toBe(1);
 
-      const topic = res.body.data[0];
+      const topic = res.body.data.items[0];
       expect(topic).toEqual({
         id: publishedDeckId.toHexString(),
         versionId: publishedDeckVersionId.toHexString(),
@@ -565,15 +592,17 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
       expect(topic).not.toHaveProperty('correctOptionId');
     });
 
-    it('GET /topic-versions/:id returns version details for Learner and Guest', async () => {
+    it('GET /topic-versions/:id enforces source permissions for Learner and Guest (07 §7)', async () => {
       const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
+      const guestCookie = `ck_guest=${RAW_GUEST_TOKEN}`;
 
-      const res = await request(app)
+      // 1. Learner đọc bản đang xuất bản công khai -> 200
+      const resLearner = await request(app)
         .get(`/api/v1/topic-versions/${publishedDeckVersionId.toHexString()}`)
         .set('Cookie', learnerCookie);
 
-      expect(res.status).toBe(200);
-      expect(res.body.data).toEqual({
+      expect(resLearner.status).toBe(200);
+      expect(resLearner.body.data).toEqual({
         id: publishedDeckVersionId.toHexString(),
         contentId: publishedDeckId.toHexString(),
         title: 'Khách sạn & Du lịch',
@@ -582,12 +611,94 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
         knowledgeCount: 1,
         questionCount: 3,
       });
-      expect(res.body.data).not.toHaveProperty('roleA');
+      expect(resLearner.body.data).not.toHaveProperty('roleA');
+
+      // 2. Khách gửi cookie thật đọc bộ thuộc đúng lượt thử của mình -> 200
+      const resGuest = await request(app)
+        .get(`/api/v1/topic-versions/${publishedDeckVersionId.toHexString()}`)
+        .set('Cookie', guestCookie);
+
+      expect(resGuest.status).toBe(200);
+      expect(resGuest.body.data.id).toBe(publishedDeckVersionId.toHexString());
+
+      // 3. Khách cố tình đọc bộ chủ đề ngoài lượt thử -> 403 FORBIDDEN
+      const otherDeckId = new ObjectId();
+      const otherDeckVersionId = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: otherDeckId,
+        kind: 'deck',
+        status: 'published',
+        publishedVersionId: otherDeckVersionId,
+        title: 'Chủ đề khác',
+        level: 'N5',
+        latestRevision: 1,
+        version: 1,
+        createdBy: adminId,
+      });
+      await db.collection('content_versions').insertOne({
+        _id: otherDeckVersionId,
+        contentId: otherDeckId,
+        kind: 'deck',
+        revision: 1,
+        payload: {
+          title: 'Chủ đề khác',
+          topicKey: 'other',
+          level: 'N5',
+          description: 'Mô tả',
+          knowledgeVersionIds: [],
+          questionVersionIds: [],
+        },
+      });
+
+      const resGuestForbidden = await request(app)
+        .get(`/api/v1/topic-versions/${otherDeckVersionId.toHexString()}`)
+        .set('Cookie', guestCookie);
+
+      expect(resGuestForbidden.status).toBe(403);
+      expect(resGuestForbidden.body.error.code).toBe('FORBIDDEN');
+
+      // 4. Learner đọc một bộ chủ đề bị ẩn (status === 'hidden') khi chưa có nguồn -> 403 FORBIDDEN
+      const hiddenDeckId = new ObjectId();
+      const hiddenDeckVersionId = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: hiddenDeckId,
+        kind: 'deck',
+        status: 'hidden',
+        publishedVersionId: hiddenDeckVersionId,
+        title: 'Bản bị ẩn',
+        level: 'N3',
+        latestRevision: 1,
+        version: 1,
+        createdBy: adminId,
+      });
+      await db.collection('content_versions').insertOne({
+        _id: hiddenDeckVersionId,
+        contentId: hiddenDeckId,
+        kind: 'deck',
+        revision: 1,
+        payload: {
+          title: 'Bản bị ẩn',
+          topicKey: 'hidden_topic',
+          level: 'N3',
+          description: 'Ẩn',
+          knowledgeVersionIds: [],
+          questionVersionIds: [],
+        },
+      });
+
+      const resLearnerForbidden = await request(app)
+        .get(`/api/v1/topic-versions/${hiddenDeckVersionId.toHexString()}`)
+        .set('Cookie', learnerCookie);
+
+      expect(resLearnerForbidden.status).toBe(403);
+      expect(resLearnerForbidden.body.error.code).toBe('FORBIDDEN');
     });
 
-    it('GET /topic-versions/:id/knowledge returns knowledge items of source version', async () => {
+    it('GET /topic-versions/:id/knowledge returns knowledge items with envelope and cursor binding (07 §1, §7)', async () => {
       const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
+      const guestCookie = `ck_guest=${RAW_GUEST_TOKEN}`;
 
+      // 1. Learner đọc danh sách kiến thức -> trả envelope data: { items, nextCursor }
       const res = await request(app)
         .get(
           `/api/v1/topic-versions/${publishedDeckVersionId.toHexString()}/knowledge`,
@@ -595,10 +706,12 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
         .set('Cookie', learnerCookie);
 
       expect(res.status).toBe(200);
-      expect(Array.isArray(res.body.data)).toBe(true);
-      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data).toHaveProperty('items');
+      expect(Array.isArray(res.body.data.items)).toBe(true);
+      expect(res.body.data.items).toHaveLength(1);
+      expect(res.body.data.nextCursor).toBeNull();
 
-      const k = res.body.data[0];
+      const k = res.body.data.items[0];
       expect(k).toEqual({
         id: k1ItemId.toHexString(),
         versionId: k1VersionId.toHexString(),
@@ -611,62 +724,202 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
         ],
       });
       expect(k).not.toHaveProperty('roleA');
-    });
 
-    it('GET /knowledge/:id returns latest or historical version based on versionId query (AC 3, BR-24, FR-LRN-01)', async () => {
-      const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
-
-      // Tạo revision 2 cho k1
-      const k1Version2Id = new ObjectId();
-      await db.collection('content_versions').insertOne({
-        _id: k1Version2Id,
-        contentId: k1ItemId,
-        kind: 'knowledge',
-        revision: 2,
-        payload: {
-          type: 'vocabulary',
-          expression: '荷物',
-          reading: 'にもつ',
-          meaning: 'Hành lý, kiện hàng (bản cập nhật mới)',
-          examples: [
-            { japanese: '荷物を預けます。', vietnamese: 'Tôi gửi hành lý.' },
-          ],
-        },
-        publishedAt: new Date(),
-        publishedBy: adminId,
-      });
-      await db.collection('content_items').updateOne(
-        { _id: k1ItemId },
-        {
-          $set: {
-            publishedVersionId: k1Version2Id,
-            latestRevision: 2,
-            version: 2,
-          },
-        },
-      );
-
-      // 1. Không truyền versionId -> Trả về bản mới nhất (revision 2)
-      const resLatest = await request(app)
-        .get(`/api/v1/knowledge/${k1ItemId.toHexString()}`)
-        .set('Cookie', learnerCookie);
-
-      expect(resLatest.status).toBe(200);
-      expect(resLatest.body.data.versionId).toBe(k1Version2Id.toHexString());
-      expect(resLatest.body.data.meaning).toBe(
-        'Hành lý, kiện hàng (bản cập nhật mới)',
-      );
-
-      // 2. Truyền versionId của revision 1 -> Đọc đúng bản lịch sử đã dùng trong phiên/lưu (AC 3)
-      const resHistorical = await request(app)
+      // 2. Guest đọc danh sách kiến thức thuộc phiên của mình -> 200
+      const resGuest = await request(app)
         .get(
-          `/api/v1/knowledge/${k1ItemId.toHexString()}?versionId=${k1VersionId.toHexString()}`,
+          `/api/v1/topic-versions/${publishedDeckVersionId.toHexString()}/knowledge`,
+        )
+        .set('Cookie', guestCookie);
+
+      expect(resGuest.status).toBe(200);
+      expect(resGuest.body.data.items).toHaveLength(1);
+
+      // 3. Test cursor binding: Dùng cursor của deck A gửi sang deck B -> 400 INVALID_CURSOR
+      const otherDeckId = new ObjectId();
+      const otherDeckVersionId = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: otherDeckId,
+        kind: 'deck',
+        status: 'published',
+        publishedVersionId: otherDeckVersionId,
+        title: 'Chủ đề 2',
+        level: 'N4',
+        latestRevision: 1,
+        version: 1,
+        createdBy: adminId,
+      });
+      await db.collection('content_versions').insertOne({
+        _id: otherDeckVersionId,
+        contentId: otherDeckId,
+        kind: 'deck',
+        revision: 1,
+        payload: {
+          title: 'Chủ đề 2',
+          topicKey: 'topic_2',
+          level: 'N4',
+          description: 'Mô tả 2',
+          knowledgeVersionIds: [k1VersionId],
+          questionVersionIds: [],
+        },
+      });
+
+      // Tạo cursor hợp lệ gắn với otherDeckVersionId
+      const foreignCursor = Buffer.from(
+        JSON.stringify({
+          versionId: otherDeckVersionId.toHexString(),
+          offset: 1,
+        }),
+      ).toString('base64url');
+
+      const resInvalidCursor = await request(app)
+        .get(
+          `/api/v1/topic-versions/${publishedDeckVersionId.toHexString()}/knowledge?cursor=${foreignCursor}`,
         )
         .set('Cookie', learnerCookie);
 
-      expect(resHistorical.status).toBe(200);
-      expect(resHistorical.body.data.versionId).toBe(k1VersionId.toHexString());
-      expect(resHistorical.body.data.meaning).toBe('Hành lý');
+      expect(resInvalidCursor.status).toBe(400);
+      expect(resInvalidCursor.body.error.code).toBe('INVALID_CURSOR');
+
+      // 4. Test cursor sai định dạng (offset âm) -> 400 INVALID_CURSOR
+      const malformedCursor = Buffer.from(
+        JSON.stringify({
+          versionId: publishedDeckVersionId.toHexString(),
+          offset: -5,
+        }),
+      ).toString('base64url');
+
+      const resNegativeCursor = await request(app)
+        .get(
+          `/api/v1/topic-versions/${publishedDeckVersionId.toHexString()}/knowledge?cursor=${malformedCursor}`,
+        )
+        .set('Cookie', learnerCookie);
+
+      expect(resNegativeCursor.status).toBe(400);
+      expect(resNegativeCursor.body.error.code).toBe('INVALID_CURSOR');
+    });
+
+    it('GET /knowledge/:id enforces source permissions for historical revisions (07 §7, AC 3)', async () => {
+      const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
+      const guestCookie = `ck_guest=${RAW_GUEST_TOKEN}`;
+
+      // Tạo knowledge k2 hoàn toàn độc lập, chưa từng xuất hiện trong session nào của learner
+      const k2ItemId = new ObjectId();
+      const k2Version1Id = new ObjectId();
+      const k2Version2Id = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: k2ItemId,
+        kind: 'knowledge',
+        status: 'published',
+        publishedVersionId: k2Version2Id,
+        title: 'Căn phòng',
+        latestRevision: 2,
+        version: 2,
+        createdBy: adminId,
+      });
+      await db.collection('content_versions').insertMany([
+        {
+          _id: k2Version1Id,
+          contentId: k2ItemId,
+          kind: 'knowledge',
+          revision: 1,
+          payload: {
+            type: 'vocabulary',
+            expression: '部屋',
+            reading: 'へや',
+            meaning: 'Căn phòng (bản cũ)',
+            examples: [],
+          },
+        },
+        {
+          _id: k2Version2Id,
+          contentId: k2ItemId,
+          kind: 'knowledge',
+          revision: 2,
+          payload: {
+            type: 'vocabulary',
+            expression: '部屋',
+            reading: 'へや',
+            meaning: 'Căn phòng (bản mới nhất)',
+            examples: [],
+          },
+        },
+      ]);
+
+      // 1. Không truyền versionId -> Trả về bản mới nhất (revision 2)
+      const resLatest = await request(app)
+        .get(`/api/v1/knowledge/${k2ItemId.toHexString()}`)
+        .set('Cookie', learnerCookie);
+
+      expect(resLatest.status).toBe(200);
+      expect(resLatest.body.data.versionId).toBe(k2Version2Id.toHexString());
+      expect(resLatest.body.data.meaning).toBe('Căn phòng (bản mới nhất)');
+
+      // 2. Truyền versionId của revision 1 cũ KHI CHƯA CÓ NGUỒN -> 403 FORBIDDEN (07 §7)
+      const resHistoricalNoSource = await request(app)
+        .get(
+          `/api/v1/knowledge/${k2ItemId.toHexString()}?versionId=${k2Version1Id.toHexString()}`,
+        )
+        .set('Cookie', learnerCookie);
+
+      expect(resHistoricalNoSource.status).toBe(403);
+      expect(resHistoricalNoSource.body.error.code).toBe('FORBIDDEN');
+
+      // 3. Sau khi người học lưu mục kiến thức này (tạo nguồn saved_sources) -> Đọc được đúng bản lịch sử
+      await db.collection('saved_sources').insertOne({
+        _id: new ObjectId(),
+        ownerKey: `user:${learnerId.toHexString()}`,
+        knowledgeId: k2ItemId,
+        knowledgeVersionId: k2Version1Id,
+        deckVersionId: publishedDeckVersionId,
+        contextKey: `deck:${publishedDeckVersionId.toHexString()}:${k2Version1Id.toHexString()}`,
+        createdAt: new Date(),
+      });
+
+      const resHistoricalWithSource = await request(app)
+        .get(
+          `/api/v1/knowledge/${k2ItemId.toHexString()}?versionId=${k2Version1Id.toHexString()}`,
+        )
+        .set('Cookie', learnerCookie);
+
+      expect(resHistoricalWithSource.status).toBe(200);
+      expect(resHistoricalWithSource.body.data.versionId).toBe(
+        k2Version1Id.toHexString(),
+      );
+      expect(resHistoricalWithSource.body.data.meaning).toBe(
+        'Căn phòng (bản cũ)',
+      );
+
+      // 4. Khách đọc kiến thức ngoài lượt thử -> 403 FORBIDDEN
+      const outsideKnowledgeId = new ObjectId();
+      const outsideVersionId = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: outsideKnowledgeId,
+        kind: 'knowledge',
+        status: 'published',
+        publishedVersionId: outsideVersionId,
+        title: 'Từ vựng ngoài lượt thử',
+      });
+      await db.collection('content_versions').insertOne({
+        _id: outsideVersionId,
+        contentId: outsideKnowledgeId,
+        kind: 'knowledge',
+        revision: 1,
+        payload: {
+          type: 'vocabulary',
+          expression: '机',
+          reading: 'つくえ',
+          meaning: 'Cái bàn',
+          examples: [],
+        },
+      });
+
+      const resGuestOutside = await request(app)
+        .get(`/api/v1/knowledge/${outsideKnowledgeId.toHexString()}`)
+        .set('Cookie', guestCookie);
+
+      expect(resGuestOutside.status).toBe(403);
+      expect(resGuestOutside.body.error.code).toBe('FORBIDDEN');
     });
   });
 });

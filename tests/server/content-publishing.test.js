@@ -249,4 +249,38 @@ describe('BE-013: Unit validation and projections for content publishing', () =>
       expect(dto).not.toHaveProperty('roleA');
     });
   });
+
+  describe('normalizePublishPayload reference deduplication (06 §2.1, Review Fix)', () => {
+    it('normalizes and deduplicates ObjectIds across uppercase and lowercase variants', () => {
+      const lowerId = '507f1f77bcf86cd799439011';
+      const upperId = '507F1F77BCF86CD799439011';
+
+      const payload = {
+        title: 'Thử nghiệm',
+        knowledgeVersionIds: [lowerId, upperId],
+      };
+
+      const normalized = normalizePublishPayload('question', payload);
+      expect(normalized.knowledgeVersionIds).toHaveLength(1);
+      expect(normalized.knowledgeVersionIds[0].toHexString()).toBe(lowerId);
+    });
+
+    it('deduplicates all reference arrays in deck payload regardless of casing', () => {
+      const id1 = '507f1f77bcf86cd799439011';
+      const id1Upper = '507F1F77BCF86CD799439011';
+      const id2 = '507f1f77bcf86cd799439022';
+
+      const deckPayload = {
+        title: 'Chủ đề du lịch',
+        scenarioVersionIds: [id1, id1Upper],
+        knowledgeVersionIds: [id1, id2, id1Upper],
+        questionVersionIds: [id2, id2.toUpperCase()],
+      };
+
+      const normalized = normalizePublishPayload('deck', deckPayload);
+      expect(normalized.scenarioVersionIds).toHaveLength(1);
+      expect(normalized.knowledgeVersionIds).toHaveLength(2);
+      expect(normalized.questionVersionIds).toHaveLength(1);
+    });
+  });
 });

@@ -816,12 +816,299 @@ export async function listPublishedTopics({ level, limit, cursor }) {
 }
 
 /**
+ * Kiểm tra quyền truy cập theo nguồn đối với phiên bản chủ đề (07 §7, 06 §4.3, §6.1, §12.1).
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {object} params
+ * @param {any} params.identity - Identity được giải mã từ cookie (user / guest)
+ * @param {import('mongoose').Types.ObjectId} params.deckVersionId - ID của ContentVersion kind=deck
+ * @param {Record<string, any>} params.parentItem - Document ContentItem cha
+ */
+async function assertDeckVersionSourceAccess(
+  db,
+  { identity, deckVersionId, parentItem },
+) {
+  if (!identity) {
+    throw new AppError({
+      status: 401,
+      code: 'AUTH_REQUIRED',
+      message: 'Vui lòng đăng nhập để tiếp tục.',
+    });
+  }
+
+  // 1. Admin: luôn có quyền đọc
+  if (identity.kind === 'user' && identity.role === 'admin') {
+    return;
+  }
+
+  // 2. Guest (07 §7, 06 §4.3): Khách chỉ đọc học liệu trong lượt thử được cấp
+  if (identity.kind === 'guest') {
+    const guestDoc = await db.collection('guest_sessions').findOne({
+      _id: identity.guestId,
+    });
+    const practiceSessionId =
+      guestDoc?.practiceSessionId || identity.guestSession?.practiceSessionId;
+
+    if (!practiceSessionId) {
+      throw new AppError({
+        status: 403,
+        code: 'FORBIDDEN',
+        message:
+          'Khách chỉ được phép truy cập học liệu trong lượt thử được cấp.',
+      });
+    }
+
+    const sessionDoc = await db.collection('practice_sessions').findOne({
+      _id:
+        practiceSessionId instanceof ObjectId
+          ? practiceSessionId
+          : new ObjectId(practiceSessionId),
+    });
+
+    if (
+      !sessionDoc ||
+      !sessionDoc.deckVersionId ||
+      !sessionDoc.deckVersionId.equals(deckVersionId)
+    ) {
+      throw new AppError({
+        status: 403,
+        code: 'FORBIDDEN',
+        message:
+          'Khách chỉ được phép truy cập học liệu trong lượt thử được cấp.',
+      });
+    }
+
+    return;
+  }
+
+  // 3. Learner (07 §7, 06 §12.1):
+  // - Nếu bản chủ đề đang xuất bản công khai và là revision mới nhất -> Cho phép đọc tự do
+  const isLatestPublished =
+    parentItem.status === 'published' &&
+    parentItem.publishedVersionId &&
+    parentItem.publishedVersionId.equals(deckVersionId);
+
+  if (isLatestPublished) {
+    return;
+  }
+
+  // - Nếu là bản ẩn (status === 'hidden') hoặc revision cũ (bản lịch sử):
+  // Phải có nguồn hợp lệ: Từng tham gia phiên luyện có deckVersionId này, hoặc đã lưu trong saved_sources
+  const actorKey = identity.actorKey;
+
+  const [hasSession, hasSaved] = await Promise.all([
+    db.collection('practice_sessions').findOne({
+      'members.actorKey': actorKey,
+      deckVersionId,
+    }),
+    db.collection('saved_sources').findOne({
+      ownerKey: actorKey,
+      deckVersionId,
+    }),
+  ]);
+
+  if (hasSession || hasSaved) {
+    return;
+  }
+
+  throw new AppError({
+    status: 403,
+    code: 'FORBIDDEN',
+    message:
+      'Bạn không có quyền truy cập bản học liệu lịch sử hoặc ẩn này khi không có nguồn hợp lệ.',
+  });
+}
+
+/**
+ * Kiểm tra quyền truy cập theo nguồn đối với mục kiến thức (07 §7, 06 §4.3, §12.1).
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {object} params
+ * @param {any} params.identity - Identity được giải mã từ cookie (user / guest)
+ * @param {import('mongoose').Types.ObjectId} params.knowledgeId - ID của ContentItem kind=knowledge
+ * @param {import('mongoose').Types.ObjectId} [params.knowledgeVersionId] - ID của ContentVersion kind=knowledge (nếu có)
+ * @param {Record<string, any>} params.parentItem - Document ContentItem cha
+ */
+async function assertKnowledgeSourceAccess(
+  db,
+  { identity, knowledgeId, knowledgeVersionId, parentItem },
+) {
+  if (!identity) {
+    throw new AppError({
+      status: 401,
+      code: 'AUTH_REQUIRED',
+      message: 'Vui lòng đăng nhập để tiếp tục.',
+    });
+  }
+
+  // 1. Admin: luôn có quyền đọc
+  if (identity.kind === 'user' && identity.role === 'admin') {
+    return;
+  }
+
+  // 2. Guest: chỉ đọc học liệu trong lượt thử
+  if (identity.kind === 'guest') {
+    const guestDoc = await db.collection('guest_sessions').findOne({
+      _id: identity.guestId,
+    });
+    const practiceSessionId =
+      guestDoc?.practiceSessionId || identity.guestSession?.practiceSessionId;
+
+    if (!practiceSessionId) {
+      throw new AppError({
+        status: 403,
+        code: 'FORBIDDEN',
+        message:
+          'Khách chỉ được phép truy cập học liệu trong lượt thử được cấp.',
+      });
+    }
+
+    const sessionDoc = await db.collection('practice_sessions').findOne({
+      _id:
+        practiceSessionId instanceof ObjectId
+          ? practiceSessionId
+          : new ObjectId(practiceSessionId),
+    });
+
+    if (!sessionDoc || !sessionDoc.deckVersionId) {
+      throw new AppError({
+        status: 403,
+        code: 'FORBIDDEN',
+        message:
+          'Khách chỉ được phép truy cập học liệu trong lượt thử được cấp.',
+      });
+    }
+
+    const trialDeck = await db.collection('content_versions').findOne({
+      _id: sessionDoc.deckVersionId,
+    });
+    const knowledgeIdsInDeck = Array.isArray(
+      trialDeck?.payload?.knowledgeVersionIds,
+    )
+      ? trialDeck.payload.knowledgeVersionIds.map(String)
+      : [];
+
+    if (knowledgeVersionId) {
+      if (knowledgeIdsInDeck.includes(String(knowledgeVersionId))) {
+        return;
+      }
+      const hasSaved = await db.collection('saved_sources').findOne({
+        ownerKey: identity.actorKey,
+        knowledgeVersionId,
+      });
+      if (hasSaved) return;
+    } else {
+      if (
+        parentItem.publishedVersionId &&
+        knowledgeIdsInDeck.includes(String(parentItem.publishedVersionId))
+      ) {
+        return;
+      }
+      const hasSavedItem = await db.collection('saved_items').findOne({
+        ownerKey: identity.actorKey,
+        knowledgeId,
+      });
+      if (hasSavedItem) return;
+    }
+
+    throw new AppError({
+      status: 403,
+      code: 'FORBIDDEN',
+      message: 'Khách chỉ được phép truy cập học liệu trong lượt thử được cấp.',
+    });
+  }
+
+  // 3. Learner:
+  if (!knowledgeVersionId) {
+    if (parentItem.status === 'published') {
+      return;
+    }
+
+    const hasSource = await db.collection('saved_items').findOne({
+      ownerKey: identity.actorKey,
+      knowledgeId,
+    });
+    if (hasSource) return;
+
+    throw new AppError({
+      status: 403,
+      code: 'FORBIDDEN',
+      message:
+        'Bạn không có quyền truy cập bản học liệu lịch sử hoặc ẩn này khi không có nguồn hợp lệ.',
+    });
+  }
+
+  const isLatestPublished =
+    parentItem.status === 'published' &&
+    parentItem.publishedVersionId &&
+    parentItem.publishedVersionId.equals(knowledgeVersionId);
+
+  if (isLatestPublished) {
+    return;
+  }
+
+  const [hasSavedSource, hasSavedItem] = await Promise.all([
+    db.collection('saved_sources').findOne({
+      ownerKey: identity.actorKey,
+      knowledgeVersionId,
+    }),
+    db.collection('saved_items').findOne({
+      ownerKey: identity.actorKey,
+      knowledgeId,
+    }),
+  ]);
+
+  if (hasSavedSource || hasSavedItem) {
+    return;
+  }
+
+  const sessionWithKnowledge = await db
+    .collection('practice_sessions')
+    .aggregate([
+      {
+        $match: {
+          'members.actorKey': identity.actorKey,
+          deckVersionId: { $exists: true },
+        },
+      },
+      {
+        $lookup: {
+          from: 'content_versions',
+          localField: 'deckVersionId',
+          foreignField: '_id',
+          as: 'deckVersion',
+        },
+      },
+      { $unwind: '$deckVersion' },
+      {
+        $match: {
+          'deckVersion.payload.knowledgeVersionIds': knowledgeVersionId,
+        },
+      },
+      { $limit: 1 },
+    ])
+    .toArray();
+
+  if (sessionWithKnowledge.length > 0) {
+    return;
+  }
+
+  throw new AppError({
+    status: 403,
+    code: 'FORBIDDEN',
+    message:
+      'Bạn không có quyền truy cập bản học liệu lịch sử hoặc ẩn này khi không có nguồn hợp lệ.',
+  });
+}
+
+/**
  * Lấy chi tiết phiên bản bộ chủ đề dành cho Learner/Guest (07 §7).
  *
  * @param {object} params
  * @param {string} params.versionId
+ * @param {any} [params.identity]
  */
-export async function getTopicVersionDetail({ versionId }) {
+export async function getTopicVersionDetail({ versionId, identity }) {
   if (!isValidObjectId(versionId)) {
     throw new AppError({
       status: 404,
@@ -849,6 +1136,14 @@ export async function getTopicVersionDetail({ versionId }) {
     });
   }
 
+  if (identity) {
+    await assertDeckVersionSourceAccess(db, {
+      identity,
+      deckVersionId: version._id,
+      parentItem: parent,
+    });
+  }
+
   return toTopicVersionDetailDto(version);
 }
 
@@ -859,8 +1154,14 @@ export async function getTopicVersionDetail({ versionId }) {
  * @param {string} params.versionId
  * @param {string | number} [params.limit]
  * @param {string} [params.cursor]
+ * @param {any} [params.identity]
  */
-export async function getTopicVersionKnowledge({ versionId, limit, cursor }) {
+export async function getTopicVersionKnowledge({
+  versionId,
+  limit,
+  cursor,
+  identity,
+}) {
   if (!isValidObjectId(versionId)) {
     throw new AppError({
       status: 404,
@@ -883,15 +1184,23 @@ export async function getTopicVersionKnowledge({ versionId, limit, cursor }) {
       const decoded = JSON.parse(
         Buffer.from(cursor, 'base64url').toString('utf8'),
       );
-      if (typeof decoded.offset !== 'number' || decoded.offset < 0) {
-        throw new Error('invalid offset');
+      if (
+        !decoded ||
+        typeof decoded !== 'object' ||
+        decoded.versionId !== versionId ||
+        typeof decoded.offset !== 'number' ||
+        !Number.isInteger(decoded.offset) ||
+        decoded.offset < 0
+      ) {
+        throw new Error('invalid cursor');
       }
       offset = decoded.offset;
     } catch {
       throw new AppError({
         status: 400,
         code: 'INVALID_CURSOR',
-        message: 'Con trỏ phân trang (cursor) không hợp lệ.',
+        message:
+          'Con trỏ phân trang (cursor) không hợp lệ hoặc không thuộc phiên bản chủ đề này.',
       });
     }
   }
@@ -915,6 +1224,14 @@ export async function getTopicVersionKnowledge({ versionId, limit, cursor }) {
     });
   }
 
+  if (identity) {
+    await assertDeckVersionSourceAccess(db, {
+      identity,
+      deckVersionId: version._id,
+      parentItem: parent,
+    });
+  }
+
   const knowledgeIds = Array.isArray(version.payload?.knowledgeVersionIds)
     ? version.payload.knowledgeVersionIds
     : [];
@@ -922,9 +1239,9 @@ export async function getTopicVersionKnowledge({ versionId, limit, cursor }) {
   const pagedIds = knowledgeIds.slice(offset, offset + parsedLimit);
   const hasMore = offset + parsedLimit < knowledgeIds.length;
   const nextCursor = hasMore
-    ? Buffer.from(JSON.stringify({ offset: offset + parsedLimit })).toString(
-        'base64url',
-      )
+    ? Buffer.from(
+        JSON.stringify({ versionId, offset: offset + parsedLimit }),
+      ).toString('base64url')
     : null;
 
   if (pagedIds.length === 0) {
@@ -955,8 +1272,9 @@ export async function getTopicVersionKnowledge({ versionId, limit, cursor }) {
  * @param {object} params
  * @param {string} params.id
  * @param {string} [params.versionId]
+ * @param {any} [params.identity]
  */
-export async function getKnowledgeDetail({ id, versionId }) {
+export async function getKnowledgeDetail({ id, versionId, identity }) {
   if (!isValidObjectId(id)) {
     throw new AppError({
       status: 404,
@@ -989,6 +1307,24 @@ export async function getKnowledgeDetail({ id, versionId }) {
       });
     }
 
+    const parent = await findContentItemById(db, id);
+    if (!parent || parent.status === 'draft') {
+      throw new AppError({
+        status: 404,
+        code: 'RESOURCE_NOT_FOUND',
+        message: `Không tìm thấy phiên bản kiến thức '${versionId}'.`,
+      });
+    }
+
+    if (identity) {
+      await assertKnowledgeSourceAccess(db, {
+        identity,
+        knowledgeId: parent._id,
+        knowledgeVersionId: versionDoc._id,
+        parentItem: parent,
+      });
+    }
+
     return toKnowledgeItemDto(versionDoc);
   }
 
@@ -1003,6 +1339,14 @@ export async function getKnowledgeDetail({ id, versionId }) {
       status: 404,
       code: 'RESOURCE_NOT_FOUND',
       message: `Không tìm thấy mục kiến thức '${id}'.`,
+    });
+  }
+
+  if (identity) {
+    await assertKnowledgeSourceAccess(db, {
+      identity,
+      knowledgeId: item._id,
+      parentItem: item,
     });
   }
 

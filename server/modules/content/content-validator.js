@@ -43,22 +43,27 @@ function validateVersionIdArray(ids, fieldName, prefix, validSet, kindLabel) {
   /** @type {Set<string>} */
   const seen = new Set();
   for (let i = 0; i < ids.length; i++) {
-    const id = ids[i];
-    if (typeof id !== 'string' || !isValidObjectId(id)) {
+    const rawId = ids[i];
+    if (typeof rawId !== 'string' || !isValidObjectId(rawId)) {
       errors.push(
-        `${prefix}.${fieldName}[${i}]: ID '${id}' không đúng chuẩn ObjectId.`,
+        `${prefix}.${fieldName}[${i}]: ID '${rawId}' không đúng chuẩn ObjectId.`,
       );
     } else {
-      if (seen.has(id)) {
+      const normalizedId = rawId.trim().toLowerCase();
+      if (seen.has(normalizedId)) {
         errors.push(
-          `${prefix}.${fieldName}[${i}]: ID '${id}' bị trùng lặp trong cùng mảng.`,
+          `${prefix}.${fieldName}[${i}]: ID '${rawId}' bị trùng lặp trong cùng mảng.`,
         );
       } else {
-        seen.add(id);
+        seen.add(normalizedId);
       }
-      if (validSet instanceof Set && !validSet.has(id)) {
+      if (
+        validSet instanceof Set &&
+        !validSet.has(rawId) &&
+        !validSet.has(normalizedId)
+      ) {
         errors.push(
-          `${prefix}.${fieldName}[${i}]: tham chiếu tới ${kindLabel} versionId '${id}' không tồn tại.`,
+          `${prefix}.${fieldName}[${i}]: tham chiếu tới ${kindLabel} versionId '${rawId}' không tồn tại.`,
         );
       }
     }
@@ -1611,6 +1616,30 @@ export async function validatePublishCompleteness(db, item, { session } = {}) {
 }
 
 /**
+ * Chuẩn hóa và loại bỏ trùng lặp mảng ID tham chiếu (không phân biệt hoa/thường hex).
+ * @param {unknown} ids
+ * @returns {import('mongoose').Types.ObjectId[]}
+ */
+function normalizeObjectIdArray(ids) {
+  if (!Array.isArray(ids)) return [];
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @type {import('mongoose').Types.ObjectId[]} */
+  const result = [];
+  for (const item of ids) {
+    if (item === null || item === undefined) continue;
+    const str = (item instanceof ObjectId ? item.toHexString() : String(item))
+      .trim()
+      .toLowerCase();
+    if (isValidObjectId(str) && !seen.has(str)) {
+      seen.add(str);
+      result.push(new ObjectId(str));
+    }
+  }
+  return result;
+}
+
+/**
  * Chuẩn hóa payload xuất bản, loại trùng các mảng ID tham chiếu và convert sang ObjectId (06 §7.2, TX-11).
  *
  * @param {string} kind
@@ -1621,44 +1650,26 @@ export function normalizePublishPayload(kind, draftPayload) {
   const normalized = { ...draftPayload };
 
   if (kind === 'question') {
-    if (Array.isArray(normalized.knowledgeVersionIds)) {
-      const distinct = [...new Set(normalized.knowledgeVersionIds.map(String))];
-      normalized.knowledgeVersionIds = distinct.map((id) => new ObjectId(id));
-    } else {
-      normalized.knowledgeVersionIds = [];
-    }
+    normalized.knowledgeVersionIds = normalizeObjectIdArray(
+      normalized.knowledgeVersionIds,
+    );
   } else if (kind === 'scenario') {
-    if (Array.isArray(normalized.knowledgeVersionIds)) {
-      const distinct = [...new Set(normalized.knowledgeVersionIds.map(String))];
-      normalized.knowledgeVersionIds = distinct.map((id) => new ObjectId(id));
-    } else {
-      normalized.knowledgeVersionIds = [];
-    }
-    if (Array.isArray(normalized.questionVersionIds)) {
-      const distinct = [...new Set(normalized.questionVersionIds.map(String))];
-      normalized.questionVersionIds = distinct.map((id) => new ObjectId(id));
-    } else {
-      normalized.questionVersionIds = [];
-    }
+    normalized.knowledgeVersionIds = normalizeObjectIdArray(
+      normalized.knowledgeVersionIds,
+    );
+    normalized.questionVersionIds = normalizeObjectIdArray(
+      normalized.questionVersionIds,
+    );
   } else if (kind === 'deck') {
-    if (Array.isArray(normalized.scenarioVersionIds)) {
-      const distinct = [...new Set(normalized.scenarioVersionIds.map(String))];
-      normalized.scenarioVersionIds = distinct.map((id) => new ObjectId(id));
-    } else {
-      normalized.scenarioVersionIds = [];
-    }
-    if (Array.isArray(normalized.knowledgeVersionIds)) {
-      const distinct = [...new Set(normalized.knowledgeVersionIds.map(String))];
-      normalized.knowledgeVersionIds = distinct.map((id) => new ObjectId(id));
-    } else {
-      normalized.knowledgeVersionIds = [];
-    }
-    if (Array.isArray(normalized.questionVersionIds)) {
-      const distinct = [...new Set(normalized.questionVersionIds.map(String))];
-      normalized.questionVersionIds = distinct.map((id) => new ObjectId(id));
-    } else {
-      normalized.questionVersionIds = [];
-    }
+    normalized.scenarioVersionIds = normalizeObjectIdArray(
+      normalized.scenarioVersionIds,
+    );
+    normalized.knowledgeVersionIds = normalizeObjectIdArray(
+      normalized.knowledgeVersionIds,
+    );
+    normalized.questionVersionIds = normalizeObjectIdArray(
+      normalized.questionVersionIds,
+    );
   }
 
   return normalized;

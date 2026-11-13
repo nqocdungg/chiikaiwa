@@ -24,11 +24,11 @@ export function createLearnerContentRouter() {
       });
 
       return response.status(200).json({
-        data: result.items,
-        meta: {
-          ...response.locals.meta,
-          nextCursor: result.nextCursor,
+        data: {
+          items: result.items,
+          nextCursor: result.nextCursor ?? null,
         },
+        meta: response.locals.meta,
       });
     } catch (err) {
       return next(err);
@@ -45,6 +45,7 @@ export function createLearnerContentRouter() {
         const versionId = Array.isArray(rawId) ? rawId[0] : String(rawId);
         const item = await getTopicVersionDetail({
           versionId,
+          identity: response.locals.identity,
         });
 
         return response.status(200).json({
@@ -70,14 +71,15 @@ export function createLearnerContentRouter() {
           versionId,
           limit: typeof limit === 'string' ? limit : undefined,
           cursor: typeof cursor === 'string' ? cursor : undefined,
+          identity: response.locals.identity,
         });
 
         return response.status(200).json({
-          data: result.items,
-          meta: {
-            ...response.locals.meta,
-            nextCursor: result.nextCursor,
+          data: {
+            items: result.items,
+            nextCursor: result.nextCursor ?? null,
           },
+          meta: response.locals.meta,
         });
       } catch (err) {
         return next(err);
@@ -97,6 +99,7 @@ export function createLearnerContentRouter() {
         const item = await getKnowledgeDetail({
           id,
           versionId: typeof versionId === 'string' ? versionId : undefined,
+          identity: response.locals.identity,
         });
 
         return response.status(200).json({

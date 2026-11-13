@@ -1149,14 +1149,24 @@ components:
         description:
           type: string
       additionalProperties: false
+    TopicList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSummary'
+        nextCursor:
+          type: string
+          nullable: true
+      additionalProperties: false
     TopicListResponse:
       type: object
       required: [data, meta]
       properties:
         data:
-          type: array
-          items:
-            $ref: '#/components/schemas/TopicSummary'
+          $ref: '#/components/schemas/TopicList'
         meta:
           $ref: '#/components/schemas/Meta'
       additionalProperties: false
@@ -1231,14 +1241,24 @@ components:
           items:
             $ref: '#/components/schemas/KnowledgeExample'
       additionalProperties: false
+    KnowledgeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeItem'
+        nextCursor:
+          type: string
+          nullable: true
+      additionalProperties: false
     KnowledgeListResponse:
       type: object
       required: [data, meta]
       properties:
         data:
-          type: array
-          items:
-            $ref: '#/components/schemas/KnowledgeItem'
+          $ref: '#/components/schemas/KnowledgeList'
         meta:
           $ref: '#/components/schemas/Meta'
       additionalProperties: false
