@@ -3,6 +3,7 @@ import { runIdempotentOperation } from '../coordination/coordination-service.js'
 import { connectDatabase } from '../../persistence/database.js';
 import { AppError } from '../../middleware/http-error.js';
 import { signMediaToken } from '../../integrations/livekit/media-token.js';
+import { reconcileSession } from './session-service.js';
 import {
   sessionEnded,
   sessionVersionConflict,
@@ -173,6 +174,15 @@ export async function issueMediaToken(
     const db = await connectDatabase();
     const id = new ObjectId(sessionId);
     const identity = await getIdentity();
+    if (
+      identity.kind === 'guest' &&
+      String(identity.guestSession.practiceSessionId) !== String(id)
+    ) {
+      // Preserve the token contract: a known member whose trial was detached
+      // has expired media rights; outsiders still receive RESOURCE_NOT_FOUND.
+      await readPermission(db, id, identity, now());
+    }
+    await reconcileSession(id, identity, now);
     const before = await readPermission(db, id, identity, now());
     const expiresAt = new Date(Math.floor(before.deadline / 1000) * 1000);
     if (expiresAt <= now())
@@ -188,6 +198,7 @@ export async function issueMediaToken(
     if (identity.actorKey !== currentIdentity.actorKey) {
       throw sessionExpired('Danh tính đã thay đổi.');
     }
+    await reconcileSession(id, currentIdentity, now);
     const after = await readPermission(db, id, currentIdentity, now());
     if (
       after.session.version !== before.session.version ||

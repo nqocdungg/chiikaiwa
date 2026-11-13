@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import mongoose from 'mongoose';
 import { AppError } from '../../middleware/http-error.js';
+import { reconcileActorSessionMedia } from '../sessions/media-cleanup-service.js';
 import {
   connectDatabase,
   withTransaction,
@@ -308,6 +309,7 @@ export async function createInvitation({
   now = new Date(),
   generateCode = generateInvitationCode,
 }) {
+  await reconcileActorSessionMedia(identity.actorKey, now);
   const invitationId = new ObjectId();
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = generateCode();
@@ -457,6 +459,7 @@ export async function createInviteRequest({
   operationId,
   now = new Date(),
 }) {
+  await reconcileActorSessionMedia(identity.actorKey, now);
   await reconcileInvitationByCode(code, now);
   const requestId = new ObjectId();
   return runIdempotentOperation({
@@ -816,8 +819,16 @@ async function respondInTransaction({
       version: 0,
       roomName: `session-${resourceId}`,
       presence: [
-        { actorKey: hostKey, connected: false },
-        { actorKey: request.requesterKey, connected: false },
+        {
+          actorKey: hostKey,
+          connected: false,
+          reconnectUntil: new Date(now.getTime() + 300_000),
+        },
+        {
+          actorKey: request.requesterKey,
+          connected: false,
+          reconnectUntil: new Date(now.getTime() + 300_000),
+        },
       ],
       activeDurationMs: 0,
       selectionRemainingMs: 60_000,

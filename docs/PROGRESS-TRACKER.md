@@ -145,6 +145,18 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
   - `npx tsc -p server/jsconfig.json`: Pass.
 - Tiếp theo: Trình người dùng duyệt nội dung, push nhánh `feature/DATA-005-seed-n1-content` và mở PR về `develop` để reviewer Minh Xuân rà soát chéo.
 
+### BE-012 — Vòng đời chuẩn bị, bắt đầu và kết thúc phòng
+
+- Ngày cập nhật: 2026-11-12
+- Trạng thái: Đã triển khai và kiểm chứng local; chờ tích hợp luồng cấp phòng thật, LiveKit Cloud, review nhóm và CI.
+- PR: Chưa có; branch `feature/BE-012-session-lifecycle`, base `develop@c7508a5`; chưa commit/push.
+- Đã làm: GET Session và leave API theo membership/CSRF/idempotency; nối consumer BE-011 mặc định. Start/controller/counter cùng transaction, GET không cộng clock vào DB. Disconnect chốt clock và giữ deadline, timeout dùng mốc nghiệp vụ, end giải phóng đúng actor resource và cố định hạn khách; lá current thành unfinished. Media cleanup sau commit có retry bền và attempt guard chống worker cũ ghi đè late join; coordination/tạo lời mời cũng xử lý timeout và thu hồi media.
+- File liên quan: `server/modules/sessions/`, `server/integrations/livekit/room-service.js`, `server/app.js`, coordination/invitation services, fixture/test lifecycle và adapter/OpenAPI, `docs/api/openapi.yaml`, `docs/development/local.md`.
+- Kiểm chứng: `npm run lint`, `npm run typecheck`, `npm test` (272 ca), `npm run test:integration` (138 ca), `npm run openapi:check` (6 ca), `npm run build`, `npm run build-storybook` pass. Node 24.19.0/npm 11.21.1, MongoDB 8.2.7 replica set tạm; adapter LiveKit dùng mock/credential giả, không dùng Atlas hoặc dịch vụ thật. Các ca mới kiểm join/leave cạnh tranh, rollback start/end, token ký cạnh tranh leave, deadline qua snapshot GET, đối soát disconnect chậm, room_finished, vai riêng, guest expiry và late join cạnh tranh cleanup. Review độc lập bằng agent không còn Must fix; chưa có human approval hoặc CI. Storybook vẫn cảnh báo chunk lớn, không chặn build.
+- Giới hạn check: Không còn bị chặn bởi format local. Người thực hiện xác nhận `npm run check` pass toàn bộ ngày 2026-11-12 sau khi xóa `.vscode/settings.json`; log cung cấp ghi nhận 138 integration tests pass lúc 20:48:17 và cả hai build thành công. Chưa có kết quả CI hoặc kiểm chứng LiveKit Cloud thật.
+- Tiếp theo: Nối dependency `assertPairCanEnterSession` và luồng guest-trial trước nghiệm thu đường mời/khách thật. Kiểm hai client, leave một phía, token cũ/vừa refresh/identity đã rời và retry thu hồi trên LiveKit Cloud test qua HTTPS. Tạo PR về develop, chạy CI và nhờ reviewer khác owner theo Tracker; chưa cập nhật Sheets/Done.
+- Bàn giao reconnect: BE-012 chỉ cung cấp nền disconnect và deadline theo phạm vi đã chốt. Nhánh phục hồi phiên đã startedAt hiện trả 503 và rollback receipt/presence; task tiếp theo thay nhánh này bằng reconnecting→active và phục hồi đầy đủ. Consumer có observedAt để chốt mất kết nối, checkedAt để recheck deadline; giữ controller, thời gian còn lại và SID guards. Không nghiệm thu toàn bộ PB-11/AT-07 từ task này. Maintenance toàn cục/full guest cleanup vẫn thuộc task sau; cleanup pending cần request/webhook hoặc maintenance tiếp tục xử lý khi dịch vụ trở lại.
+
 ## Sprint 2
 
 Chưa có cập nhật.
