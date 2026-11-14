@@ -1752,92 +1752,144 @@ export async function resolveDeckManifest(db, draftPayload, { session } = {}) {
   );
 
   // 4. Tải và kiểm tra các knowledge versions
-  if (distinctKnowledgeObjectIds.length > 0) {
-    const knowledgeVersions = await db
-      .collection('content_versions')
-      .find(
-        { _id: { $in: distinctKnowledgeObjectIds }, kind: 'knowledge' },
-        queryOptions,
-      )
-      .toArray();
+  const knowledgeVersions =
+    distinctKnowledgeObjectIds.length > 0
+      ? await db
+          .collection('content_versions')
+          .find(
+            { _id: { $in: distinctKnowledgeObjectIds }, kind: 'knowledge' },
+            queryOptions,
+          )
+          .toArray()
+      : [];
 
-    const foundKnowledgeMap = new Map(
-      knowledgeVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
-    );
+  const foundKnowledgeMap = new Map(
+    knowledgeVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
+  );
 
-    for (let i = 0; i < directKnowledgeIds.length; i++) {
-      const id = String(directKnowledgeIds[i]);
-      if (!foundKnowledgeMap.has(id.toLowerCase())) {
+  // Đối chiếu tham chiếu trực tiếp ở deck
+  for (let i = 0; i < directKnowledgeIds.length; i++) {
+    const id = String(directKnowledgeIds[i]);
+    if (!foundKnowledgeMap.has(id.toLowerCase())) {
+      errors.push({
+        path: `draftPayload.knowledgeVersionIds[${i}]`,
+        code: 'INVALID_REFERENCE',
+        message: `Tham chiếu tới phiên bản knowledge '${id}' không tồn tại hoặc sai loại học liệu.`,
+      });
+    }
+  }
+
+  // Đối chiếu toàn bộ tham chiếu kiến thức bắt nguồn từ các scenario con
+  for (const sv of scenarioVersions) {
+    const svId = sv._id.toHexString();
+    const kIds = Array.isArray(sv.payload?.knowledgeVersionIds)
+      ? sv.payload.knowledgeVersionIds
+      : [];
+    for (let j = 0; j < kIds.length; j++) {
+      const rawKid = kIds[j];
+      const kIdStr = (
+        rawKid instanceof ObjectId ? rawKid.toHexString() : String(rawKid ?? '')
+      ).trim();
+      if (
+        !isValidObjectId(rawKid) ||
+        !foundKnowledgeMap.has(kIdStr.toLowerCase())
+      ) {
         errors.push({
-          path: `draftPayload.knowledgeVersionIds[${i}]`,
+          path: `scenario[${svId}].knowledgeVersionIds[${j}]`,
           code: 'INVALID_REFERENCE',
-          message: `Tham chiếu tới phiên bản knowledge '${id}' không tồn tại hoặc sai loại học liệu.`,
-        });
-      }
-    }
-
-    const knowledgeByContentId = new Map();
-    for (const v of knowledgeVersions) {
-      const cId = v.contentId.toHexString();
-      if (!knowledgeByContentId.has(cId)) {
-        knowledgeByContentId.set(cId, []);
-      }
-      knowledgeByContentId.get(cId).push(v._id.toHexString());
-    }
-    for (const [cId, vIds] of knowledgeByContentId.entries()) {
-      const distinctVIds = new Set(vIds);
-      if (distinctVIds.size > 1) {
-        errors.push({
-          path: 'draftPayload.knowledgeVersionIds',
-          code: 'DUPLICATE_CONTENT_REVISION',
-          message: `Phát hiện nhiều phiên bản khác nhau của cùng một kiến thức (contentId '${cId}') trong manifest bộ.`,
+          message: `Tình huống nguồn '${svId}' tham chiếu tới phiên bản knowledge '${kIdStr}' không tồn tại hoặc sai loại học liệu.`,
         });
       }
     }
   }
 
+  const knowledgeByContentId = new Map();
+  for (const v of knowledgeVersions) {
+    const cId = v.contentId.toHexString();
+    if (!knowledgeByContentId.has(cId)) {
+      knowledgeByContentId.set(cId, []);
+    }
+    knowledgeByContentId.get(cId).push(v._id.toHexString());
+  }
+  for (const [cId, vIds] of knowledgeByContentId.entries()) {
+    const distinctVIds = new Set(vIds);
+    if (distinctVIds.size > 1) {
+      errors.push({
+        path: 'draftPayload.knowledgeVersionIds',
+        code: 'DUPLICATE_CONTENT_REVISION',
+        message: `Phát hiện nhiều phiên bản khác nhau của cùng một kiến thức (contentId '${cId}') trong manifest bộ.`,
+      });
+    }
+  }
+
   // 5. Tải và kiểm tra các question versions
-  if (distinctQuestionObjectIds.length > 0) {
-    const questionVersions = await db
-      .collection('content_versions')
-      .find(
-        { _id: { $in: distinctQuestionObjectIds }, kind: 'question' },
-        queryOptions,
-      )
-      .toArray();
+  const questionVersions =
+    distinctQuestionObjectIds.length > 0
+      ? await db
+          .collection('content_versions')
+          .find(
+            { _id: { $in: distinctQuestionObjectIds }, kind: 'question' },
+            queryOptions,
+          )
+          .toArray()
+      : [];
 
-    const foundQuestionMap = new Map(
-      questionVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
-    );
+  const foundQuestionMap = new Map(
+    questionVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
+  );
 
-    for (let i = 0; i < directQuestionIds.length; i++) {
-      const id = String(directQuestionIds[i]);
-      if (!foundQuestionMap.has(id.toLowerCase())) {
+  // Đối chiếu tham chiếu trực tiếp ở deck
+  for (let i = 0; i < directQuestionIds.length; i++) {
+    const id = String(directQuestionIds[i]);
+    if (!foundQuestionMap.has(id.toLowerCase())) {
+      errors.push({
+        path: `draftPayload.questionVersionIds[${i}]`,
+        code: 'INVALID_REFERENCE',
+        message: `Tham chiếu tới phiên bản question '${id}' không tồn tại hoặc sai loại học liệu.`,
+      });
+    }
+  }
+
+  // Đối chiếu toàn bộ tham chiếu câu hỏi bắt nguồn từ các scenario con
+  for (const sv of scenarioVersions) {
+    const svId = sv._id.toHexString();
+    const qIds = Array.isArray(sv.payload?.questionVersionIds)
+      ? sv.payload.questionVersionIds
+      : [];
+    for (let j = 0; j < qIds.length; j++) {
+      const rawQid = qIds[j];
+      const qIdStr = (
+        rawQid instanceof ObjectId ? rawQid.toHexString() : String(rawQid ?? '')
+      ).trim();
+      if (
+        !isValidObjectId(rawQid) ||
+        !foundQuestionMap.has(qIdStr.toLowerCase())
+      ) {
         errors.push({
-          path: `draftPayload.questionVersionIds[${i}]`,
+          path: `scenario[${svId}].questionVersionIds[${j}]`,
           code: 'INVALID_REFERENCE',
-          message: `Tham chiếu tới phiên bản question '${id}' không tồn tại hoặc sai loại học liệu.`,
+          message: `Tình huống nguồn '${svId}' tham chiếu tới phiên bản question '${qIdStr}' không tồn tại hoặc sai loại học liệu.`,
         });
       }
     }
+  }
 
-    const questionByContentId = new Map();
-    for (const v of questionVersions) {
-      const cId = v.contentId.toHexString();
-      if (!questionByContentId.has(cId)) {
-        questionByContentId.set(cId, []);
-      }
-      questionByContentId.get(cId).push(v._id.toHexString());
+  const questionByContentId = new Map();
+  for (const v of questionVersions) {
+    const cId = v.contentId.toHexString();
+    if (!questionByContentId.has(cId)) {
+      questionByContentId.set(cId, []);
     }
-    for (const [cId, vIds] of questionByContentId.entries()) {
-      const distinctVIds = new Set(vIds);
-      if (distinctVIds.size > 1) {
-        errors.push({
-          path: 'draftPayload.questionVersionIds',
-          code: 'DUPLICATE_CONTENT_REVISION',
-          message: `Phát hiện nhiều phiên bản khác nhau của cùng một câu hỏi (contentId '${cId}') trong manifest bộ.`,
-        });
-      }
+    questionByContentId.get(cId).push(v._id.toHexString());
+  }
+  for (const [cId, vIds] of questionByContentId.entries()) {
+    const distinctVIds = new Set(vIds);
+    if (distinctVIds.size > 1) {
+      errors.push({
+        path: 'draftPayload.questionVersionIds',
+        code: 'DUPLICATE_CONTENT_REVISION',
+        message: `Phát hiện nhiều phiên bản khác nhau của cùng một câu hỏi (contentId '${cId}') trong manifest bộ.`,
+      });
     }
   }
 

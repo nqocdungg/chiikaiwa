@@ -637,6 +637,116 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
         ]),
       );
     });
+
+    it('rejects publishing deck when scenario references nonexistent or wrong kind knowledge/question (06 §7.2)', async () => {
+      const adminCookie = createAuthCookie(adminId, adminSessionId);
+      const { cookie: csrfCookie, token: csrfToken } = await fetchCsrfToken();
+
+      const danglingKnowledgeId = new ObjectId();
+
+      // Tạo 3 câu hỏi hợp lệ cho scenario
+      const qvIds = [];
+      for (let i = 1; i <= 3; i++) {
+        const qvId = new ObjectId();
+        qvIds.push(qvId);
+        await db.collection('content_versions').insertOne({
+          _id: qvId,
+          contentId: new ObjectId(),
+          kind: 'question',
+          revision: 1,
+          payload: {
+            type: 'multipleChoice',
+            prompt: `Q${i}`,
+            explanation: `E${i}`,
+            options: [
+              { id: '1', text: 'A' },
+              { id: '2', text: 'B' },
+            ],
+            correctOptionId: '1',
+          },
+        });
+      }
+
+      // Scenario chứa danglingKnowledgeId (ID này không tồn tại trong content_versions)
+      const badScenarioVersionId = new ObjectId();
+      await db.collection('content_versions').insertOne({
+        _id: badScenarioVersionId,
+        contentId: new ObjectId(),
+        kind: 'scenario',
+        revision: 1,
+        payload: {
+          title: 'Scenario có ref hỏng',
+          context: 'C',
+          objective: 'O',
+          roleA: 'A',
+          roleB: 'B',
+          hints: ['H'],
+          knowledgeVersionIds: [danglingKnowledgeId], // ID lỗi chỉ có ở scenario
+          questionVersionIds: qvIds,
+        },
+      });
+
+      // Deck CHỈ THAM CHIẾU scenario trên, không khai báo knowledge trực tiếp
+      const deckItemId = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: deckItemId,
+        kind: 'deck',
+        status: 'draft',
+        latestRevision: 0,
+        version: 0,
+        publishedVersionId: null,
+        createdBy: adminId,
+      });
+
+      // Đặt draftPayload cho deck
+      await db.collection('content_items').updateOne(
+        { _id: deckItemId },
+        {
+          $set: {
+            draftPayload: {
+              title: 'Deck tham chiếu scenario lỗi',
+              topicKey: 'bad_scenario_ref',
+              level: 'N4',
+              description: 'Mô tả',
+              scenarioVersionIds: [badScenarioVersionId.toHexString()],
+            },
+          },
+        },
+      );
+
+      const res = await request(app)
+        .post(`/api/v1/admin/content/${deckItemId.toHexString()}/publish`)
+        .set('Origin', TEST_ORIGIN)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Cookie', [adminCookie, ...csrfCookie])
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: 0 });
+
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe('CONTENT_INCOMPLETE');
+      expect(res.body.error.details.fields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: `scenario[${badScenarioVersionId.toHexString()}].knowledgeVersionIds[0]`,
+            code: 'INVALID_REFERENCE',
+          }),
+        ]),
+      );
+
+      // Xác minh: Không tạo revision mới trong content_versions và giữ nguyên con trỏ deck
+      const createdVersions = await db
+        .collection('content_versions')
+        .find({ contentId: deckItemId })
+        .toArray();
+      expect(createdVersions).toHaveLength(0);
+
+      const deckCheck = await db
+        .collection('content_items')
+        .findOne({ _id: deckItemId });
+      expect(deckCheck?.status).toBe('draft');
+      expect(deckCheck?.version).toBe(0);
+      expect(deckCheck?.publishedVersionId).toBeNull();
+    });
   });
 
   describe('POST /admin/content/:id/hide', () => {

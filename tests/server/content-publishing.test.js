@@ -480,5 +480,54 @@ describe('BE-013: Unit validation and projections for content publishing', () =>
         ]),
       );
     });
+
+    it('detects dangling or wrong kind knowledge reference in scenario and returns INVALID_REFERENCE', async () => {
+      const scenarioId = new ObjectId();
+      const danglingKnowledgeId = new ObjectId();
+
+      const mockDb = /** @type {any} */ ({
+        collection: () => ({
+          find: (/** @type {any} */ { kind }) => ({
+            toArray: async () => {
+              if (kind === 'scenario') {
+                return [
+                  {
+                    _id: scenarioId,
+                    contentId: new ObjectId(),
+                    kind: 'scenario',
+                    payload: {
+                      knowledgeVersionIds: [danglingKnowledgeId],
+                      questionVersionIds: [],
+                    },
+                  },
+                ];
+              }
+              // Knowledge query returns empty because danglingKnowledgeId does not exist
+              return [];
+            },
+          }),
+        }),
+      });
+
+      const draftPayload = {
+        title: 'Bộ có scenario tham chiếu sai',
+        topicKey: 'bad_ref',
+        level: 'N4',
+        description: 'Mô tả',
+        scenarioVersionIds: [scenarioId.toHexString()],
+        // Không truyền knowledgeVersionIds trực tiếp
+      };
+
+      const { errors } = await resolveDeckManifest(mockDb, draftPayload);
+
+      expect(errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: `scenario[${scenarioId.toHexString()}].knowledgeVersionIds[0]`,
+            code: 'INVALID_REFERENCE',
+          }),
+        ]),
+      );
+    });
   });
 });
