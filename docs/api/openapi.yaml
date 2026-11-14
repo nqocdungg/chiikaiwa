@@ -754,6 +754,158 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /me/saved-items:
+    get:
+      tags: [Learning Content]
+      operationId: listSavedItems
+      summary: Liệt kê mục đã lưu của người gọi
+      security: &savedReadSecurity
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: sessionId
+          in: query
+          description: Chỉ lấy các mục có nguồn thuộc phiên này
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - &savedLimit
+          name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - &savedCursor
+          name: cursor
+          in: query
+          schema: { type: string, maxLength: 512 }
+      responses:
+        '200':
+          description: Mục đang được lưu, theo ngày lưu và ID giảm dần
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedItemsResponse'
+        '400': &savedBadRequest
+          description: MALFORMED_REQUEST hoặc INVALID_CURSOR
+          content: &savedError
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401': &savedUnauthorized
+          $ref: '#/components/responses/Unauthorized'
+        '403': &savedForbidden
+          description: ACCOUNT_LOCKED hoặc CSRF_INVALID khi ghi
+          content: *savedError
+        '404': &savedNotFound
+          $ref: '#/components/responses/NotFound'
+        '410': &savedExpired
+          description: GUEST_EXPIRED
+          content: *savedError
+        '422': &savedInvalid
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags: [Learning Content]
+      operationId: saveKnowledgeItem
+      summary: Lưu kiến thức và nguồn
+      description: Dùng chung một mục cho mỗi kiến thức. Khi lưu từ phiên, phải gửi cả sessionId và scenarioVersionId của lá đã bốc.
+      security: &savedWriteSecurity
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [knowledgeVersionId, deckVersionId]
+              dependentRequired:
+                sessionId: [scenarioVersionId]
+                scenarioVersionId: [sessionId]
+              properties:
+                knowledgeVersionId: &savedId
+                  $ref: '#/components/schemas/ObjectId'
+                deckVersionId: *savedId
+                sessionId: *savedId
+                scenarioVersionId: *savedId
+      responses:
+        '200':
+          description: Mục đã lưu và bản kiến thức hiện được phép xem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedItemResponse'
+        '400': *savedBadRequest
+        '401': *savedUnauthorized
+        '403': *savedForbidden
+        '404': *savedNotFound
+        '409': &savedConflict
+          $ref: '#/components/responses/Conflict'
+        '410': *savedExpired
+        '413':
+          description: PAYLOAD_TOO_LARGE
+          content: *savedError
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE
+          content: *savedError
+        '422': *savedInvalid
+        '429': &savedRateLimited
+          $ref: '#/components/responses/RateLimited'
+
+  /me/saved-items/{id}:
+    delete:
+      tags: [Learning Content]
+      operationId: removeSavedItem
+      summary: Bỏ lưu kiến thức
+      description: Đổi trạng thái lưu theo expectedVersion, giữ nguồn và tiến độ ôn.
+      security: *savedWriteSecurity
+      parameters:
+        - &savedPathId
+          name: id
+          in: path
+          required: true
+          schema: *savedId
+        - $ref: '#/components/parameters/ExpectedVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Đã bỏ lưu
+        '400': *savedBadRequest
+        '401': *savedUnauthorized
+        '403': *savedForbidden
+        '404': *savedNotFound
+        '409': *savedConflict
+        '410': *savedExpired
+        '422': *savedInvalid
+        '429': *savedRateLimited
+
+  /me/saved-items/{id}/sources:
+    get:
+      tags: [Learning Content]
+      operationId: listSavedItemSources
+      summary: Đọc nguồn của mục đã lưu
+      description: Chủ sở hữu vẫn xem được đúng revision nguồn sau khi bỏ lưu.
+      security: *savedReadSecurity
+      parameters:
+        - *savedPathId
+        - *savedLimit
+        - *savedCursor
+      responses:
+        '200':
+          description: Nguồn theo ngày tạo và ID giảm dần
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedSourcesResponse'
+        '400': *savedBadRequest
+        '401': *savedUnauthorized
+        '403': *savedForbidden
+        '404': *savedNotFound
+        '410': *savedExpired
+        '422': *savedInvalid
+
 components:
   securitySchemes:
     livekitWebhookSignature:
@@ -806,6 +958,73 @@ components:
         format: uuid
 
   schemas:
+    SavedItem:
+      type: object
+      additionalProperties: false
+      required: [id, knowledge, savedAt, version]
+      properties:
+        id: *savedId
+        knowledge:
+          $ref: '#/components/schemas/KnowledgeItem'
+        savedAt: &savedDate
+          type: string
+          format: date-time
+        version: { type: integer, minimum: 0 }
+    SavedSource:
+      type: object
+      additionalProperties: false
+      required: [knowledgeVersionId, deckVersionId, createdAt]
+      dependentRequired:
+        sessionId: [scenarioVersionId]
+        scenarioVersionId: [sessionId]
+      properties:
+        knowledgeVersionId: *savedId
+        deckVersionId: *savedId
+        sessionId: *savedId
+        scenarioVersionId: *savedId
+        createdAt: *savedDate
+    SavedItemResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta: &savedMeta
+          $ref: '#/components/schemas/Meta'
+        data:
+          $ref: '#/components/schemas/SavedItem'
+    SavedItemsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta: *savedMeta
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            nextCursor: &savedNext
+              type: [string, 'null']
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SavedItem'
+    SavedSourcesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta: *savedMeta
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            nextCursor: *savedNext
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SavedSource'
     Session:
       type: object
       required:
