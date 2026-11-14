@@ -25,6 +25,7 @@ export const VALID_CONTENT_KINDS = [
  * @returns {boolean}
  */
 export function isValidObjectId(id) {
+  if (id instanceof ObjectId) return true;
   return typeof id === 'string' && OBJECT_ID_REGEX.test(id);
 }
 
@@ -43,22 +44,27 @@ function validateVersionIdArray(ids, fieldName, prefix, validSet, kindLabel) {
   /** @type {Set<string>} */
   const seen = new Set();
   for (let i = 0; i < ids.length; i++) {
-    const id = ids[i];
-    if (typeof id !== 'string' || !isValidObjectId(id)) {
+    const rawId = ids[i];
+    if (typeof rawId !== 'string' || !isValidObjectId(rawId)) {
       errors.push(
-        `${prefix}.${fieldName}[${i}]: ID '${id}' không đúng chuẩn ObjectId.`,
+        `${prefix}.${fieldName}[${i}]: ID '${rawId}' không đúng chuẩn ObjectId.`,
       );
     } else {
-      if (seen.has(id)) {
+      const normalizedId = rawId.trim().toLowerCase();
+      if (seen.has(normalizedId)) {
         errors.push(
-          `${prefix}.${fieldName}[${i}]: ID '${id}' bị trùng lặp trong cùng mảng.`,
+          `${prefix}.${fieldName}[${i}]: ID '${rawId}' bị trùng lặp trong cùng mảng.`,
         );
       } else {
-        seen.add(id);
+        seen.add(normalizedId);
       }
-      if (validSet instanceof Set && !validSet.has(id)) {
+      if (
+        validSet instanceof Set &&
+        !validSet.has(rawId) &&
+        !validSet.has(normalizedId)
+      ) {
         errors.push(
-          `${prefix}.${fieldName}[${i}]: tham chiếu tới ${kindLabel} versionId '${id}' không tồn tại.`,
+          `${prefix}.${fieldName}[${i}]: tham chiếu tới ${kindLabel} versionId '${rawId}' không tồn tại.`,
         );
       }
     }
@@ -1255,4 +1261,727 @@ export async function verifyDraftReferences(
   }
 
   return errors;
+}
+
+/**
+ * Kiểm tra mức độ đầy đủ (completeness) và references của bản nháp trước khi xuất bản (BE-013, 07 §10, 02 BR-24, FR-ADM-03).
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {Record<string, any>} item
+ * @param {{ session?: import('mongoose').ClientSession }} [options]
+ * @returns {Promise<FieldValidationError[]>}
+ */
+export async function validatePublishCompleteness(db, item, { session } = {}) {
+  /** @type {FieldValidationError[]} */
+  const errors = [];
+  const draftPayload = item?.draftPayload;
+
+  if (
+    !draftPayload ||
+    typeof draftPayload !== 'object' ||
+    Array.isArray(draftPayload)
+  ) {
+    return [
+      {
+        path: 'draftPayload',
+        code: 'REQUIRED',
+        message: 'Học liệu chưa có nội dung nháp để xuất bản.',
+      },
+    ];
+  }
+
+  const kind = item.kind;
+
+  if (kind === 'knowledge') {
+    if (!['vocabulary', 'grammar'].includes(draftPayload.type)) {
+      errors.push({
+        path: 'draftPayload.type',
+        code: 'INVALID_ENUM',
+        message: "type phải là 'vocabulary' hoặc 'grammar'.",
+      });
+    }
+    if (
+      typeof draftPayload.expression !== 'string' ||
+      !draftPayload.expression.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.expression',
+        code: 'REQUIRED',
+        message: 'expression (từ/cấu trúc tiếng Nhật) không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.meaning !== 'string' ||
+      !draftPayload.meaning.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.meaning',
+        code: 'REQUIRED',
+        message: 'meaning (giải nghĩa tiếng Việt) không được để trống.',
+      });
+    }
+    if (
+      draftPayload.reading !== undefined &&
+      typeof draftPayload.reading !== 'string'
+    ) {
+      errors.push({
+        path: 'draftPayload.reading',
+        code: 'INVALID_TYPE',
+        message: 'reading phải là chuỗi.',
+      });
+    }
+    if (
+      !Array.isArray(draftPayload.examples) ||
+      draftPayload.examples.length === 0
+    ) {
+      errors.push({
+        path: 'draftPayload.examples',
+        code: 'REQUIRED',
+        message:
+          'examples phải là mảng chứa ít nhất 1 ví dụ câu tiếng Nhật và dịch nghĩa.',
+      });
+    } else {
+      for (let i = 0; i < draftPayload.examples.length; i++) {
+        const ex = draftPayload.examples[i];
+        if (!ex || typeof ex !== 'object') {
+          errors.push({
+            path: `draftPayload.examples[${i}]`,
+            code: 'INVALID_TYPE',
+            message: 'Mỗi ví dụ phải là một object.',
+          });
+          continue;
+        }
+        if (typeof ex.japanese !== 'string' || !ex.japanese.trim()) {
+          errors.push({
+            path: `draftPayload.examples[${i}].japanese`,
+            code: 'REQUIRED',
+            message: 'japanese không được để trống.',
+          });
+        }
+        if (typeof ex.vietnamese !== 'string' || !ex.vietnamese.trim()) {
+          errors.push({
+            path: `draftPayload.examples[${i}].vietnamese`,
+            code: 'REQUIRED',
+            message: 'vietnamese không được để trống.',
+          });
+        }
+      }
+    }
+  } else if (kind === 'question') {
+    if (!['multipleChoice', 'shortAnswer'].includes(draftPayload.type)) {
+      errors.push({
+        path: 'draftPayload.type',
+        code: 'INVALID_ENUM',
+        message: "type phải là 'multipleChoice' hoặc 'shortAnswer'.",
+      });
+    }
+    if (
+      typeof draftPayload.prompt !== 'string' ||
+      !draftPayload.prompt.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.prompt',
+        code: 'REQUIRED',
+        message: 'prompt (nội dung câu hỏi) không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.explanation !== 'string' ||
+      !draftPayload.explanation.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.explanation',
+        code: 'REQUIRED',
+        message: 'explanation (giải thích đáp án) không được để trống.',
+      });
+    }
+
+    if (draftPayload.type === 'multipleChoice') {
+      const optionIds = new Set();
+      if (
+        !Array.isArray(draftPayload.options) ||
+        draftPayload.options.length < 2
+      ) {
+        errors.push({
+          path: 'draftPayload.options',
+          code: 'THRESHOLD_NOT_MET',
+          message:
+            'options phải có ít nhất 2 lựa chọn cho câu hỏi trắc nghiệm.',
+        });
+      }
+      if (Array.isArray(draftPayload.options)) {
+        for (let i = 0; i < draftPayload.options.length; i++) {
+          const opt = draftPayload.options[i];
+          if (!opt || typeof opt !== 'object') {
+            errors.push({
+              path: `draftPayload.options[${i}]`,
+              code: 'INVALID_TYPE',
+              message: 'Lựa chọn phải là object.',
+            });
+            continue;
+          }
+          if (typeof opt.id !== 'string' || !opt.id.trim()) {
+            errors.push({
+              path: `draftPayload.options[${i}].id`,
+              code: 'REQUIRED',
+              message: 'id của lựa chọn không được để trống.',
+            });
+          } else {
+            optionIds.add(opt.id.trim());
+          }
+          if (typeof opt.text !== 'string' || !opt.text.trim()) {
+            errors.push({
+              path: `draftPayload.options[${i}].text`,
+              code: 'REQUIRED',
+              message: 'text của lựa chọn không được để trống.',
+            });
+          }
+        }
+      }
+      if (
+        typeof draftPayload.correctOptionId !== 'string' ||
+        !draftPayload.correctOptionId.trim() ||
+        !optionIds.has(draftPayload.correctOptionId.trim())
+      ) {
+        errors.push({
+          path: 'draftPayload.correctOptionId',
+          code: 'INVALID_REFERENCE',
+          message:
+            'correctOptionId phải khớp với một id trong danh sách options.',
+        });
+      }
+    } else if (draftPayload.type === 'shortAnswer') {
+      if (
+        !Array.isArray(draftPayload.acceptedAnswers) ||
+        draftPayload.acceptedAnswers.length === 0 ||
+        draftPayload.acceptedAnswers.some(
+          (/** @type {any} */ ans) => typeof ans !== 'string' || !ans.trim(),
+        )
+      ) {
+        errors.push({
+          path: 'draftPayload.acceptedAnswers',
+          code: 'REQUIRED',
+          message:
+            'acceptedAnswers phải có ít nhất một đáp án chuỗi không rỗng.',
+        });
+      }
+    }
+
+    // Verify knowledgeVersionIds references
+    const refErrors = await verifyDraftReferences(
+      db,
+      'question',
+      draftPayload,
+      { session },
+    );
+    errors.push(...refErrors);
+  } else if (kind === 'scenario') {
+    if (typeof draftPayload.title !== 'string' || !draftPayload.title.trim()) {
+      errors.push({
+        path: 'draftPayload.title',
+        code: 'REQUIRED',
+        message: 'title không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.context !== 'string' ||
+      !draftPayload.context.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.context',
+        code: 'REQUIRED',
+        message: 'context không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.objective !== 'string' ||
+      !draftPayload.objective.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.objective',
+        code: 'REQUIRED',
+        message: 'objective không được để trống.',
+      });
+    }
+    if (typeof draftPayload.roleA !== 'string' || !draftPayload.roleA.trim()) {
+      errors.push({
+        path: 'draftPayload.roleA',
+        code: 'REQUIRED',
+        message: 'roleA không được để trống.',
+      });
+    }
+    if (typeof draftPayload.roleB !== 'string' || !draftPayload.roleB.trim()) {
+      errors.push({
+        path: 'draftPayload.roleB',
+        code: 'REQUIRED',
+        message: 'roleB không được để trống.',
+      });
+    }
+    if (draftPayload.hints !== undefined) {
+      if (
+        !Array.isArray(draftPayload.hints) ||
+        draftPayload.hints.some(
+          (/** @type {any} */ h) => typeof h !== 'string' || !h.trim(),
+        )
+      ) {
+        errors.push({
+          path: 'draftPayload.hints',
+          code: 'INVALID_TYPE',
+          message: 'hints phải là mảng chuỗi không rỗng.',
+        });
+      }
+    }
+
+    // Ngưỡng: tối thiểu 3 câu hỏi quiz (02 FR-ADM-03, BR-24)
+    const questionIds = Array.isArray(draftPayload.questionVersionIds)
+      ? draftPayload.questionVersionIds.filter(isValidObjectId)
+      : [];
+    const distinctQuestionCount = new Set(
+      questionIds.map((/** @type {any} */ id) => id.toLowerCase()),
+    ).size;
+    if (distinctQuestionCount < 3) {
+      errors.push({
+        path: 'draftPayload.questionVersionIds',
+        code: 'THRESHOLD_NOT_MET',
+        message: 'Mỗi tình huống xuất bản phải có tối thiểu 3 câu hỏi quiz.',
+      });
+    }
+
+    // Verify references
+    const refErrors = await verifyDraftReferences(
+      db,
+      'scenario',
+      draftPayload,
+      { session },
+    );
+    errors.push(...refErrors);
+  } else if (kind === 'deck') {
+    if (typeof draftPayload.title !== 'string' || !draftPayload.title.trim()) {
+      errors.push({
+        path: 'draftPayload.title',
+        code: 'REQUIRED',
+        message: 'title không được để trống.',
+      });
+    }
+    if (
+      typeof draftPayload.topicKey !== 'string' ||
+      !draftPayload.topicKey.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.topicKey',
+        code: 'REQUIRED',
+        message: 'topicKey không được để trống.',
+      });
+    }
+    if (!VALID_LEVELS.includes(draftPayload.level)) {
+      errors.push({
+        path: 'draftPayload.level',
+        code: 'INVALID_ENUM',
+        message: `level phải thuộc: ${VALID_LEVELS.join(', ')}.`,
+      });
+    }
+    if (
+      typeof draftPayload.description !== 'string' ||
+      !draftPayload.description.trim()
+    ) {
+      errors.push({
+        path: 'draftPayload.description',
+        code: 'REQUIRED',
+        message: 'description không được để trống.',
+      });
+    }
+
+    // Ngưỡng: tối thiểu 1 tình huống (02 FR-ADM-03)
+    const scenarioIds = Array.isArray(draftPayload.scenarioVersionIds)
+      ? draftPayload.scenarioVersionIds.filter(isValidObjectId)
+      : [];
+    const distinctScenarioCount = new Set(
+      scenarioIds.map((/** @type {any} */ id) => id.toLowerCase()),
+    ).size;
+    if (distinctScenarioCount < 1) {
+      errors.push({
+        path: 'draftPayload.scenarioVersionIds',
+        code: 'THRESHOLD_NOT_MET',
+        message: 'Bộ chủ đề xuất bản phải có ít nhất 1 tình huống hoàn chỉnh.',
+      });
+    }
+
+    const { errors: deckManifestErrors } = await resolveDeckManifest(
+      db,
+      draftPayload,
+      { session },
+    );
+    errors.push(...deckManifestErrors);
+  }
+
+  return errors;
+}
+
+/**
+ * Hợp nhất và xác thực manifest bộ chủ đề từ các tình huống và tham chiếu trực tiếp (06 §7.2).
+ * Tải các scenario revision, hợp nhất knowledge/question references, kiểm tra tồn tại và đúng loại,
+ * loại trùng version ID và nhóm theo contentId để phát hiện hai revision của cùng một mục (06 §7.2).
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {Record<string, any>} draftPayload
+ * @param {{ session?: import('mongoose').ClientSession }} [options]
+ * @returns {Promise<{ errors: FieldValidationError[], mergedPayload: Record<string, any> }>}
+ */
+export async function resolveDeckManifest(db, draftPayload, { session } = {}) {
+  /** @type {FieldValidationError[]} */
+  const errors = [];
+  const rawScenarioIds = Array.isArray(draftPayload.scenarioVersionIds)
+    ? draftPayload.scenarioVersionIds
+    : [];
+  const scenarioIds = rawScenarioIds
+    .filter(isValidObjectId)
+    .map((id) => (id instanceof ObjectId ? id.toHexString() : String(id)));
+
+  const queryOptions = session ? { session } : undefined;
+
+  // 1. Tải các scenario versions
+  const scenarioObjectIds = scenarioIds.map((id) => new ObjectId(id));
+  const scenarioVersions =
+    scenarioObjectIds.length > 0
+      ? await db
+          .collection('content_versions')
+          .find(
+            { _id: { $in: scenarioObjectIds }, kind: 'scenario' },
+            queryOptions,
+          )
+          .toArray()
+      : [];
+
+  const foundScenarioMap = new Map(
+    scenarioVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
+  );
+
+  for (let i = 0; i < rawScenarioIds.length; i++) {
+    const rawId = String(rawScenarioIds[i] ?? '');
+    if (!foundScenarioMap.has(rawId.toLowerCase())) {
+      errors.push({
+        path: `draftPayload.scenarioVersionIds[${i}]`,
+        code: 'INVALID_REFERENCE',
+        message: `Tham chiếu tới phiên bản scenario '${rawId}' không tồn tại hoặc sai loại học liệu.`,
+      });
+    }
+  }
+
+  // Nhóm scenario versions theo contentId để kiểm tra không có 2 revision của cùng 1 scenario
+  const scenarioByContentId = new Map();
+  for (const v of scenarioVersions) {
+    const cId = v.contentId.toHexString();
+    if (!scenarioByContentId.has(cId)) {
+      scenarioByContentId.set(cId, []);
+    }
+    scenarioByContentId.get(cId).push(v._id.toHexString());
+  }
+  for (const [cId, vIds] of scenarioByContentId.entries()) {
+    const distinctVIds = new Set(vIds);
+    if (distinctVIds.size > 1) {
+      errors.push({
+        path: 'draftPayload.scenarioVersionIds',
+        code: 'DUPLICATE_CONTENT_REVISION',
+        message: `Phát hiện nhiều phiên bản khác nhau của cùng một tình huống (contentId '${cId}') trong manifest bộ.`,
+      });
+    }
+  }
+
+  // 2. Thu thập và hợp nhất knowledgeVersionIds từ scenarios + direct deck refs
+  const directKnowledgeIds = (
+    Array.isArray(draftPayload.knowledgeVersionIds)
+      ? draftPayload.knowledgeVersionIds
+      : []
+  )
+    .filter(isValidObjectId)
+    .map((id) => (id instanceof ObjectId ? id.toHexString() : String(id)));
+  const scenarioKnowledgeIds = [];
+  for (const sv of scenarioVersions) {
+    const kIds = sv.payload?.knowledgeVersionIds;
+    if (Array.isArray(kIds)) {
+      for (const kId of kIds) {
+        if (isValidObjectId(kId)) {
+          scenarioKnowledgeIds.push(
+            kId instanceof ObjectId ? kId.toHexString() : String(kId),
+          );
+        }
+      }
+    }
+  }
+  const allKnowledgeIds = [
+    ...directKnowledgeIds.map(String),
+    ...scenarioKnowledgeIds,
+  ];
+  const distinctKnowledgeIdSet = new Set(
+    allKnowledgeIds.map((id) => id.toLowerCase()),
+  );
+  const distinctKnowledgeObjectIds = [...distinctKnowledgeIdSet].map(
+    (id) => new ObjectId(id),
+  );
+
+  // 3. Thu thập và hợp nhất questionVersionIds từ scenarios + direct deck refs
+  const directQuestionIds = (
+    Array.isArray(draftPayload.questionVersionIds)
+      ? draftPayload.questionVersionIds
+      : []
+  )
+    .filter(isValidObjectId)
+    .map((id) => (id instanceof ObjectId ? id.toHexString() : String(id)));
+  const scenarioQuestionIds = [];
+  for (const sv of scenarioVersions) {
+    const qIds = sv.payload?.questionVersionIds;
+    if (Array.isArray(qIds)) {
+      for (const qId of qIds) {
+        if (isValidObjectId(qId)) {
+          scenarioQuestionIds.push(
+            qId instanceof ObjectId ? qId.toHexString() : String(qId),
+          );
+        }
+      }
+    }
+  }
+  const allQuestionIds = [
+    ...directQuestionIds.map(String),
+    ...scenarioQuestionIds,
+  ];
+  const distinctQuestionIdSet = new Set(
+    allQuestionIds.map((id) => id.toLowerCase()),
+  );
+  const distinctQuestionObjectIds = [...distinctQuestionIdSet].map(
+    (id) => new ObjectId(id),
+  );
+
+  // 4. Tải và kiểm tra các knowledge versions
+  const knowledgeVersions =
+    distinctKnowledgeObjectIds.length > 0
+      ? await db
+          .collection('content_versions')
+          .find(
+            { _id: { $in: distinctKnowledgeObjectIds }, kind: 'knowledge' },
+            queryOptions,
+          )
+          .toArray()
+      : [];
+
+  const foundKnowledgeMap = new Map(
+    knowledgeVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
+  );
+
+  // Đối chiếu tham chiếu trực tiếp ở deck
+  for (let i = 0; i < directKnowledgeIds.length; i++) {
+    const id = String(directKnowledgeIds[i]);
+    if (!foundKnowledgeMap.has(id.toLowerCase())) {
+      errors.push({
+        path: `draftPayload.knowledgeVersionIds[${i}]`,
+        code: 'INVALID_REFERENCE',
+        message: `Tham chiếu tới phiên bản knowledge '${id}' không tồn tại hoặc sai loại học liệu.`,
+      });
+    }
+  }
+
+  // Đối chiếu toàn bộ tham chiếu kiến thức bắt nguồn từ các scenario con
+  for (const sv of scenarioVersions) {
+    const svId = sv._id.toHexString();
+    const kIds = Array.isArray(sv.payload?.knowledgeVersionIds)
+      ? sv.payload.knowledgeVersionIds
+      : [];
+    for (let j = 0; j < kIds.length; j++) {
+      const rawKid = kIds[j];
+      const kIdStr = (
+        rawKid instanceof ObjectId ? rawKid.toHexString() : String(rawKid ?? '')
+      ).trim();
+      if (
+        !isValidObjectId(rawKid) ||
+        !foundKnowledgeMap.has(kIdStr.toLowerCase())
+      ) {
+        errors.push({
+          path: `scenario[${svId}].knowledgeVersionIds[${j}]`,
+          code: 'INVALID_REFERENCE',
+          message: `Tình huống nguồn '${svId}' tham chiếu tới phiên bản knowledge '${kIdStr}' không tồn tại hoặc sai loại học liệu.`,
+        });
+      }
+    }
+  }
+
+  const knowledgeByContentId = new Map();
+  for (const v of knowledgeVersions) {
+    const cId = v.contentId.toHexString();
+    if (!knowledgeByContentId.has(cId)) {
+      knowledgeByContentId.set(cId, []);
+    }
+    knowledgeByContentId.get(cId).push(v._id.toHexString());
+  }
+  for (const [cId, vIds] of knowledgeByContentId.entries()) {
+    const distinctVIds = new Set(vIds);
+    if (distinctVIds.size > 1) {
+      errors.push({
+        path: 'draftPayload.knowledgeVersionIds',
+        code: 'DUPLICATE_CONTENT_REVISION',
+        message: `Phát hiện nhiều phiên bản khác nhau của cùng một kiến thức (contentId '${cId}') trong manifest bộ.`,
+      });
+    }
+  }
+
+  // 5. Tải và kiểm tra các question versions
+  const questionVersions =
+    distinctQuestionObjectIds.length > 0
+      ? await db
+          .collection('content_versions')
+          .find(
+            { _id: { $in: distinctQuestionObjectIds }, kind: 'question' },
+            queryOptions,
+          )
+          .toArray()
+      : [];
+
+  const foundQuestionMap = new Map(
+    questionVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
+  );
+
+  // Đối chiếu tham chiếu trực tiếp ở deck
+  for (let i = 0; i < directQuestionIds.length; i++) {
+    const id = String(directQuestionIds[i]);
+    if (!foundQuestionMap.has(id.toLowerCase())) {
+      errors.push({
+        path: `draftPayload.questionVersionIds[${i}]`,
+        code: 'INVALID_REFERENCE',
+        message: `Tham chiếu tới phiên bản question '${id}' không tồn tại hoặc sai loại học liệu.`,
+      });
+    }
+  }
+
+  // Đối chiếu toàn bộ tham chiếu câu hỏi bắt nguồn từ các scenario con
+  for (const sv of scenarioVersions) {
+    const svId = sv._id.toHexString();
+    const qIds = Array.isArray(sv.payload?.questionVersionIds)
+      ? sv.payload.questionVersionIds
+      : [];
+    for (let j = 0; j < qIds.length; j++) {
+      const rawQid = qIds[j];
+      const qIdStr = (
+        rawQid instanceof ObjectId ? rawQid.toHexString() : String(rawQid ?? '')
+      ).trim();
+      if (
+        !isValidObjectId(rawQid) ||
+        !foundQuestionMap.has(qIdStr.toLowerCase())
+      ) {
+        errors.push({
+          path: `scenario[${svId}].questionVersionIds[${j}]`,
+          code: 'INVALID_REFERENCE',
+          message: `Tình huống nguồn '${svId}' tham chiếu tới phiên bản question '${qIdStr}' không tồn tại hoặc sai loại học liệu.`,
+        });
+      }
+    }
+  }
+
+  const questionByContentId = new Map();
+  for (const v of questionVersions) {
+    const cId = v.contentId.toHexString();
+    if (!questionByContentId.has(cId)) {
+      questionByContentId.set(cId, []);
+    }
+    questionByContentId.get(cId).push(v._id.toHexString());
+  }
+  for (const [cId, vIds] of questionByContentId.entries()) {
+    const distinctVIds = new Set(vIds);
+    if (distinctVIds.size > 1) {
+      errors.push({
+        path: 'draftPayload.questionVersionIds',
+        code: 'DUPLICATE_CONTENT_REVISION',
+        message: `Phát hiện nhiều phiên bản khác nhau của cùng một câu hỏi (contentId '${cId}') trong manifest bộ.`,
+      });
+    }
+  }
+
+  const distinctScenarioObjectIds = [];
+  const seenScenario = new Set();
+  for (const id of scenarioIds) {
+    const lower = id.toLowerCase();
+    if (!seenScenario.has(lower)) {
+      seenScenario.add(lower);
+      distinctScenarioObjectIds.push(new ObjectId(lower));
+    }
+  }
+
+  const mergedPayload = {
+    ...draftPayload,
+    title:
+      typeof draftPayload.title === 'string'
+        ? draftPayload.title.trim()
+        : draftPayload.title,
+    topicKey:
+      typeof draftPayload.topicKey === 'string'
+        ? draftPayload.topicKey.trim()
+        : draftPayload.topicKey,
+    level: draftPayload.level,
+    description:
+      typeof draftPayload.description === 'string'
+        ? draftPayload.description.trim()
+        : draftPayload.description,
+    scenarioVersionIds: distinctScenarioObjectIds,
+    knowledgeVersionIds: distinctKnowledgeObjectIds,
+    questionVersionIds: distinctQuestionObjectIds,
+  };
+
+  return { errors, mergedPayload };
+}
+
+/**
+ * Chuẩn hóa và loại bỏ trùng lặp mảng ID tham chiếu (không phân biệt hoa/thường hex).
+ * @param {unknown} ids
+ * @returns {import('mongoose').Types.ObjectId[]}
+ */
+function normalizeObjectIdArray(ids) {
+  if (!Array.isArray(ids)) return [];
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @type {import('mongoose').Types.ObjectId[]} */
+  const result = [];
+  for (const item of ids) {
+    if (item === null || item === undefined) continue;
+    const str = (item instanceof ObjectId ? item.toHexString() : String(item))
+      .trim()
+      .toLowerCase();
+    if (isValidObjectId(str) && !seen.has(str)) {
+      seen.add(str);
+      result.push(new ObjectId(str));
+    }
+  }
+  return result;
+}
+
+/**
+ * Chuẩn hóa payload xuất bản, loại trùng các mảng ID tham chiếu và convert sang ObjectId (06 §7.2, TX-11).
+ *
+ * @param {string} kind
+ * @param {Record<string, any>} draftPayload
+ * @returns {Record<string, any>}
+ */
+export function normalizePublishPayload(kind, draftPayload) {
+  const normalized = { ...draftPayload };
+
+  if (kind === 'question') {
+    normalized.knowledgeVersionIds = normalizeObjectIdArray(
+      normalized.knowledgeVersionIds,
+    );
+  } else if (kind === 'scenario') {
+    normalized.knowledgeVersionIds = normalizeObjectIdArray(
+      normalized.knowledgeVersionIds,
+    );
+    normalized.questionVersionIds = normalizeObjectIdArray(
+      normalized.questionVersionIds,
+    );
+  } else if (kind === 'deck') {
+    normalized.scenarioVersionIds = normalizeObjectIdArray(
+      normalized.scenarioVersionIds,
+    );
+    normalized.knowledgeVersionIds = normalizeObjectIdArray(
+      normalized.knowledgeVersionIds,
+    );
+    normalized.questionVersionIds = normalizeObjectIdArray(
+      normalized.questionVersionIds,
+    );
+  }
+
+  return normalized;
 }
