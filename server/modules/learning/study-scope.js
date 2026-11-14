@@ -128,6 +128,30 @@ function knowledgeCard(knowledge, position) {
   };
 }
 
+/** @param {Db} db @param {Identity} identity @param {import('mongoose').mongo.WithId<import('mongoose').mongo.Document>} item */
+async function findReadableHiddenVersion(db, identity, item) {
+  const versions = db
+    .collection('content_versions')
+    .find({ contentId: item._id, kind: 'knowledge' })
+    .sort({ revision: -1 });
+  for await (const version of versions) {
+    try {
+      await assertKnowledgeSourceAccess(db, {
+        identity,
+        knowledgeId: item._id,
+        knowledgeVersionId: version._id,
+        parentItem: item,
+        allowAdmin: false,
+      });
+      return version;
+    } catch (error) {
+      if (!(error instanceof AppError && error.code === 'FORBIDDEN'))
+        throw error;
+    }
+  }
+  return null;
+}
+
 /**
  * @param {Db} db
  * @param {Identity} identity
@@ -147,7 +171,9 @@ async function readKnowledgeCards(db, identity, knowledgeIds, positions) {
     .toArray();
   const versions = await findContentVersionsByIds(
     db,
-    items.map((item) => item.publishedVersionId),
+    items
+      .filter((item) => item.status === 'published')
+      .map((item) => item.publishedVersionId),
   );
   const byVersionId = new Map(
     versions.map((version) => [String(version._id), version]),
@@ -155,24 +181,12 @@ async function readKnowledgeCards(db, identity, knowledgeIds, positions) {
   /** @type {StudyCard[]} */
   const cards = [];
   for (const item of items) {
-    const versionId = String(item.publishedVersionId);
-    const version = byVersionId.get(versionId);
+    const version =
+      item.status === 'hidden'
+        ? await findReadableHiddenVersion(db, identity, item)
+        : byVersionId.get(String(item.publishedVersionId));
     if (version?.kind !== 'knowledge' || !item._id.equals(version.contentId))
       continue;
-    if (item.status === 'hidden') {
-      try {
-        await assertKnowledgeSourceAccess(db, {
-          identity,
-          knowledgeId: item._id,
-          knowledgeVersionId: version._id,
-          parentItem: item,
-          allowAdmin: false,
-        });
-      } catch (error) {
-        if (error instanceof AppError && error.code === 'FORBIDDEN') continue;
-        throw error;
-      }
-    }
     const position =
       positions.get(`knowledge:${item._id}`) ??
       positionFor(item._id, item.createdAt);

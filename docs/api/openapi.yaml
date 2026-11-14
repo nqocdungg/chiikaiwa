@@ -764,6 +764,7 @@ paths:
         Chế độ due gồm thẻ mới và thẻ đến hạn tại giờ server. Sắp xếp theo ngày tạo mục kiến thức
         (topic), ngày lưu (saved) hoặc ngày thêm vào bộ (personalDeck), sau đó theo ID của bản ghi
         tương ứng, đều giảm dần. Cursor chỉ dùng lại cho cùng danh tính, phạm vi và chế độ.
+        Với học liệu ẩn, trả bản xuất bản mới nhất mà người học có nguồn hợp lệ.
         Hai thao tác study/cards không cần Idempotency-Key.
       security: &studySecurity
         - sessionCookie: []

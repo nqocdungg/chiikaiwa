@@ -407,6 +407,27 @@ describe('BE-014 HTTP', () => {
     );
     assertSuccessEnvelope(opened);
     expect(opened.body.data.ticketExpiresAt).toBe(expiresAt.toISOString());
+    await db
+      .collection('content_items')
+      .updateOne(
+        { _id: CONTENT_FIXTURES.knowledgeVersion.contentId },
+        { $set: { status: 'hidden' } },
+      );
+    const hidden = await studyRequest(
+      'reveal',
+      { scope: topic, cardKey: knowledgeKey },
+      cookie,
+    );
+    assertSuccessEnvelope(hidden);
+    expect(
+      verifyReviewTicket(
+        hidden.body.data.reviewTicket,
+        guestKey,
+        new Date(hidden.body.meta.serverTime),
+      ),
+    ).toMatchObject({
+      contentVersionId: FIXTURE_VERSION_IDS.knowledgeAVersion,
+    });
     const wrong = { type: 'topic', topicVersionId: String(new ObjectId()) };
     expect(
       (await studyRequest('query', { scope: wrong, mode: 'all' }, cookie))
@@ -477,6 +498,91 @@ describe('BE-014 HTTP', () => {
         )
       ).status,
     ).toBe(200);
+  });
+
+  it('reveals the newest permitted hidden revision and keeps the existing progress', async () => {
+    const cookie = account();
+    const original = CONTENT_FIXTURES.knowledgeVersion;
+    const newestId = new ObjectId();
+    const saved = { type: 'saved' };
+    const revealBody = { scope: saved, cardKey: knowledgeKey };
+    await db.collection('content_versions').insertOne({
+      ...original,
+      _id: newestId,
+      revision: 3,
+      payload: { ...original.payload, meaning: 'Nghĩa chưa được cấp quyền' },
+    });
+    await db.collection('content_items').updateOne(
+      { _id: original.contentId },
+      {
+        $set: {
+          status: 'hidden',
+          latestRevision: 3,
+          publishedVersionId: newestId,
+        },
+      },
+    );
+    await db.collection('saved_sources').insertMany(
+      [
+        {
+          knowledgeVersionId: original._id,
+          ownerKey: learner,
+          contextKey: 'first',
+        },
+        {
+          knowledgeVersionId: latestId,
+          ownerKey: learner,
+          contextKey: 'second',
+        },
+        {
+          knowledgeVersionId: newestId,
+          ownerKey: `user:${FIXTURE_USER_IDS.learnerB}`,
+          contextKey: 'third',
+        },
+      ].map((source) => ({ ...source, knowledgeId: original.contentId })),
+    );
+    await seedProgress(knowledgeKey, now.toISOString(), learner);
+    const storedBefore = await db
+      .collection('card_progress')
+      .findOne({ ownerKey: learner, cardKey: knowledgeKey });
+
+    const query = await studyRequest(
+      'query',
+      { scope: saved, mode: 'all' },
+      cookie,
+    );
+    assertSuccessEnvelope(query);
+    expect(query.body.data.items).toMatchObject([
+      {
+        cardKey: knowledgeKey,
+        contentVersionId: String(latestId),
+        progress: { version: 3, dueAt: now.toISOString() },
+      },
+    ]);
+    const reveal = await studyRequest('reveal', revealBody, cookie);
+    assertSuccessEnvelope(reveal);
+    expect(reveal.body.data.back).toContain('Xin chào từ bản mới');
+    expect(reveal.body.data.back).not.toContain('Nghĩa chưa được cấp quyền');
+    expect(reveal.body.data.progress).toEqual(
+      query.body.data.items[0].progress,
+    );
+    expect(
+      verifyReviewTicket(
+        reveal.body.data.reviewTicket,
+        learner,
+        new Date(reveal.body.meta.serverTime),
+      ),
+    ).toMatchObject({
+      contentVersionId: String(latestId),
+      cardKey: knowledgeKey,
+      progressVersion: 3,
+    });
+    expect(
+      await db
+        .collection('card_progress')
+        .findOne({ ownerKey: learner, cardKey: knowledgeKey }),
+    ).toEqual(storedBefore);
+    expect(await db.collection('review_logs').countDocuments()).toBe(0);
   });
 
   it('registers the config once and rejects a corrupt persisted config without granting a ticket', async () => {
