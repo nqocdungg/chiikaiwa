@@ -44,6 +44,31 @@ describe('BE-010 LiveKit signing and configuration', () => {
     expect(claims.metadata).toBeUndefined();
     expect(credential.url).toBe(config.LIVEKIT_URL);
   });
+  it('keeps expiration within the permission deadline when signing crosses a second boundary', async () => {
+    for (const [key, value] of Object.entries(config)) vi.stubEnv(key, value);
+    const now = Date.UTC(2026, 0, 1, 0, 0, 0, 999);
+    const deadline = new Date(now + 30_000);
+    vi.setSystemTime(now + 1);
+    const clock = vi.spyOn(Date, 'now').mockReturnValueOnce(now);
+    try {
+      const credential = await signMediaToken({
+        roomName: 'test-room',
+        actorKey: 'user:opaque-id',
+        expiresAt: deadline,
+      });
+      const claims = await new TokenVerifier(
+        config.LIVEKIT_API_KEY,
+        config.LIVEKIT_API_SECRET,
+      ).verify(credential.token, 0);
+      expect(claims.exp).toBe(credential.expiresAt.getTime() / 1000);
+      expect(credential.expiresAt.getTime()).toBeLessThanOrEqual(
+        deadline.getTime(),
+      );
+    } finally {
+      clock.mockRestore();
+      vi.useRealTimers();
+    }
+  });
   it.each([
     'https://media.example.test',
     'ws://media.example.test',
