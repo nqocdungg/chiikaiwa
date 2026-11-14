@@ -67,10 +67,17 @@ export function App({ skipInitialAuthCheck = false } = {}) {
     );
   }
 
+  const isFullBleedAuthRoute =
+    pathname === '/forgot-password' || pathname === '/reset-password';
+
   return (
     <AuthProvider skipInitialCheck={skipInitialAuthCheck}>
       <div className="ck-app">
-        <main className="mx-auto max-w-4xl px-6 py-12">
+        <main
+          className={
+            isFullBleedAuthRoute ? 'w-full' : 'ck-page-container py-10'
+          }
+        >
           <Routes>
             {/* SC-01: Public Landing */}
             <Route

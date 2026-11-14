@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
+import usagi from '../../assets/mascots/usagi.png';
+import { AuthLayout } from '../../components/layout/AuthLayout.jsx';
 import { Button } from '../../components/ui/controls.jsx';
+import { Input } from '../../components/ui/forms.jsx';
+import { Badge, Card } from '../../components/ui/surfaces.jsx';
 import { api } from '../../services/api-client.js';
 import { getIdentityEpoch } from '../../services/cache.js';
 import { ApiError } from '../../services/errors.js';
@@ -113,98 +117,87 @@ export function ForgotPasswordPage() {
   };
 
   return (
-    <section
-      data-screen-id="SC-02"
-      className="ck-account-page ck-account-page--narrow"
-    >
-      <div className="ck-account-topbar">
-        <Link className="ck-brand" to="/" aria-label="Chiikaiwa, trang chủ">
-          <span lang="ja">ち</span>chiikaiwa
-        </Link>
-      </div>
+    <section data-screen-id="SC-02">
+      <AuthLayout mascotSrc={usagi} mascotAlt="Mascot thỏ Chiikaiwa">
+        <div className="ck-account-page">
+          <header className="ck-account-header">
+            <div>
+              <Badge tone="accent">Khôi phục mật khẩu</Badge>
+              <h1 className="mt-2 text-2xl font-semibold text-ink">
+                Quên mật khẩu
+              </h1>
+              <p className="mt-1 text-muted">
+                Nhập email đăng ký để nhận liên kết đặt lại mật khẩu dùng một
+                lần (hiệu lực 15 phút).
+              </p>
+            </div>
+          </header>
 
-      <header className="ck-account-header">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Quên mật khẩu</h1>
-          <p className="mt-1 text-muted">
-            Nhập email đăng ký để nhận liên kết đặt lại mật khẩu dùng một lần
-            (hiệu lực 15 phút).
-          </p>
-        </div>
-      </header>
-
-      <div className="ck-card">
-        {neutralMessage ? (
-          <div className="ck-alert ck-alert--success mb-4" role="status">
-            <strong className="block">Đã tiếp nhận yêu cầu</strong>
-            <p className="mt-1">{neutralMessage}</p>
-            <p className="mt-1 text-xs">
-              Liên kết trong thư chỉ sử dụng được một lần trong vòng 15 phút.
-              Chức năng này chỉ đặt lại mật khẩu qua email đăng ký, không mở
-              khóa tài khoản hoặc khôi phục tài khoản đã mất quyền truy cập
-              email.
-            </p>
-          </div>
-        ) : null}
-
-        {serviceError ? (
-          <div className="ck-alert ck-alert--error mb-4" role="alert">
-            <p>{serviceError}</p>
-          </div>
-        ) : null}
-
-        <form className="ck-form" onSubmit={handleSubmit} noValidate>
-          <div className="ck-field">
-            <label htmlFor="reset-request-email">Email đăng ký *</label>
-            <input
-              id="reset-request-email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setFieldError(null);
-                setServiceError(null);
-              }}
-              aria-invalid={Boolean(fieldError)}
-              aria-describedby={
-                fieldError
-                  ? 'reset-request-email-error'
-                  : 'reset-request-email-hint'
-              }
-            />
-            <small id="reset-request-email-hint">
-              Hệ thống sẽ gửi liên kết đặt lại mật khẩu nếu địa chỉ email tương
-              ứng với tài khoản đang hoạt động.
-            </small>
-            {fieldError ? (
-              <span
-                id="reset-request-email-error"
-                className="ck-field-error"
-                role="alert"
-              >
-                {fieldError}
-              </span>
+          <Card>
+            {neutralMessage ? (
+              <div className="ck-alert ck-alert--success mb-4" role="status">
+                <strong className="block">Đã tiếp nhận yêu cầu</strong>
+                <p className="mt-1">{neutralMessage}</p>
+                <p className="mt-1 text-xs">
+                  Liên kết trong thư chỉ sử dụng được một lần trong vòng 15
+                  phút. Chức năng này chỉ đặt lại mật khẩu qua email đăng ký,
+                  không mở khóa tài khoản hoặc khôi phục tài khoản đã mất quyền
+                  truy cập email.
+                </p>
+              </div>
             ) : null}
-          </div>
 
-          <div className="ck-actions mt-2">
-            <Button type="submit" variant="primary" disabled={isSubmitting}>
-              {isSubmitting
-                ? 'Đang gửi yêu cầu...'
-                : 'Gửi liên kết đặt lại mật khẩu'}
-            </Button>
-            <Link to="/login" className="ck-button ck-button--secondary">
-              Quay lại đăng nhập
-            </Link>
-            <Link to="/" className="ck-text-button">
-              Về trang chủ
-            </Link>
-          </div>
-        </form>
-      </div>
+            {serviceError ? (
+              <div className="ck-alert ck-alert--error mb-4" role="alert">
+                <p>{serviceError}</p>
+              </div>
+            ) : null}
+
+            <form className="ck-form" onSubmit={handleSubmit} noValidate>
+              <Input
+                id="reset-request-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                label="Email đăng ký"
+                required
+                placeholder="ban@example.com"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setFieldError(null);
+                  setServiceError(null);
+                }}
+                disabled={isSubmitting}
+                helperText="Hệ thống sẽ gửi liên kết đặt lại mật khẩu nếu địa chỉ email tương ứng với tài khoản đang hoạt động."
+                error={fieldError ?? undefined}
+              />
+
+              <div className="ck-actions mt-2">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  fullWidth
+                  loading={isSubmitting}
+                >
+                  {isSubmitting
+                    ? 'Đang gửi yêu cầu...'
+                    : 'Gửi liên kết đặt lại mật khẩu'}
+                </Button>
+                <Link
+                  to="/login"
+                  className="ck-button ck-button--secondary ck-button--full"
+                >
+                  Quay lại đăng nhập
+                </Link>
+                <Link to="/" className="ck-text-button">
+                  Về trang chủ
+                </Link>
+              </div>
+            </form>
+          </Card>
+        </div>
+      </AuthLayout>
     </section>
   );
 }

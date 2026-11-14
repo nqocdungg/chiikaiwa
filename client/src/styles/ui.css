@@ -1055,16 +1055,8 @@
 .ck-account-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.95fr);
-  gap: 22px;
+  gap: 24px;
   align-items: start;
-}
-.ck-account-page .ck-card {
-  min-width: 0;
-  padding: 26px 28px;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 5px 24px #40312f08;
 }
 .ck-account-page .ck-card__header {
   margin-bottom: 18px;
@@ -1078,50 +1070,21 @@
   gap: 14px;
   padding: 18px 24px;
 }
-.ck-account-page .ck-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--sage);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
-}
 .ck-account-page .ck-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
 }
 .ck-account-page :is(.ck-form-grid, .ck-form-row) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px 20px;
 }
-.ck-account-page .ck-field {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.ck-account-page :is(.ck-field > label, .ck-fieldset > legend, .ck-legend) {
-  font-size: 13px;
-  font-weight: 700;
+.ck-account-page :is(.ck-fieldset > legend, .ck-legend) {
+  font-size: var(--font-size-label);
+  font-weight: 600;
+  line-height: var(--line-height-label);
   color: var(--ink);
-}
-.ck-account-page .ck-field :is(input, select) {
-  width: 100%;
-  min-height: 42px;
-  padding: 9px 13px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--paper);
-  color: var(--ink);
-  font-size: 14px;
-}
-.ck-account-page .ck-field :is(input, select)[aria-invalid='true'] {
-  border-color: #963c45;
-  background: #fff9f9;
 }
 .ck-account-page .ck-fieldset {
   margin: 0;
@@ -1131,22 +1094,26 @@
 .ck-account-page .ck-choice-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 9px;
+  gap: 10px;
   margin-top: 8px;
 }
 .ck-account-page :is(.ck-choice-pill, .ck-choice-chip) {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 38px;
-  padding: 7px 13px;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--bg);
-  font-size: 13px;
+  border-radius: var(--radius-input);
+  background: var(--color-surface-raised);
+  font-size: var(--font-size-label);
   font-weight: 600;
   cursor: pointer;
   user-select: none;
+  transition:
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 .ck-account-page :is(.ck-choice-pill, .ck-choice-chip):hover {
   background: var(--pink);
@@ -1166,33 +1133,33 @@
   margin: 0;
 }
 .ck-account-page .ck-field-error {
-  color: #963c45;
-  font-size: 12px;
+  color: var(--color-danger);
+  font-size: var(--font-size-caption);
   font-weight: 600;
 }
 :is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert {
   padding: 14px 18px;
-  border-radius: 10px;
+  border-radius: var(--radius-input);
   border: 1px solid var(--line);
-  font-size: 13px;
+  font-size: var(--font-size-label);
 }
 .ck-account-page .ck-alert__body {
   margin-bottom: 10px;
 }
 :is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert--error {
-  background: #fbe9e9;
-  border-color: #e4b4b9;
-  color: #7c2832;
+  background: var(--color-danger-bg);
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
+  color: var(--color-danger);
 }
 :is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert--success {
-  background: var(--sage);
-  border-color: #c5d4b1;
-  color: #2f4733;
+  background: var(--color-success-bg);
+  border-color: color-mix(in srgb, var(--color-success) 35%, transparent);
+  color: var(--color-success);
 }
 :is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert--warning {
-  background: #faedcf;
-  border-color: #e2c891;
-  color: #694b1b;
+  background: var(--color-warning-bg);
+  border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
+  color: var(--color-warning);
 }
 :is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert--info {
   background: var(--bg);

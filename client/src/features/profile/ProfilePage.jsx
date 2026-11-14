@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
+import logo from '../../assets/brand/chii-logo.svg';
 import { Button } from '../../components/ui/controls.jsx';
+import { FormField, Input, PasswordInput } from '../../components/ui/forms.jsx';
+import { Avatar, Badge, Card } from '../../components/ui/surfaces.jsx';
 import { api, createIdempotencyKey } from '../../services/api-client.js';
 import { getIdentityEpoch, setPrivateCache } from '../../services/cache.js';
 import { ApiError } from '../../services/errors.js';
@@ -570,21 +573,19 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
   const interestsError = profileFieldErrors['profile.interests'];
 
   const isAdmin = baseUser.role === 'admin' || role === 'admin';
-  const avatarInitial = (
-    draft.displayName.trim()[0] ||
-    baseUser.displayName?.[0] ||
-    'U'
-  ).toUpperCase();
+  const avatarDisplayName =
+    draft.displayName.trim() || baseUser.displayName || 'U';
 
   return (
     <section data-screen-id="SC-04" className="ck-account-page">
       <div className="ck-account-topbar">
         <Link
-          className="ck-brand"
+          className="ck-brand-lockup"
           to={isAdmin ? '/admin' : '/home'}
           aria-label="Chiikaiwa, trang chính"
         >
-          <span lang="ja">ち</span>chiikaiwa
+          <img src={logo} alt="" />
+          <span>Chiikaiwa</span>
         </Link>
         <nav aria-label="Điều hướng tài khoản">
           {!isAdmin ? (
@@ -603,9 +604,7 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
 
       <header className="ck-account-header">
         <div className="ck-account-identity">
-          <span className="ck-avatar" aria-hidden="true">
-            {avatarInitial}
-          </span>
+          <Avatar name={avatarDisplayName} size={48} />
           <div>
             <h1 className="text-2xl font-semibold text-ink">Hồ sơ cá nhân</h1>
             <p className="mt-1 text-muted">
@@ -615,11 +614,11 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
           </div>
         </div>
         <div className="ck-account-meta">
-          <span className="ck-badge">{baseUser.email}</span>
-          <span className="ck-badge">
+          <Badge>{baseUser.email}</Badge>
+          <Badge tone="accent">
             Vai trò: {isAdmin ? 'Quản trị' : 'Học viên'}
-          </span>
-          <span className="ck-badge">Phiên bản hồ sơ: v{baseUser.version}</span>
+          </Badge>
+          <Badge>Phiên bản hồ sơ: v{baseUser.version}</Badge>
         </div>
       </header>
 
@@ -641,7 +640,7 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
 
       <div className="ck-account-grid">
         {/* Card 1: Profile Form */}
-        <article className="ck-card" aria-labelledby="profile-section-heading">
+        <Card className="ck-account-card">
           <div className="ck-card__header">
             <h2
               id="profile-section-heading"
@@ -688,7 +687,7 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                   <Button
                     variant="primary"
                     onClick={() => handleResolveConflict(true)}
-                    disabled={isSyncingConflict}
+                    loading={isSyncingConflict}
                   >
                     {isSyncingConflict
                       ? 'Đang đồng bộ...'
@@ -712,43 +711,20 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
               disabled={profileSubmitting || isSyncingConflict}
             >
               {/* Display Name */}
-              <div className="ck-field">
-                <label htmlFor="profile-display-name">Tên hiển thị *</label>
-                <input
-                  id="profile-display-name"
-                  name="displayName"
-                  type="text"
-                  required
-                  maxLength={120}
-                  value={draft.displayName}
-                  onChange={(e) =>
-                    updateDraftField(
-                      'displayName',
-                      e.target.value,
-                      'displayName',
-                    )
-                  }
-                  aria-invalid={Boolean(displayNameError)}
-                  aria-describedby={
-                    displayNameError
-                      ? 'profile-display-name-error'
-                      : 'profile-display-name-hint'
-                  }
-                />
-                <small id="profile-display-name-hint">
-                  Từ 1 đến 100 ký tự (khoảng trắng đầu/cuối sẽ tự động được cắt
-                  gọn).
-                </small>
-                {displayNameError ? (
-                  <span
-                    id="profile-display-name-error"
-                    className="ck-field-error"
-                    role="alert"
-                  >
-                    {displayNameError}
-                  </span>
-                ) : null}
-              </div>
+              <Input
+                id="profile-display-name"
+                name="displayName"
+                type="text"
+                label="Tên hiển thị"
+                required
+                maxLength={120}
+                value={draft.displayName}
+                onChange={(e) =>
+                  updateDraftField('displayName', e.target.value, 'displayName')
+                }
+                helperText="Từ 1 đến 100 ký tự (khoảng trắng đầu/cuối sẽ tự động được cắt gọn)."
+                error={displayNameError}
+              />
 
               {/* Avatar preset */}
               <fieldset className="ck-fieldset">
@@ -786,19 +762,26 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                   })}
                 </div>
                 {avatarKeyError ? (
-                  <span className="ck-field-error" role="alert">
+                  <p
+                    className="ck-field__message ck-field__message--error"
+                    role="alert"
+                  >
                     {avatarKeyError}
-                  </span>
+                  </p>
                 ) : null}
               </fieldset>
 
               {/* Optional select fields */}
               <div className="ck-form-row">
-                <div className="ck-field">
-                  <label htmlFor="profile-level">Trình độ tiếng Nhật</label>
+                <FormField
+                  label="Trình độ tiếng Nhật"
+                  htmlFor="profile-level"
+                  error={levelError}
+                >
                   <select
                     id="profile-level"
                     name="level"
+                    className="ck-input"
                     value={draft.level}
                     onChange={(e) =>
                       updateDraftField('level', e.target.value, 'profile.level')
@@ -817,18 +800,17 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                       </option>
                     ))}
                   </select>
-                  {levelError ? (
-                    <span className="ck-field-error" role="alert">
-                      {levelError}
-                    </span>
-                  ) : null}
-                </div>
+                </FormField>
 
-                <div className="ck-field">
-                  <label htmlFor="profile-goal">Mục tiêu học</label>
+                <FormField
+                  label="Mục tiêu học"
+                  htmlFor="profile-goal"
+                  error={goalError}
+                >
                   <select
                     id="profile-goal"
                     name="goal"
+                    className="ck-input"
                     value={draft.goal}
                     onChange={(e) =>
                       updateDraftField('goal', e.target.value, 'profile.goal')
@@ -847,20 +829,19 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                       </option>
                     ))}
                   </select>
-                  {goalError ? (
-                    <span className="ck-field-error" role="alert">
-                      {goalError}
-                    </span>
-                  ) : null}
-                </div>
+                </FormField>
               </div>
 
               <div className="ck-form-row">
-                <div className="ck-field">
-                  <label htmlFor="profile-native-language">Tiếng mẹ đẻ</label>
+                <FormField
+                  label="Tiếng mẹ đẻ"
+                  htmlFor="profile-native-language"
+                  error={nativeLangError}
+                >
                   <select
                     id="profile-native-language"
                     name="nativeLanguageCode"
+                    className="ck-input"
                     value={draft.nativeLanguageCode}
                     onChange={(e) =>
                       updateDraftField(
@@ -887,20 +868,17 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                       </option>
                     ))}
                   </select>
-                  {nativeLangError ? (
-                    <span className="ck-field-error" role="alert">
-                      {nativeLangError}
-                    </span>
-                  ) : null}
-                </div>
+                </FormField>
 
-                <div className="ck-field">
-                  <label htmlFor="profile-country">
-                    Quốc gia đang sinh sống
-                  </label>
+                <FormField
+                  label="Quốc gia đang sinh sống"
+                  htmlFor="profile-country"
+                  error={countryError}
+                >
                   <select
                     id="profile-country"
                     name="countryCode"
+                    className="ck-input"
                     value={draft.countryCode}
                     onChange={(e) =>
                       updateDraftField(
@@ -927,20 +905,19 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                       </option>
                     ))}
                   </select>
-                  {countryError ? (
-                    <span className="ck-field-error" role="alert">
-                      {countryError}
-                    </span>
-                  ) : null}
-                </div>
+                </FormField>
               </div>
 
               <div className="ck-form-row">
-                <div className="ck-field">
-                  <label htmlFor="profile-age-group">Nhóm tuổi</label>
+                <FormField
+                  label="Nhóm tuổi"
+                  htmlFor="profile-age-group"
+                  error={ageGroupError}
+                >
                   <select
                     id="profile-age-group"
                     name="ageGroup"
+                    className="ck-input"
                     value={draft.ageGroup}
                     onChange={(e) =>
                       updateDraftField(
@@ -965,18 +942,17 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                       </option>
                     ))}
                   </select>
-                  {ageGroupError ? (
-                    <span className="ck-field-error" role="alert">
-                      {ageGroupError}
-                    </span>
-                  ) : null}
-                </div>
+                </FormField>
 
-                <div className="ck-field">
-                  <label htmlFor="profile-gender">Giới tính</label>
+                <FormField
+                  label="Giới tính"
+                  htmlFor="profile-gender"
+                  error={genderError}
+                >
                   <select
                     id="profile-gender"
                     name="gender"
+                    className="ck-input"
                     value={draft.gender}
                     onChange={(e) =>
                       updateDraftField(
@@ -999,12 +975,7 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                       </option>
                     ))}
                   </select>
-                  {genderError ? (
-                    <span className="ck-field-error" role="alert">
-                      {genderError}
-                    </span>
-                  ) : null}
-                </div>
+                </FormField>
               </div>
 
               {/* Interests (max 3) */}
@@ -1044,9 +1015,12 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                   })}
                 </div>
                 {interestsError ? (
-                  <span className="ck-field-error" role="alert">
+                  <p
+                    className="ck-field__message ck-field__message--error"
+                    role="alert"
+                  >
                     {interestsError}
-                  </span>
+                  </p>
                 ) : null}
               </fieldset>
 
@@ -1054,7 +1028,8 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                 <Button
                   type="submit"
                   variant="primary"
-                  disabled={profileSubmitting || isSyncingConflict}
+                  loading={profileSubmitting}
+                  disabled={isSyncingConflict}
                 >
                   {profileSubmitting ? 'Đang lưu hồ sơ...' : 'Lưu hồ sơ'}
                 </Button>
@@ -1075,13 +1050,10 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
               </div>
             </fieldset>
           </form>
-        </article>
+        </Card>
 
         {/* Card 2: Change Password Form */}
-        <article
-          className="ck-card"
-          aria-labelledby="password-change-section-heading"
-        >
+        <Card className="ck-account-card">
           <div className="ck-card__header">
             <h2
               id="password-change-section-heading"
@@ -1106,90 +1078,58 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
             onSubmit={handlePasswordChangeSubmit}
             noValidate
           >
-            <div className="ck-field">
-              <label htmlFor="profile-current-password">
-                Mật khẩu hiện tại *
-              </label>
-              <input
-                id="profile-current-password"
-                name="currentPassword"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={currentPassword}
-                onChange={(e) => {
-                  setCurrentPassword(e.target.value);
-                  setPasswordError(null);
-                  setPasswordFieldErrors((prev) => {
-                    if (!prev.currentPassword) return prev;
-                    const next = { ...prev };
-                    delete next.currentPassword;
-                    return next;
-                  });
-                }}
-                aria-invalid={Boolean(passwordFieldErrors.currentPassword)}
-                aria-describedby={
-                  passwordFieldErrors.currentPassword
-                    ? 'profile-current-password-error'
-                    : undefined
-                }
-              />
-              {passwordFieldErrors.currentPassword ? (
-                <span
-                  id="profile-current-password-error"
-                  className="ck-field-error"
-                  role="alert"
-                >
-                  {passwordFieldErrors.currentPassword}
-                </span>
-              ) : null}
-            </div>
+            <PasswordInput
+              id="profile-current-password"
+              name="currentPassword"
+              autoComplete="current-password"
+              label="Mật khẩu hiện tại"
+              required
+              showLabel="Hiện mật khẩu hiện tại"
+              hideLabel="Ẩn mật khẩu hiện tại"
+              value={currentPassword}
+              disabled={passwordSubmitting}
+              onChange={(e) => {
+                setCurrentPassword(e.target.value);
+                setPasswordError(null);
+                setPasswordFieldErrors((prev) => {
+                  if (!prev.currentPassword) return prev;
+                  const next = { ...prev };
+                  delete next.currentPassword;
+                  return next;
+                });
+              }}
+              error={passwordFieldErrors.currentPassword}
+            />
 
-            <div className="ck-field">
-              <label htmlFor="profile-new-password">Mật khẩu mới *</label>
-              <input
-                id="profile-new-password"
-                name="newPassword"
-                type="password"
-                autoComplete="new-password"
-                required
-                value={newPassword}
-                onChange={(e) => {
-                  setNewPassword(e.target.value);
-                  setPasswordError(null);
-                  setPasswordFieldErrors((prev) => {
-                    if (!prev.newPassword) return prev;
-                    const next = { ...prev };
-                    delete next.newPassword;
-                    return next;
-                  });
-                }}
-                aria-invalid={Boolean(passwordFieldErrors.newPassword)}
-                aria-describedby={
-                  passwordFieldErrors.newPassword
-                    ? 'profile-new-password-error'
-                    : 'profile-new-password-hint'
-                }
-              />
-              <small id="profile-new-password-hint">
-                Từ 8 đến 128 ký tự (giữ nguyên khoảng trắng, không tự cắt).
-              </small>
-              {passwordFieldErrors.newPassword ? (
-                <span
-                  id="profile-new-password-error"
-                  className="ck-field-error"
-                  role="alert"
-                >
-                  {passwordFieldErrors.newPassword}
-                </span>
-              ) : null}
-            </div>
+            <PasswordInput
+              id="profile-new-password"
+              name="newPassword"
+              autoComplete="new-password"
+              label="Mật khẩu mới"
+              required
+              showLabel="Hiện mật khẩu mới"
+              hideLabel="Ẩn mật khẩu mới"
+              value={newPassword}
+              disabled={passwordSubmitting}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                setPasswordError(null);
+                setPasswordFieldErrors((prev) => {
+                  if (!prev.newPassword) return prev;
+                  const next = { ...prev };
+                  delete next.newPassword;
+                  return next;
+                });
+              }}
+              helperText="Từ 8 đến 128 ký tự (giữ nguyên khoảng trắng, không tự cắt)."
+              error={passwordFieldErrors.newPassword}
+            />
 
             <div className="ck-actions mt-4">
               <Button
                 type="submit"
                 variant="primary"
-                disabled={passwordSubmitting}
+                loading={passwordSubmitting}
               >
                 {passwordSubmitting
                   ? 'Đang cập nhật mật khẩu...'
@@ -1200,7 +1140,7 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
               </Link>
             </div>
           </form>
-        </article>
+        </Card>
       </div>
     </section>
   );
