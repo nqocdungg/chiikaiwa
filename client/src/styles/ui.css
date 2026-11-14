@@ -1,32 +1,20 @@
-@font-face {
-  font-family: 'Nunito';
-  font-style: normal;
-  font-weight: 400 900;
-  font-display: swap;
-  src: url('../assets/fonts/nunito-variable.ttf') format('truetype');
-}
 /* Shared Chiikaiwa UI, scoped under .ck-app. */
 .ck-app {
-  --bg: #fbf6ed;
-  --paper: #fffdf8;
-  --ink: #40312f;
-  --muted: #75615c;
-  --accent: #863e54;
-  --pink: #f5dce1;
-  --illustration-bg: #f2dad9;
-  --line: #dfd4c9;
+  --bg: var(--color-background);
+  --paper: var(--color-surface);
+  --ink: var(--color-text);
+  --muted: var(--color-text-muted);
+  --accent: var(--color-accent);
+  --pink: var(--color-selected);
+  --illustration-bg: var(--color-brand-soft);
+  --line: var(--color-border);
   --sage: #e1e9d5;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   color: var(--ink);
   background: var(--bg);
-  font:
-    14px/1.55 'Nunito',
-    'Segoe UI',
-    'Yu Gothic',
-    Meiryo,
-    sans-serif;
+  font: var(--font-size-body) / var(--line-height-body) var(--font-body);
   -webkit-font-smoothing: antialiased;
   scrollbar-color: #b7a49a transparent;
   scrollbar-width: thin;
