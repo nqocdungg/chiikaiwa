@@ -1,32 +1,20 @@
-@font-face {
-  font-family: 'Nunito';
-  font-style: normal;
-  font-weight: 400 900;
-  font-display: swap;
-  src: url('../assets/fonts/nunito-variable.ttf') format('truetype');
-}
 /* Shared Chiikaiwa UI, scoped under .ck-app. */
 .ck-app {
-  --bg: #fbf6ed;
-  --paper: #fffdf8;
-  --ink: #40312f;
-  --muted: #75615c;
-  --accent: #863e54;
-  --pink: #f5dce1;
-  --illustration-bg: #f2dad9;
-  --line: #dfd4c9;
+  --bg: var(--color-background);
+  --paper: var(--color-surface);
+  --ink: var(--color-text);
+  --muted: var(--color-text-muted);
+  --accent: var(--color-accent);
+  --pink: var(--color-selected);
+  --illustration-bg: var(--color-brand-soft);
+  --line: var(--color-border);
   --sage: #e1e9d5;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   color: var(--ink);
   background: var(--bg);
-  font:
-    14px/1.55 'Nunito',
-    'Segoe UI',
-    'Yu Gothic',
-    Meiryo,
-    sans-serif;
+  font: var(--font-size-body) / var(--line-height-body) var(--font-body);
   -webkit-font-smoothing: antialiased;
   scrollbar-color: #b7a49a transparent;
   scrollbar-width: thin;
@@ -1285,7 +1273,7 @@
 
 /* ==========================================================================
    FE-009: Auth Screens (/login, /register) & Authenticated Session Bar
-   Scoped strictly to .ck-auth-screen and .ck-session-bar
+   Built on top of foundation.css (.ck-auth-layout, .ck-input, .ck-button)
    ========================================================================== */
 .ck-app main:has(.ck-auth-screen) {
   max-width: none;
@@ -1300,152 +1288,18 @@
 .ck-auth-screen {
   flex: 1;
   display: flex;
+  flex-direction: column;
   min-height: 100dvh;
   width: 100%;
-  background: #fdfbf7;
-  color: #3a3532;
+  background: var(--color-background);
+  color: var(--color-text);
 }
 
-.ck-auth-split {
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1.06fr) minmax(0, 0.94fr);
-  width: 100%;
-  min-height: 100dvh;
-}
-
-.ck-auth-hero {
-  position: relative;
-  min-width: 0;
+.ck-auth-card {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 48px 54px 0;
-  background: #f9eef0;
-  border-right: 1px solid rgba(58, 53, 50, 0.08);
-  overflow: hidden;
-}
-
-.ck-auth-hero__orb {
-  position: absolute;
-  top: -38px;
-  right: -28px;
-  width: 310px;
-  height: 310px;
-  border-radius: 50%;
-  background: #e1eff7;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.ck-auth-hero__top {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 88px;
-}
-
-.ck-auth-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  align-self: flex-start;
-  text-decoration: none;
-  color: #3a3532;
-}
-
-.ck-auth-brand__badge {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 38px;
-  height: 36px;
-  border-radius: 50%;
-  background: #f5d0dc;
-  border: 1.8px solid #3a3532;
-  box-shadow: 2px 2px 0 #f6e599;
-}
-
-.ck-auth-brand__ear {
-  position: absolute;
-  top: -5px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #f5d0dc;
-  border: 1.6px solid #3a3532;
-  border-bottom-color: transparent;
-}
-
-.ck-auth-brand__ear--left {
-  left: 4px;
-  transform: rotate(-18deg);
-}
-
-.ck-auth-brand__ear--right {
-  right: 4px;
-  transform: rotate(18deg);
-}
-
-.ck-auth-brand__glyph {
-  position: relative;
-  z-index: 1;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1;
-  color: #3a3532;
-}
-
-.ck-auth-brand__text {
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: #3a3532;
-}
-
-.ck-auth-hero__copy {
-  max-width: 470px;
-}
-
-.ck-auth-hero__headline {
-  font-size: clamp(28px, 2.5vw, 36px);
-  font-weight: 800;
-  line-height: 1.24;
-  letter-spacing: -0.02em;
-  color: #3a3532;
-}
-
-.ck-auth-hero__subtitle {
-  margin-top: 16px;
-  font-size: 16px;
-  line-height: 1.6;
-  color: #6b635e;
-}
-
-.ck-auth-hero__art {
-  position: relative;
-  z-index: 1;
-  margin-top: 24px;
-  display: block;
-  width: 100%;
-}
-
-.ck-auth-hero__art .ck-friends {
-  display: block;
-  width: 100%;
-  max-width: 460px;
-  height: 310px;
-  object-fit: contain;
-  object-position: bottom left;
-}
-
-.ck-auth-panel {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 40px 56px 36px;
-  background: #fdfbf7;
+  gap: var(--space-5);
+  margin-top: var(--space-5);
 }
 
 .ck-auth-panel__topbar {
@@ -1457,78 +1311,60 @@
 .ck-auth-back-link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: var(--space-2);
+  font-size: var(--font-size-label);
   font-weight: 600;
-  color: #6b635e;
+  color: var(--color-text-muted);
   text-decoration: none;
   padding: 4px 2px;
 }
 
 .ck-auth-back-link:hover {
-  color: #6b3e4e;
-}
-
-.ck-auth-panel__body {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 0;
-}
-
-.ck-auth-card {
-  width: 100%;
-  max-width: 400px;
+  color: var(--color-accent);
 }
 
 .ck-auth-card__header {
-  margin-bottom: 24px;
-}
-
-.ck-auth-eyebrow {
-  font-size: 12px;
-  font-weight: 700;
-  color: #6b3e4e;
-  margin-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
 }
 
 .ck-auth-title {
-  font-size: clamp(26px, 2.2vw, 31px);
+  font-family: var(--font-heading);
+  font-size: var(--font-size-title);
   font-weight: 800;
-  line-height: 1.22;
-  color: #3a3532;
+  line-height: var(--line-height-title);
+  color: var(--color-text);
 }
 
 .ck-auth-subtitle {
-  margin-top: 8px;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: #6b635e;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  color: var(--color-text-muted);
 }
 
 .ck-auth-alert {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 18px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.5;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
 }
 
 .ck-auth-alert--notice {
-  background: #eef6f0;
-  border: 1px solid #bcd8c4;
-  color: #2f573d;
+  background: var(--color-success-bg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
+  color: var(--color-success);
 }
 
 .ck-auth-alert--error {
-  background: #fdf0f1;
-  border: 1px solid #eabcc2;
-  color: #8f2d3b;
+  background: var(--color-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  color: var(--color-danger);
 }
 
 .ck-auth-alert__dismiss {
@@ -1543,102 +1379,20 @@
 .ck-auth-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-}
-
-.ck-auth-field {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.ck-auth-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: #3a3532;
-}
-
-.ck-auth-input {
-  width: 100%;
-  height: 46px;
-  padding: 0 15px;
-  border: 1.5px solid #e0dad1;
-  border-radius: 12px;
-  background: #ffffff;
-  color: #3a3532;
-  font-size: 14px;
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.ck-auth-input::placeholder {
-  color: #9e9690;
-}
-
-.ck-auth-input:focus {
-  border-color: #863e54;
-  box-shadow: 0 0 0 3px rgba(134, 62, 84, 0.12);
-  outline: none;
-}
-
-.ck-auth-input.is-invalid {
-  border-color: #c24b5a;
-  background: #fffafa;
-}
-
-.ck-auth-password-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.ck-auth-input--password {
-  padding-right: 44px;
-}
-
-.ck-auth-password-toggle {
-  position: absolute;
-  right: 8px;
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #6b635e;
-}
-
-.ck-auth-password-toggle:hover:not(:disabled) {
-  background: #f5eef0;
-  color: #6b3e4e;
-}
-
-.ck-auth-field-hint {
-  font-size: 11.5px;
-  color: #7c736d;
-  line-height: 1.45;
-}
-
-.ck-auth-field-error {
-  font-size: 12px;
-  font-weight: 600;
-  color: #b43646;
-  line-height: 1.45;
+  gap: var(--space-5);
 }
 
 .ck-auth-meta-row {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  margin-top: -4px;
+  margin-top: calc(var(--space-2) * -1);
 }
 
 .ck-auth-forgot-link {
-  font-size: 12px;
-  font-weight: 700;
-  color: #6b3e4e;
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  color: var(--color-accent);
   text-decoration: none;
 }
 
@@ -1647,49 +1401,19 @@
   text-underline-offset: 3px;
 }
 
-.ck-auth-submit-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 48px;
-  margin-top: 4px;
-  padding: 12px 20px;
-  border-radius: 13px;
-  border: 1.5px solid #d99fb1;
-  background: linear-gradient(180deg, #f7d9e3 0%, #eab9c9 100%);
-  box-shadow: 0 3px 0 #d59aad;
-  color: #3a3532;
-  font-size: 14.5px;
-  font-weight: 800;
-  text-decoration: none;
-  transition:
-    transform 100ms ease,
-    filter 140ms ease;
-}
-
-.ck-auth-submit-btn:hover:not(:disabled) {
-  filter: brightness(0.98);
-}
-
-.ck-auth-submit-btn:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: 0 2px 0 #d59aad;
-}
-
 .ck-auth-footer {
-  margin-top: 26px;
+  margin-top: var(--space-2);
   text-align: center;
 }
 
 .ck-auth-switch {
-  font-size: 13px;
-  color: #6b635e;
+  font-size: var(--font-size-label);
+  color: var(--color-text-muted);
 }
 
 .ck-auth-switch__link {
-  font-weight: 800;
-  color: #6b3e4e;
+  font-weight: 700;
+  color: var(--color-accent);
   text-decoration: none;
 }
 
@@ -1701,34 +1425,34 @@
 .ck-auth-success-box {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 20px;
-  border-radius: 14px;
-  background: #f5faf6;
-  border: 1.5px solid #bfd9c5;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--color-success-bg);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
 }
 
 .ck-auth-success-box__title {
-  font-size: 16px;
-  font-weight: 800;
-  color: #285136;
+  font-size: var(--font-size-body);
+  font-weight: 700;
+  color: var(--color-success);
 }
 
 .ck-auth-success-box__desc {
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: #3a3532;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  color: var(--color-text);
 }
 
 .ck-session-bar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 24px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: var(--paper);
-  border: 1px solid var(--line);
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
 }
 
 .ck-session-bar__inner {
@@ -1736,42 +1460,31 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .ck-session-bar__identity {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.ck-session-bar__badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: var(--pink);
-  color: var(--accent);
-  font-size: 11.5px;
-  font-weight: 700;
+  gap: var(--space-3);
 }
 
 .ck-session-bar__name {
-  font-size: 13.5px;
+  font-size: var(--font-size-label);
   font-weight: 700;
-  color: var(--ink);
+  color: var(--color-text);
 }
 
 .ck-session-bar__actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .ck-session-bar__link {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent);
+  font-size: var(--font-size-label);
+  font-weight: 600;
+  color: var(--color-accent);
   text-decoration: none;
 }
 
@@ -1779,71 +1492,11 @@
   text-decoration: underline;
 }
 
-.ck-session-bar__logout-btn {
-  padding: 7px 14px;
-  border-radius: 9px;
-  border: 1px solid var(--line);
-  background: #fffdf8;
-  color: var(--ink);
-  font-size: 12.5px;
-  font-weight: 700;
-}
-
-.ck-session-bar__logout-btn:hover:not(:disabled) {
-  background: #fbe9e9;
-  border-color: #e4b8be;
-  color: #943845;
-}
-
 .ck-session-bar__error {
-  padding: 9px 12px;
-  border-radius: 8px;
-  background: #fdf0f1;
-  border: 1px solid #eabcc2;
-  color: #8f2d3b;
-  font-size: 12.5px;
-}
-
-@media (max-width: 960px) {
-  .ck-auth-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .ck-auth-hero {
-    padding: 24px 20px 0;
-    border-right: 0;
-    border-bottom: 1px solid rgba(58, 53, 50, 0.08);
-  }
-
-  .ck-auth-hero__top {
-    gap: 18px;
-  }
-
-  .ck-auth-hero__headline {
-    font-size: 24px;
-  }
-
-  .ck-auth-hero__subtitle {
-    margin-top: 8px;
-    font-size: 14px;
-  }
-
-  .ck-auth-hero__art {
-    margin-top: 12px;
-  }
-
-  .ck-auth-hero__art .ck-friends {
-    max-width: 240px;
-    height: 150px;
-    margin: 0 auto;
-    object-position: center bottom;
-  }
-
-  .ck-auth-panel {
-    padding: 20px 20px 32px;
-  }
-
-  .ck-auth-panel__body {
-    padding: 16px 0;
-  }
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-input);
+  background: var(--color-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent);
+  color: var(--color-danger);
+  font-size: var(--font-size-caption);
 }

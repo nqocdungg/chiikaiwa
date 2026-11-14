@@ -1,5 +1,8 @@
 import { useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
+import usagi from '../../assets/mascots/usagi.png';
+import { Button } from '../../components/ui/controls.jsx';
+import { Input, PasswordInput } from '../../components/ui/forms.jsx';
 import { AuthSplitLayout } from './AuthSplitLayout.jsx';
 import {
   mapAuthApiError,
@@ -7,47 +10,6 @@ import {
   validateLoginForm,
 } from './auth-validation.js';
 import { useAuth } from './use-auth.js';
-
-/**
- * @param {{ visible: boolean }} props
- */
-function PasswordEyeIcon({ visible }) {
-  if (visible) {
-    return (
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-        <line x1="1" y1="1" x2="23" y2="23" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
 
 export function LoginPage() {
   const { login, authNotice, clearAuthNotice } = useAuth();
@@ -67,7 +29,6 @@ export function LoginPage() {
 
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState(
     /** @type {Record<string, string>} */ ({}),
   );
@@ -139,6 +100,8 @@ export function LoginPage() {
       title="Chào mừng bạn trở lại!"
       accessibleTitle="Đăng nhập"
       subtitle="Đăng nhập để tiếp tục những cuộc hội thoại của bạn."
+      mascotSrc={usagi}
+      mascotAlt="Mascot thỏ Usagi Chiikaiwa"
       footer={
         <p className="ck-auth-switch">
           <span>Chưa có tài khoản? </span>
@@ -183,79 +146,40 @@ export function LoginPage() {
       ) : null}
 
       <form className="ck-auth-form" onSubmit={handleSubmit} noValidate>
-        <div className="ck-auth-field">
-          <label htmlFor="login-email" className="ck-auth-label">
-            Email
-          </label>
-          <input
-            id="login-email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            placeholder="ban@example.com"
-            className={`ck-auth-input${fieldErrors.email ? ' is-invalid' : ''}`}
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              if (fieldErrors.email) {
-                setFieldErrors((prev) => ({ ...prev, email: '' }));
-              }
-            }}
-            disabled={isSubmitting}
-            aria-invalid={Boolean(fieldErrors.email)}
-            aria-describedby={
-              fieldErrors.email ? 'login-email-error' : undefined
+        <Input
+          id="login-email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          label="Email"
+          placeholder="ban@example.com"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            if (fieldErrors.email) {
+              setFieldErrors((prev) => ({ ...prev, email: '' }));
             }
-          />
-          {fieldErrors.email ? (
-            <p id="login-email-error" className="ck-auth-field-error">
-              {fieldErrors.email}
-            </p>
-          ) : null}
-        </div>
+          }}
+          disabled={isSubmitting}
+          error={fieldErrors.email || undefined}
+        />
 
-        <div className="ck-auth-field">
-          <label htmlFor="login-password" className="ck-auth-label">
-            Mật khẩu
-          </label>
-          <div className="ck-auth-password-wrap">
-            <input
-              id="login-password"
-              name="password"
-              type={showPassword ? 'text' : 'password'}
-              autoComplete="current-password"
-              placeholder="Nhập mật khẩu"
-              className={`ck-auth-input ck-auth-input--password${fieldErrors.password ? ' is-invalid' : ''}`}
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (fieldErrors.password) {
-                  setFieldErrors((prev) => ({ ...prev, password: '' }));
-                }
-              }}
-              disabled={isSubmitting}
-              aria-invalid={Boolean(fieldErrors.password)}
-              aria-describedby={
-                fieldErrors.password ? 'login-password-error' : undefined
-              }
-            />
-            <button
-              type="button"
-              className="ck-auth-password-toggle"
-              onClick={() => setShowPassword((prev) => !prev)}
-              aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-              aria-pressed={showPassword}
-              disabled={isSubmitting}
-            >
-              <PasswordEyeIcon visible={showPassword} />
-            </button>
-          </div>
-          {fieldErrors.password ? (
-            <p id="login-password-error" className="ck-auth-field-error">
-              {fieldErrors.password}
-            </p>
-          ) : null}
-        </div>
+        <PasswordInput
+          id="login-password"
+          name="password"
+          autoComplete="current-password"
+          label="Mật khẩu"
+          placeholder="Nhập mật khẩu"
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            if (fieldErrors.password) {
+              setFieldErrors((prev) => ({ ...prev, password: '' }));
+            }
+          }}
+          disabled={isSubmitting}
+          error={fieldErrors.password || undefined}
+        />
 
         <div className="ck-auth-meta-row">
           <Link to="/forgot-password" className="ck-auth-forgot-link">
@@ -263,13 +187,14 @@ export function LoginPage() {
           </Link>
         </div>
 
-        <button
+        <Button
           type="submit"
-          className="ck-auth-submit-btn"
-          disabled={isSubmitting}
+          variant="primary"
+          fullWidth
+          loading={isSubmitting}
         >
           {isSubmitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
-        </button>
+        </Button>
       </form>
     </AuthSplitLayout>
   );

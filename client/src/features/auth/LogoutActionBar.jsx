@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { Button } from '../../components/ui/controls.jsx';
+import { Avatar, Badge } from '../../components/ui/surfaces.jsx';
 import { mapAuthApiError } from './auth-validation.js';
 import { useAuth } from './use-auth.js';
 
@@ -49,13 +51,14 @@ export function LogoutActionBar() {
     <div className="ck-session-bar" data-testid="auth-session-bar">
       <div className="ck-session-bar__inner">
         <div className="ck-session-bar__identity">
-          <span className="ck-session-bar__badge">
+          <Avatar name={actorLabel} size={32} />
+          <Badge tone="accent">
             {role === 'admin'
               ? 'Admin'
               : kind === 'guest'
                 ? 'Khách'
                 : 'Học viên'}
-          </span>
+          </Badge>
           <span className="ck-session-bar__name">{actorLabel}</span>
         </div>
 
@@ -65,14 +68,15 @@ export function LogoutActionBar() {
               Hồ sơ
             </Link>
           ) : null}
-          <button
+          <Button
             type="button"
-            className="ck-session-bar__logout-btn"
+            variant="secondary"
+            size="compact"
+            loading={isLoggingOut}
             onClick={handleLogout}
-            disabled={isLoggingOut}
           >
             {isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất'}
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -1,49 +1,11 @@
 import { useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
+import hachiware from '../../assets/mascots/hachiware.png';
+import { Button } from '../../components/ui/controls.jsx';
+import { Input, PasswordInput } from '../../components/ui/forms.jsx';
 import { AuthSplitLayout } from './AuthSplitLayout.jsx';
 import { mapAuthApiError, validateRegisterForm } from './auth-validation.js';
 import { useAuth } from './use-auth.js';
-
-/**
- * @param {{ visible: boolean }} props
- */
-function PasswordEyeIcon({ visible }) {
-  if (visible) {
-    return (
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-        <line x1="1" y1="1" x2="23" y2="23" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
 
 export function RegisterPage() {
   const { register } = useAuth();
@@ -55,8 +17,6 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [confirmTouched, setConfirmTouched] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState(
     /** @type {Record<string, string>} */ ({}),
   );
@@ -123,6 +83,8 @@ export function RegisterPage() {
       title="Cùng bắt đầu luyện nói nhé!"
       accessibleTitle="Đăng ký"
       subtitle="Tạo tài khoản để lưu kiến thức và bắt đầu luyện tập."
+      mascotSrc={hachiware}
+      mascotAlt="Mascot mèo Hachiware Chiikaiwa"
       footer={
         <p className="ck-auth-switch">
           <span>Đã có tài khoản? </span>
@@ -170,7 +132,7 @@ export function RegisterPage() {
               notice:
                 'Đăng ký tài khoản thành công! Vui lòng đăng nhập để bắt đầu.',
             }}
-            className="ck-auth-submit-btn ck-auth-submit-btn--link"
+            className="ck-button ck-button--primary ck-button--full"
           >
             Đi tới trang đăng nhập
           </Link>
@@ -188,187 +150,91 @@ export function RegisterPage() {
           ) : null}
 
           <form className="ck-auth-form" onSubmit={handleSubmit} noValidate>
-            <div className="ck-auth-field">
-              <label htmlFor="register-display-name" className="ck-auth-label">
-                Tên hiển thị
-              </label>
-              <input
-                id="register-display-name"
-                name="displayName"
-                type="text"
-                autoComplete="name"
-                placeholder="Ví dụ: Minh Anh"
-                className={`ck-auth-input${fieldErrors.displayName ? ' is-invalid' : ''}`}
-                value={displayName}
-                onChange={(e) => {
-                  setDisplayName(e.target.value);
-                  if (fieldErrors.displayName) {
-                    setFieldErrors((prev) => ({ ...prev, displayName: '' }));
-                  }
-                }}
-                disabled={isSubmitting}
-                aria-invalid={Boolean(fieldErrors.displayName)}
-                aria-describedby={
-                  fieldErrors.displayName
-                    ? 'register-display-name-error'
-                    : undefined
+            <Input
+              id="register-display-name"
+              name="displayName"
+              type="text"
+              autoComplete="name"
+              label="Tên hiển thị"
+              placeholder="Ví dụ: Minh Anh"
+              value={displayName}
+              onChange={(e) => {
+                setDisplayName(e.target.value);
+                if (fieldErrors.displayName) {
+                  setFieldErrors((prev) => ({ ...prev, displayName: '' }));
                 }
-              />
-              {fieldErrors.displayName ? (
-                <p
-                  id="register-display-name-error"
-                  className="ck-auth-field-error"
-                >
-                  {fieldErrors.displayName}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="ck-auth-field">
-              <label htmlFor="register-email" className="ck-auth-label">
-                Email
-              </label>
-              <input
-                id="register-email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                placeholder="ban@example.com"
-                className={`ck-auth-input${fieldErrors.email ? ' is-invalid' : ''}`}
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (fieldErrors.email) {
-                    setFieldErrors((prev) => ({ ...prev, email: '' }));
-                  }
-                }}
-                disabled={isSubmitting}
-                aria-invalid={Boolean(fieldErrors.email)}
-                aria-describedby={
-                  fieldErrors.email ? 'register-email-error' : undefined
-                }
-              />
-              {fieldErrors.email ? (
-                <p id="register-email-error" className="ck-auth-field-error">
-                  {fieldErrors.email}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="ck-auth-field">
-              <label htmlFor="register-password" className="ck-auth-label">
-                Mật khẩu
-              </label>
-              <div className="ck-auth-password-wrap">
-                <input
-                  id="register-password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  placeholder="Tạo mật khẩu"
-                  className={`ck-auth-input ck-auth-input--password${fieldErrors.password ? ' is-invalid' : ''}`}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (fieldErrors.password) {
-                      setFieldErrors((prev) => ({ ...prev, password: '' }));
-                    }
-                  }}
-                  disabled={isSubmitting}
-                  aria-invalid={Boolean(fieldErrors.password)}
-                  aria-describedby={
-                    fieldErrors.password
-                      ? 'register-password-hint register-password-error'
-                      : 'register-password-hint'
-                  }
-                />
-                <button
-                  type="button"
-                  className="ck-auth-password-toggle"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                  aria-pressed={showPassword}
-                  disabled={isSubmitting}
-                >
-                  <PasswordEyeIcon visible={showPassword} />
-                </button>
-              </div>
-              <p id="register-password-hint" className="ck-auth-field-hint">
-                Ít nhất 8 ký tự, gồm 1 chữ hoa và 1 chữ số.
-              </p>
-              {fieldErrors.password ? (
-                <p id="register-password-error" className="ck-auth-field-error">
-                  {fieldErrors.password}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="ck-auth-field">
-              <label
-                htmlFor="register-confirm-password"
-                className="ck-auth-label"
-              >
-                Xác nhận mật khẩu
-              </label>
-              <div className="ck-auth-password-wrap">
-                <input
-                  id="register-confirm-password"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  placeholder="Nhập lại mật khẩu"
-                  className={`ck-auth-input ck-auth-input--password${fieldErrors.confirmPassword ? ' is-invalid' : ''}`}
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmTouched(true);
-                    setConfirmPassword(e.target.value);
-                    if (fieldErrors.confirmPassword) {
-                      setFieldErrors((prev) => ({
-                        ...prev,
-                        confirmPassword: '',
-                      }));
-                    }
-                  }}
-                  disabled={isSubmitting}
-                  aria-invalid={Boolean(fieldErrors.confirmPassword)}
-                  aria-describedby={
-                    fieldErrors.confirmPassword
-                      ? 'register-confirm-password-error'
-                      : undefined
-                  }
-                />
-                <button
-                  type="button"
-                  className="ck-auth-password-toggle"
-                  onClick={() => setShowConfirmPassword((prev) => !prev)}
-                  aria-label={
-                    showConfirmPassword
-                      ? 'Ẩn mật khẩu xác nhận'
-                      : 'Hiện mật khẩu xác nhận'
-                  }
-                  aria-pressed={showConfirmPassword}
-                  disabled={isSubmitting}
-                >
-                  <PasswordEyeIcon visible={showConfirmPassword} />
-                </button>
-              </div>
-              {fieldErrors.confirmPassword ? (
-                <p
-                  id="register-confirm-password-error"
-                  className="ck-auth-field-error"
-                >
-                  {fieldErrors.confirmPassword}
-                </p>
-              ) : null}
-            </div>
-
-            <button
-              type="submit"
-              className="ck-auth-submit-btn"
+              }}
               disabled={isSubmitting}
+              error={fieldErrors.displayName || undefined}
+            />
+
+            <Input
+              id="register-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              label="Email"
+              placeholder="ban@example.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldErrors.email) {
+                  setFieldErrors((prev) => ({ ...prev, email: '' }));
+                }
+              }}
+              disabled={isSubmitting}
+              error={fieldErrors.email || undefined}
+            />
+
+            <PasswordInput
+              id="register-password"
+              name="password"
+              autoComplete="new-password"
+              label="Mật khẩu"
+              placeholder="Tạo mật khẩu"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (fieldErrors.password) {
+                  setFieldErrors((prev) => ({ ...prev, password: '' }));
+                }
+              }}
+              disabled={isSubmitting}
+              helperText="Ít nhất 8 ký tự, gồm 1 chữ hoa và 1 chữ số."
+              error={fieldErrors.password || undefined}
+            />
+
+            <PasswordInput
+              id="register-confirm-password"
+              name="confirmPassword"
+              autoComplete="new-password"
+              label="Xác nhận mật khẩu"
+              placeholder="Nhập lại mật khẩu"
+              showLabel="Hiện mật khẩu xác nhận"
+              hideLabel="Ẩn mật khẩu xác nhận"
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmTouched(true);
+                setConfirmPassword(e.target.value);
+                if (fieldErrors.confirmPassword) {
+                  setFieldErrors((prev) => ({
+                    ...prev,
+                    confirmPassword: '',
+                  }));
+                }
+              }}
+              disabled={isSubmitting}
+              error={fieldErrors.confirmPassword || undefined}
+            />
+
+            <Button
+              type="submit"
+              variant="primary"
+              fullWidth
+              loading={isSubmitting}
             >
               {isSubmitting ? 'Đang tạo tài khoản...' : 'Tạo tài khoản'}
-            </button>
+            </Button>
           </form>
         </>
       )}
