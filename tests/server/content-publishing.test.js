@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import mongoose from 'mongoose';
 import {
   normalizePublishPayload,
+  resolveDeckManifest,
   validatePublishCompleteness,
 } from '../../server/modules/content/content-validator.js';
+import { parsePageLimit } from '../../server/modules/content/content-service.js';
 import {
   toKnowledgeItemDto,
   toTopicSummaryDto,
@@ -281,6 +283,202 @@ describe('BE-013: Unit validation and projections for content publishing', () =>
       expect(normalized.scenarioVersionIds).toHaveLength(1);
       expect(normalized.knowledgeVersionIds).toHaveLength(2);
       expect(normalized.questionVersionIds).toHaveLength(1);
+    });
+  });
+
+  describe('parsePageLimit unit validation (07 §1, OpenAPI)', () => {
+    it('returns default limit 20 when limit is undefined', () => {
+      expect(parsePageLimit(undefined)).toBe(20);
+    });
+
+    it('accepts valid integer strings and numbers in range [1, 50]', () => {
+      expect(parsePageLimit('1')).toBe(1);
+      expect(parsePageLimit('20')).toBe(20);
+      expect(parsePageLimit('50')).toBe(50);
+      expect(parsePageLimit(10)).toBe(10);
+    });
+
+    it('rejects invalid inputs with 400 MALFORMED_REQUEST', () => {
+      const invalidInputs = [
+        '0.5',
+        0.5,
+        '0',
+        0,
+        '-1',
+        -5,
+        '51',
+        100,
+        'abc',
+        '',
+        '   ',
+        ['10'],
+        null,
+        {},
+      ];
+
+      for (const input of invalidInputs) {
+        expect(
+          () => parsePageLimit(input),
+          `Expected input ${JSON.stringify(input)} to be rejected`,
+        ).toThrowError(
+          expect.objectContaining({
+            status: 400,
+            code: 'MALFORMED_REQUEST',
+          }),
+        );
+      }
+    });
+  });
+
+  describe('resolveDeckManifest merging and duplicate contentId detection (06 §7.2)', () => {
+    it('merges knowledge and question references from scenarios into deck manifest', async () => {
+      const scenarioVersionId = new ObjectId();
+      const scenarioContentId = new ObjectId();
+      const k1VersionId = new ObjectId();
+      const k1ContentId = new ObjectId();
+      const q1VersionId = new ObjectId();
+      const q1ContentId = new ObjectId();
+
+      const mockDb = /** @type {any} */ ({
+        collection: () => ({
+          find: (/** @type {any} */ { kind }) => ({
+            toArray: async () => {
+              if (kind === 'scenario') {
+                return [
+                  {
+                    _id: scenarioVersionId,
+                    contentId: scenarioContentId,
+                    kind: 'scenario',
+                    payload: {
+                      knowledgeVersionIds: [k1VersionId],
+                      questionVersionIds: [q1VersionId],
+                    },
+                  },
+                ];
+              }
+              if (kind === 'knowledge') {
+                return [
+                  {
+                    _id: k1VersionId,
+                    contentId: k1ContentId,
+                    kind: 'knowledge',
+                  },
+                ];
+              }
+              if (kind === 'question') {
+                return [
+                  {
+                    _id: q1VersionId,
+                    contentId: q1ContentId,
+                    kind: 'question',
+                  },
+                ];
+              }
+              return [];
+            },
+          }),
+        }),
+      });
+
+      const draftPayload = {
+        title: 'Bộ học liệu du lịch',
+        topicKey: 'travel',
+        level: 'N4',
+        description: 'Mô tả',
+        scenarioVersionIds: [scenarioVersionId.toHexString()],
+        // Không truyền knowledgeVersionIds hay questionVersionIds trực tiếp
+      };
+
+      const { errors, mergedPayload } = await resolveDeckManifest(
+        mockDb,
+        draftPayload,
+      );
+
+      expect(errors).toHaveLength(0);
+      expect(mergedPayload.knowledgeVersionIds).toHaveLength(1);
+      expect(mergedPayload.knowledgeVersionIds[0].equals(k1VersionId)).toBe(
+        true,
+      );
+      expect(mergedPayload.questionVersionIds).toHaveLength(1);
+      expect(mergedPayload.questionVersionIds[0].equals(q1VersionId)).toBe(
+        true,
+      );
+    });
+
+    it('detects two different revisions of the same knowledge item and returns DUPLICATE_CONTENT_REVISION', async () => {
+      const scenario1Id = new ObjectId();
+      const scenario2Id = new ObjectId();
+      const sharedKnowledgeContentId = new ObjectId();
+      const kVersion1Id = new ObjectId();
+      const kVersion2Id = new ObjectId();
+
+      const mockDb = /** @type {any} */ ({
+        collection: () => ({
+          find: (/** @type {any} */ { kind }) => ({
+            toArray: async () => {
+              if (kind === 'scenario') {
+                return [
+                  {
+                    _id: scenario1Id,
+                    contentId: new ObjectId(),
+                    kind: 'scenario',
+                    payload: {
+                      knowledgeVersionIds: [kVersion1Id],
+                      questionVersionIds: [],
+                    },
+                  },
+                  {
+                    _id: scenario2Id,
+                    contentId: new ObjectId(),
+                    kind: 'scenario',
+                    payload: {
+                      knowledgeVersionIds: [kVersion2Id],
+                      questionVersionIds: [],
+                    },
+                  },
+                ];
+              }
+              if (kind === 'knowledge') {
+                return [
+                  {
+                    _id: kVersion1Id,
+                    contentId: sharedKnowledgeContentId,
+                    kind: 'knowledge',
+                  },
+                  {
+                    _id: kVersion2Id,
+                    contentId: sharedKnowledgeContentId, // Cùng contentId nhưng khác revision!
+                    kind: 'knowledge',
+                  },
+                ];
+              }
+              return [];
+            },
+          }),
+        }),
+      });
+
+      const draftPayload = {
+        title: 'Bộ xung đột phiên bản',
+        topicKey: 'conflict',
+        level: 'N4',
+        description: 'Mô tả',
+        scenarioVersionIds: [
+          scenario1Id.toHexString(),
+          scenario2Id.toHexString(),
+        ],
+      };
+
+      const { errors } = await resolveDeckManifest(mockDb, draftPayload);
+
+      expect(errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'draftPayload.knowledgeVersionIds',
+            code: 'DUPLICATE_CONTENT_REVISION',
+          }),
+        ]),
+      );
     });
   });
 });

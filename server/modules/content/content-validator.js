@@ -25,6 +25,7 @@ export const VALID_CONTENT_KINDS = [
  * @returns {boolean}
  */
 export function isValidObjectId(id) {
+  if (id instanceof ObjectId) return true;
   return typeof id === 'string' && OBJECT_ID_REGEX.test(id);
 }
 
@@ -1605,14 +1606,272 @@ export async function validatePublishCompleteness(db, item, { session } = {}) {
       });
     }
 
-    // Verify references
-    const refErrors = await verifyDraftReferences(db, 'deck', draftPayload, {
-      session,
-    });
-    errors.push(...refErrors);
+    const { errors: deckManifestErrors } = await resolveDeckManifest(
+      db,
+      draftPayload,
+      { session },
+    );
+    errors.push(...deckManifestErrors);
   }
 
   return errors;
+}
+
+/**
+ * Hợp nhất và xác thực manifest bộ chủ đề từ các tình huống và tham chiếu trực tiếp (06 §7.2).
+ * Tải các scenario revision, hợp nhất knowledge/question references, kiểm tra tồn tại và đúng loại,
+ * loại trùng version ID và nhóm theo contentId để phát hiện hai revision của cùng một mục (06 §7.2).
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {Record<string, any>} draftPayload
+ * @param {{ session?: import('mongoose').ClientSession }} [options]
+ * @returns {Promise<{ errors: FieldValidationError[], mergedPayload: Record<string, any> }>}
+ */
+export async function resolveDeckManifest(db, draftPayload, { session } = {}) {
+  /** @type {FieldValidationError[]} */
+  const errors = [];
+  const rawScenarioIds = Array.isArray(draftPayload.scenarioVersionIds)
+    ? draftPayload.scenarioVersionIds
+    : [];
+  const scenarioIds = rawScenarioIds
+    .filter(isValidObjectId)
+    .map((id) => (id instanceof ObjectId ? id.toHexString() : String(id)));
+
+  const queryOptions = session ? { session } : undefined;
+
+  // 1. Tải các scenario versions
+  const scenarioObjectIds = scenarioIds.map((id) => new ObjectId(id));
+  const scenarioVersions =
+    scenarioObjectIds.length > 0
+      ? await db
+          .collection('content_versions')
+          .find(
+            { _id: { $in: scenarioObjectIds }, kind: 'scenario' },
+            queryOptions,
+          )
+          .toArray()
+      : [];
+
+  const foundScenarioMap = new Map(
+    scenarioVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
+  );
+
+  for (let i = 0; i < rawScenarioIds.length; i++) {
+    const rawId = String(rawScenarioIds[i] ?? '');
+    if (!foundScenarioMap.has(rawId.toLowerCase())) {
+      errors.push({
+        path: `draftPayload.scenarioVersionIds[${i}]`,
+        code: 'INVALID_REFERENCE',
+        message: `Tham chiếu tới phiên bản scenario '${rawId}' không tồn tại hoặc sai loại học liệu.`,
+      });
+    }
+  }
+
+  // Nhóm scenario versions theo contentId để kiểm tra không có 2 revision của cùng 1 scenario
+  const scenarioByContentId = new Map();
+  for (const v of scenarioVersions) {
+    const cId = v.contentId.toHexString();
+    if (!scenarioByContentId.has(cId)) {
+      scenarioByContentId.set(cId, []);
+    }
+    scenarioByContentId.get(cId).push(v._id.toHexString());
+  }
+  for (const [cId, vIds] of scenarioByContentId.entries()) {
+    const distinctVIds = new Set(vIds);
+    if (distinctVIds.size > 1) {
+      errors.push({
+        path: 'draftPayload.scenarioVersionIds',
+        code: 'DUPLICATE_CONTENT_REVISION',
+        message: `Phát hiện nhiều phiên bản khác nhau của cùng một tình huống (contentId '${cId}') trong manifest bộ.`,
+      });
+    }
+  }
+
+  // 2. Thu thập và hợp nhất knowledgeVersionIds từ scenarios + direct deck refs
+  const directKnowledgeIds = (
+    Array.isArray(draftPayload.knowledgeVersionIds)
+      ? draftPayload.knowledgeVersionIds
+      : []
+  )
+    .filter(isValidObjectId)
+    .map((id) => (id instanceof ObjectId ? id.toHexString() : String(id)));
+  const scenarioKnowledgeIds = [];
+  for (const sv of scenarioVersions) {
+    const kIds = sv.payload?.knowledgeVersionIds;
+    if (Array.isArray(kIds)) {
+      for (const kId of kIds) {
+        if (isValidObjectId(kId)) {
+          scenarioKnowledgeIds.push(
+            kId instanceof ObjectId ? kId.toHexString() : String(kId),
+          );
+        }
+      }
+    }
+  }
+  const allKnowledgeIds = [
+    ...directKnowledgeIds.map(String),
+    ...scenarioKnowledgeIds,
+  ];
+  const distinctKnowledgeIdSet = new Set(
+    allKnowledgeIds.map((id) => id.toLowerCase()),
+  );
+  const distinctKnowledgeObjectIds = [...distinctKnowledgeIdSet].map(
+    (id) => new ObjectId(id),
+  );
+
+  // 3. Thu thập và hợp nhất questionVersionIds từ scenarios + direct deck refs
+  const directQuestionIds = (
+    Array.isArray(draftPayload.questionVersionIds)
+      ? draftPayload.questionVersionIds
+      : []
+  )
+    .filter(isValidObjectId)
+    .map((id) => (id instanceof ObjectId ? id.toHexString() : String(id)));
+  const scenarioQuestionIds = [];
+  for (const sv of scenarioVersions) {
+    const qIds = sv.payload?.questionVersionIds;
+    if (Array.isArray(qIds)) {
+      for (const qId of qIds) {
+        if (isValidObjectId(qId)) {
+          scenarioQuestionIds.push(
+            qId instanceof ObjectId ? qId.toHexString() : String(qId),
+          );
+        }
+      }
+    }
+  }
+  const allQuestionIds = [
+    ...directQuestionIds.map(String),
+    ...scenarioQuestionIds,
+  ];
+  const distinctQuestionIdSet = new Set(
+    allQuestionIds.map((id) => id.toLowerCase()),
+  );
+  const distinctQuestionObjectIds = [...distinctQuestionIdSet].map(
+    (id) => new ObjectId(id),
+  );
+
+  // 4. Tải và kiểm tra các knowledge versions
+  if (distinctKnowledgeObjectIds.length > 0) {
+    const knowledgeVersions = await db
+      .collection('content_versions')
+      .find(
+        { _id: { $in: distinctKnowledgeObjectIds }, kind: 'knowledge' },
+        queryOptions,
+      )
+      .toArray();
+
+    const foundKnowledgeMap = new Map(
+      knowledgeVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
+    );
+
+    for (let i = 0; i < directKnowledgeIds.length; i++) {
+      const id = String(directKnowledgeIds[i]);
+      if (!foundKnowledgeMap.has(id.toLowerCase())) {
+        errors.push({
+          path: `draftPayload.knowledgeVersionIds[${i}]`,
+          code: 'INVALID_REFERENCE',
+          message: `Tham chiếu tới phiên bản knowledge '${id}' không tồn tại hoặc sai loại học liệu.`,
+        });
+      }
+    }
+
+    const knowledgeByContentId = new Map();
+    for (const v of knowledgeVersions) {
+      const cId = v.contentId.toHexString();
+      if (!knowledgeByContentId.has(cId)) {
+        knowledgeByContentId.set(cId, []);
+      }
+      knowledgeByContentId.get(cId).push(v._id.toHexString());
+    }
+    for (const [cId, vIds] of knowledgeByContentId.entries()) {
+      const distinctVIds = new Set(vIds);
+      if (distinctVIds.size > 1) {
+        errors.push({
+          path: 'draftPayload.knowledgeVersionIds',
+          code: 'DUPLICATE_CONTENT_REVISION',
+          message: `Phát hiện nhiều phiên bản khác nhau của cùng một kiến thức (contentId '${cId}') trong manifest bộ.`,
+        });
+      }
+    }
+  }
+
+  // 5. Tải và kiểm tra các question versions
+  if (distinctQuestionObjectIds.length > 0) {
+    const questionVersions = await db
+      .collection('content_versions')
+      .find(
+        { _id: { $in: distinctQuestionObjectIds }, kind: 'question' },
+        queryOptions,
+      )
+      .toArray();
+
+    const foundQuestionMap = new Map(
+      questionVersions.map((v) => [v._id.toHexString().toLowerCase(), v]),
+    );
+
+    for (let i = 0; i < directQuestionIds.length; i++) {
+      const id = String(directQuestionIds[i]);
+      if (!foundQuestionMap.has(id.toLowerCase())) {
+        errors.push({
+          path: `draftPayload.questionVersionIds[${i}]`,
+          code: 'INVALID_REFERENCE',
+          message: `Tham chiếu tới phiên bản question '${id}' không tồn tại hoặc sai loại học liệu.`,
+        });
+      }
+    }
+
+    const questionByContentId = new Map();
+    for (const v of questionVersions) {
+      const cId = v.contentId.toHexString();
+      if (!questionByContentId.has(cId)) {
+        questionByContentId.set(cId, []);
+      }
+      questionByContentId.get(cId).push(v._id.toHexString());
+    }
+    for (const [cId, vIds] of questionByContentId.entries()) {
+      const distinctVIds = new Set(vIds);
+      if (distinctVIds.size > 1) {
+        errors.push({
+          path: 'draftPayload.questionVersionIds',
+          code: 'DUPLICATE_CONTENT_REVISION',
+          message: `Phát hiện nhiều phiên bản khác nhau của cùng một câu hỏi (contentId '${cId}') trong manifest bộ.`,
+        });
+      }
+    }
+  }
+
+  const distinctScenarioObjectIds = [];
+  const seenScenario = new Set();
+  for (const id of scenarioIds) {
+    const lower = id.toLowerCase();
+    if (!seenScenario.has(lower)) {
+      seenScenario.add(lower);
+      distinctScenarioObjectIds.push(new ObjectId(lower));
+    }
+  }
+
+  const mergedPayload = {
+    ...draftPayload,
+    title:
+      typeof draftPayload.title === 'string'
+        ? draftPayload.title.trim()
+        : draftPayload.title,
+    topicKey:
+      typeof draftPayload.topicKey === 'string'
+        ? draftPayload.topicKey.trim()
+        : draftPayload.topicKey,
+    level: draftPayload.level,
+    description:
+      typeof draftPayload.description === 'string'
+        ? draftPayload.description.trim()
+        : draftPayload.description,
+    scenarioVersionIds: distinctScenarioObjectIds,
+    knowledgeVersionIds: distinctKnowledgeObjectIds,
+    questionVersionIds: distinctQuestionObjectIds,
+  };
+
+  return { errors, mergedPayload };
 }
 
 /**

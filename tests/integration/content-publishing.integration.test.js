@@ -375,6 +375,268 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('VERSION_CONFLICT');
     });
+
+    it('merges knowledge and question references from scenario into deck manifest on publish (06 §7.2)', async () => {
+      const adminCookie = createAuthCookie(adminId, adminSessionId);
+      const { cookie: csrfCookie, token: csrfToken } = await fetchCsrfToken();
+
+      // 1. Tạo 1 knowledge version đã xuất bản
+      const kId = new ObjectId();
+      const kVersionId = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: kId,
+        kind: 'knowledge',
+        status: 'published',
+        publishedVersionId: kVersionId,
+        latestRevision: 1,
+        version: 1,
+        createdBy: adminId,
+      });
+      await db.collection('content_versions').insertOne({
+        _id: kVersionId,
+        contentId: kId,
+        kind: 'knowledge',
+        revision: 1,
+        payload: {
+          type: 'vocabulary',
+          expression: '予約',
+          reading: 'よやく',
+          meaning: 'Đặt trước',
+          examples: [
+            { japanese: '予約します。', vietnamese: 'Tôi đặt trước.' },
+          ],
+        },
+      });
+
+      // 2. Tạo 3 question versions đã xuất bản
+      const qVersionIds = [];
+      for (let i = 1; i <= 3; i++) {
+        const qId = new ObjectId();
+        const qvId = new ObjectId();
+        qVersionIds.push(qvId);
+        await db.collection('content_items').insertOne({
+          _id: qId,
+          kind: 'question',
+          status: 'published',
+          publishedVersionId: qvId,
+          latestRevision: 1,
+          version: 1,
+          createdBy: adminId,
+        });
+        await db.collection('content_versions').insertOne({
+          _id: qvId,
+          contentId: qId,
+          kind: 'question',
+          revision: 1,
+          payload: {
+            type: 'multipleChoice',
+            prompt: `Câu hỏi ${i}`,
+            explanation: `Giải thích ${i}`,
+            options: [
+              { id: '1', text: 'A' },
+              { id: '2', text: 'B' },
+            ],
+            correctOptionId: '1',
+            knowledgeVersionIds: [kVersionId],
+          },
+        });
+      }
+
+      // 3. Tạo 1 scenario version đã xuất bản chứa knowledge và questions trên
+      const scenarioId = new ObjectId();
+      const scenarioVersionId = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: scenarioId,
+        kind: 'scenario',
+        status: 'published',
+        publishedVersionId: scenarioVersionId,
+        latestRevision: 1,
+        version: 1,
+        createdBy: adminId,
+      });
+      await db.collection('content_versions').insertOne({
+        _id: scenarioVersionId,
+        contentId: scenarioId,
+        kind: 'scenario',
+        revision: 1,
+        payload: {
+          title: 'Tình huống tại khách sạn',
+          context: 'Bối cảnh',
+          objective: 'Mục tiêu',
+          roleA: 'Khách',
+          roleB: 'Lễ tân',
+          hints: ['Gợi ý'],
+          knowledgeVersionIds: [kVersionId],
+          questionVersionIds: qVersionIds,
+        },
+      });
+
+      // 4. Tạo deck nháp CHỈ KHAI BÁO scenarioVersionIds (không có knowledgeVersionIds hay questionVersionIds)
+      const deckItemId = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: deckItemId,
+        kind: 'deck',
+        status: 'draft',
+        latestRevision: 0,
+        version: 0,
+        createdBy: adminId,
+        draftPayload: {
+          title: 'Bộ du lịch hợp nhất',
+          topicKey: 'travel_merged',
+          level: 'N4',
+          description: 'Học liệu du lịch hợp nhất tự động',
+          scenarioVersionIds: [scenarioVersionId.toHexString()],
+        },
+      });
+
+      // 5. Xuất bản deck
+      const resPublish = await request(app)
+        .post(`/api/v1/admin/content/${deckItemId.toHexString()}/publish`)
+        .set('Origin', TEST_ORIGIN)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Cookie', [adminCookie, ...csrfCookie])
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: 0 });
+
+      expect(resPublish.status).toBe(200);
+      const publishedDeckVersionId = resPublish.body.data.publishedVersionId;
+
+      // 6. Kiểm tra document trong content_versions: manifest phải chứa đầy đủ knowledge và questions từ scenario
+      const savedVersion = await db
+        .collection('content_versions')
+        .findOne({ _id: new ObjectId(publishedDeckVersionId) });
+
+      expect(savedVersion?.payload.knowledgeVersionIds).toHaveLength(1);
+      expect(
+        savedVersion?.payload.knowledgeVersionIds[0].equals(kVersionId),
+      ).toBe(true);
+      expect(savedVersion?.payload.questionVersionIds).toHaveLength(3);
+
+      // 7. Khi gọi GET /topic-versions/:id, counts phải phản ánh chính xác (1 knowledge, 3 questions, 1 scenario)
+      const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
+      const resDetail = await request(app)
+        .get(`/api/v1/topic-versions/${publishedDeckVersionId}`)
+        .set('Cookie', learnerCookie);
+
+      expect(resDetail.status).toBe(200);
+      expect(resDetail.body.data.knowledgeCount).toBe(1);
+      expect(resDetail.body.data.questionCount).toBe(3);
+    });
+
+    it('rejects publishing deck containing two revisions of the same contentId with 422 CONTENT_INCOMPLETE (06 §7.2)', async () => {
+      const adminCookie = createAuthCookie(adminId, adminSessionId);
+      const { cookie: csrfCookie, token: csrfToken } = await fetchCsrfToken();
+
+      const sharedKnowledgeId = new ObjectId();
+      const kRev1Id = new ObjectId();
+      const kRev2Id = new ObjectId();
+
+      await db.collection('content_versions').insertMany([
+        {
+          _id: kRev1Id,
+          contentId: sharedKnowledgeId,
+          kind: 'knowledge',
+          revision: 1,
+          payload: {
+            type: 'vocabulary',
+            expression: '鍵',
+            meaning: 'Chìa khóa (bản 1)',
+            examples: [],
+          },
+        },
+        {
+          _id: kRev2Id,
+          contentId: sharedKnowledgeId, // Cùng contentId!
+          kind: 'knowledge',
+          revision: 2,
+          payload: {
+            type: 'vocabulary',
+            expression: '鍵',
+            meaning: 'Chìa khóa (bản 2)',
+            examples: [],
+          },
+        },
+      ]);
+
+      const qvIds = [];
+      for (let i = 1; i <= 3; i++) {
+        const qvId = new ObjectId();
+        qvIds.push(qvId);
+        await db.collection('content_versions').insertOne({
+          _id: qvId,
+          contentId: new ObjectId(),
+          kind: 'question',
+          revision: 1,
+          payload: {
+            type: 'multipleChoice',
+            prompt: `Q${i}`,
+            explanation: `E${i}`,
+            options: [
+              { id: '1', text: 'A' },
+              { id: '2', text: 'B' },
+            ],
+            correctOptionId: '1',
+          },
+        });
+      }
+
+      // Scenario 1 dùng revision 1
+      const s1VersionId = new ObjectId();
+      await db.collection('content_versions').insertOne({
+        _id: s1VersionId,
+        contentId: new ObjectId(),
+        kind: 'scenario',
+        revision: 1,
+        payload: {
+          title: 'S1',
+          context: 'C',
+          objective: 'O',
+          roleA: 'A',
+          roleB: 'B',
+          hints: ['H'],
+          knowledgeVersionIds: [kRev1Id],
+          questionVersionIds: qvIds,
+        },
+      });
+
+      // Deck khai báo kRev2Id trực tiếp (xung đột với kRev1Id từ scenario 1)
+      const deckItemId = new ObjectId();
+      await db.collection('content_items').insertOne({
+        _id: deckItemId,
+        kind: 'deck',
+        status: 'draft',
+        latestRevision: 0,
+        version: 0,
+        createdBy: adminId,
+        draftPayload: {
+          title: 'Bộ xung đột',
+          topicKey: 'conflict',
+          level: 'N4',
+          description: 'Mô tả xung đột',
+          scenarioVersionIds: [s1VersionId.toHexString()],
+          knowledgeVersionIds: [kRev2Id.toHexString()],
+        },
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/admin/content/${deckItemId.toHexString()}/publish`)
+        .set('Origin', TEST_ORIGIN)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Cookie', [adminCookie, ...csrfCookie])
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: 0 });
+
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe('CONTENT_INCOMPLETE');
+      expect(res.body.error.details.fields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'draftPayload.knowledgeVersionIds',
+            code: 'DUPLICATE_CONTENT_REVISION',
+          }),
+        ]),
+      );
+    });
   });
 
   describe('POST /admin/content/:id/hide', () => {
@@ -590,6 +852,48 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
       expect(topic).not.toHaveProperty('roleA');
       expect(topic).not.toHaveProperty('roleB');
       expect(topic).not.toHaveProperty('correctOptionId');
+    });
+
+    it('validates limit parameter strictly on GET /topics and GET /topic-versions/:id/knowledge (07 §1, OpenAPI)', async () => {
+      const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
+
+      // GET /topics: Từ chối các limit không hợp lệ (0.5, 0, -1, 51, 'abc') với 400 MALFORMED_REQUEST
+      const invalidLimits = ['0.5', '0', '-1', '51', 'abc'];
+      for (const lim of invalidLimits) {
+        const resTopicInvalid = await request(app)
+          .get(`/api/v1/topics?limit=${lim}`)
+          .set('Cookie', learnerCookie);
+
+        expect(resTopicInvalid.status).toBe(400);
+        expect(resTopicInvalid.body.error.code).toBe('MALFORMED_REQUEST');
+
+        const resKnowledgeInvalid = await request(app)
+          .get(
+            `/api/v1/topic-versions/${publishedDeckVersionId.toHexString()}/knowledge?limit=${lim}`,
+          )
+          .set('Cookie', learnerCookie);
+
+        expect(resKnowledgeInvalid.status).toBe(400);
+        expect(resKnowledgeInvalid.body.error.code).toBe('MALFORMED_REQUEST');
+      }
+
+      // Chấp nhận các giá trị hợp lệ biên: limit=1, limit=50
+      const resTopic1 = await request(app)
+        .get('/api/v1/topics?limit=1')
+        .set('Cookie', learnerCookie);
+      expect(resTopic1.status).toBe(200);
+
+      const resTopic50 = await request(app)
+        .get('/api/v1/topics?limit=50')
+        .set('Cookie', learnerCookie);
+      expect(resTopic50.status).toBe(200);
+
+      const resKnowledge1 = await request(app)
+        .get(
+          `/api/v1/topic-versions/${publishedDeckVersionId.toHexString()}/knowledge?limit=1`,
+        )
+        .set('Cookie', learnerCookie);
+      expect(resKnowledge1.status).toBe(200);
     });
 
     it('GET /topic-versions/:id enforces source permissions for Learner and Guest (07 §7)', async () => {
@@ -865,12 +1169,41 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
       expect(resHistoricalNoSource.status).toBe(403);
       expect(resHistoricalNoSource.body.error.code).toBe('FORBIDDEN');
 
-      // 3. Sau khi người học lưu mục kiến thức này (tạo nguồn saved_sources) -> Đọc được đúng bản lịch sử
+      // 2b. Người học bookmark mục này (saved_items) và CÓ NGUỒN CỦA REVISION 2 (saved_sources)
+      // Nhưng gửi versionId của revision 1 -> VẪN BỊ 403 FORBIDDEN (06 §8.1: Nguồn revision 2 không cấp quyền đọc revision 1)
+      await db.collection('saved_items').insertOne({
+        _id: new ObjectId(),
+        ownerKey: `user:${learnerId.toHexString()}`,
+        knowledgeId: k2ItemId,
+        isSaved: true,
+        savedAt: new Date(),
+        version: 1,
+      });
       await db.collection('saved_sources').insertOne({
         _id: new ObjectId(),
         ownerKey: `user:${learnerId.toHexString()}`,
         knowledgeId: k2ItemId,
-        knowledgeVersionId: k2Version1Id,
+        knowledgeVersionId: k2Version2Id, // Chỉ có nguồn cho revision 2
+        deckVersionId: publishedDeckVersionId,
+        contextKey: `deck:${publishedDeckVersionId.toHexString()}:${k2Version2Id.toHexString()}`,
+        createdAt: new Date(),
+      });
+
+      const resRev1WithRev2SourceOnly = await request(app)
+        .get(
+          `/api/v1/knowledge/${k2ItemId.toHexString()}?versionId=${k2Version1Id.toHexString()}`,
+        )
+        .set('Cookie', learnerCookie);
+
+      expect(resRev1WithRev2SourceOnly.status).toBe(403);
+      expect(resRev1WithRev2SourceOnly.body.error.code).toBe('FORBIDDEN');
+
+      // 3. Sau khi người học có nguồn hợp lệ trỏ tới đúng revision 1 -> Đọc được đúng bản lịch sử revision 1
+      await db.collection('saved_sources').insertOne({
+        _id: new ObjectId(),
+        ownerKey: `user:${learnerId.toHexString()}`,
+        knowledgeId: k2ItemId,
+        knowledgeVersionId: k2Version1Id, // Nguồn chính xác cho revision 1
         deckVersionId: publishedDeckVersionId,
         contextKey: `deck:${publishedDeckVersionId.toHexString()}:${k2Version1Id.toHexString()}`,
         createdAt: new Date(),

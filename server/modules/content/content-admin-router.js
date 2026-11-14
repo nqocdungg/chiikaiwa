@@ -27,7 +27,7 @@ export function createAdminContentRouter() {
         kind: typeof kind === 'string' ? kind : undefined,
         status: typeof status === 'string' ? status : undefined,
         level: typeof level === 'string' ? level : undefined,
-        limit: typeof limit === 'string' ? limit : undefined,
+        limit,
         cursor: typeof cursor === 'string' ? cursor : undefined,
       });
 

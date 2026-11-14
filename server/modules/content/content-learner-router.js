@@ -19,7 +19,7 @@ export function createLearnerContentRouter() {
       const { level, limit, cursor } = request.query;
       const result = await listPublishedTopics({
         level: typeof level === 'string' ? level : undefined,
-        limit: typeof limit === 'string' ? limit : undefined,
+        limit,
         cursor: typeof cursor === 'string' ? cursor : undefined,
       });
 
@@ -69,7 +69,7 @@ export function createLearnerContentRouter() {
         const { limit, cursor } = request.query;
         const result = await getTopicVersionKnowledge({
           versionId,
-          limit: typeof limit === 'string' ? limit : undefined,
+          limit,
           cursor: typeof cursor === 'string' ? cursor : undefined,
           identity: response.locals.identity,
         });

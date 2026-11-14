@@ -9,6 +9,7 @@ import {
   validateContentItemDraftInput,
   validatePublishCompleteness,
   normalizePublishPayload,
+  resolveDeckManifest,
   verifyDraftReferences,
 } from './content-validator.js';
 import {
@@ -35,6 +36,47 @@ const { ObjectId } = mongoose.Types;
 
 const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 50;
+
+/**
+ * Phân tích và kiểm tra tham số phân trang limit theo contract (07 §1, OpenAPI).
+ * Chỉ chấp nhận số nguyên từ 1 đến 50. Nếu không truyền, mặc định là 20.
+ *
+ * @param {unknown} limit
+ * @returns {number}
+ */
+export function parsePageLimit(limit) {
+  if (limit === undefined) {
+    return DEFAULT_PAGE_LIMIT;
+  }
+
+  if (typeof limit !== 'string' && typeof limit !== 'number') {
+    throw new AppError({
+      status: 400,
+      code: 'MALFORMED_REQUEST',
+      message: 'Tham số limit không hợp lệ. Phải là số nguyên từ 1 đến 50.',
+    });
+  }
+
+  const str = String(limit).trim();
+  if (!/^[1-9]\d*$/.test(str)) {
+    throw new AppError({
+      status: 400,
+      code: 'MALFORMED_REQUEST',
+      message: 'Tham số limit không hợp lệ. Phải là số nguyên từ 1 đến 50.',
+    });
+  }
+
+  const num = Number(str);
+  if (!Number.isSafeInteger(num) || num < 1 || num > MAX_PAGE_LIMIT) {
+    throw new AppError({
+      status: 400,
+      code: 'MALFORMED_REQUEST',
+      message: `Tham số limit vượt quá phạm vi cho phép (1-${MAX_PAGE_LIMIT}).`,
+    });
+  }
+
+  return num;
+}
 
 /**
  * Tạo mới một bản ghi nháp học liệu (BE-003, 07 §10).
@@ -381,7 +423,7 @@ export async function getContentItemDetail({ id }) {
  * @param {string} [params.kind]
  * @param {string} [params.status]
  * @param {string} [params.level]
- * @param {number | string} [params.limit]
+ * @param {unknown} [params.limit]
  * @param {string} [params.cursor]
  * @returns {Promise<{ items: Array<import('./content-dto.js').ContentItemDto>, nextCursor: string | null }>}
  */
@@ -414,13 +456,7 @@ export async function listContentItems({ kind, status, level, limit, cursor }) {
     });
   }
 
-  let parsedLimit = DEFAULT_PAGE_LIMIT;
-  if (limit !== undefined) {
-    const num = Number(limit);
-    if (!Number.isNaN(num) && num > 0) {
-      parsedLimit = Math.min(Math.floor(num), MAX_PAGE_LIMIT);
-    }
-  }
+  const parsedLimit = parsePageLimit(limit);
 
   const filters = { kind, status, level };
 
@@ -566,10 +602,25 @@ export async function publishContent({
         });
       }
 
-      const normalizedPayload = normalizePublishPayload(
-        item.kind,
-        item.draftPayload,
-      );
+      let normalizedPayload;
+      if (item.kind === 'deck') {
+        const { mergedPayload, errors: manifestErrors } =
+          await resolveDeckManifest(db, item.draftPayload, { session });
+        if (manifestErrors && manifestErrors.length > 0) {
+          throw new AppError({
+            status: 422,
+            code: 'CONTENT_INCOMPLETE',
+            message: 'Học liệu chưa đủ điều kiện xuất bản.',
+            details: { fields: manifestErrors },
+          });
+        }
+        normalizedPayload = mergedPayload;
+      } else {
+        normalizedPayload = normalizePublishPayload(
+          item.kind,
+          item.draftPayload,
+        );
+      }
 
       const res = await publishContentItemTx(
         db,
@@ -750,7 +801,7 @@ export async function hideContent({
  *
  * @param {object} params
  * @param {string} [params.level]
- * @param {string | number} [params.limit]
+ * @param {unknown} [params.limit]
  * @param {string} [params.cursor]
  */
 export async function listPublishedTopics({ level, limit, cursor }) {
@@ -762,13 +813,7 @@ export async function listPublishedTopics({ level, limit, cursor }) {
     });
   }
 
-  let parsedLimit = DEFAULT_PAGE_LIMIT;
-  if (limit !== undefined) {
-    const num = Number(limit);
-    if (!Number.isNaN(num) && num > 0) {
-      parsedLimit = Math.min(Math.floor(num), MAX_PAGE_LIMIT);
-    }
-  }
+  const parsedLimit = parsePageLimit(limit);
 
   const filters = { kind: 'deck', status: 'published', level };
 
@@ -994,6 +1039,7 @@ async function assertKnowledgeSourceAccess(
       }
       const hasSaved = await db.collection('saved_sources').findOne({
         ownerKey: identity.actorKey,
+        knowledgeId,
         knowledgeVersionId,
       });
       if (hasSaved) return;
@@ -1047,18 +1093,13 @@ async function assertKnowledgeSourceAccess(
     return;
   }
 
-  const [hasSavedSource, hasSavedItem] = await Promise.all([
-    db.collection('saved_sources').findOne({
-      ownerKey: identity.actorKey,
-      knowledgeVersionId,
-    }),
-    db.collection('saved_items').findOne({
-      ownerKey: identity.actorKey,
-      knowledgeId,
-    }),
-  ]);
+  const hasSavedSource = await db.collection('saved_sources').findOne({
+    ownerKey: identity.actorKey,
+    knowledgeId,
+    knowledgeVersionId,
+  });
 
-  if (hasSavedSource || hasSavedItem) {
+  if (hasSavedSource) {
     return;
   }
 
@@ -1152,7 +1193,7 @@ export async function getTopicVersionDetail({ versionId, identity }) {
  *
  * @param {object} params
  * @param {string} params.versionId
- * @param {string | number} [params.limit]
+ * @param {unknown} [params.limit]
  * @param {string} [params.cursor]
  * @param {any} [params.identity]
  */
@@ -1170,13 +1211,7 @@ export async function getTopicVersionKnowledge({
     });
   }
 
-  let parsedLimit = DEFAULT_PAGE_LIMIT;
-  if (limit !== undefined) {
-    const num = Number(limit);
-    if (!Number.isNaN(num) && num > 0) {
-      parsedLimit = Math.min(Math.floor(num), MAX_PAGE_LIMIT);
-    }
-  }
+  const parsedLimit = parsePageLimit(limit);
 
   let offset = 0;
   if (cursor !== undefined) {
