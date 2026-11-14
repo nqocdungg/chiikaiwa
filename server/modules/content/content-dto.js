@@ -155,3 +155,91 @@ export function decodeContentCursor(cursor, expectedFilters = {}) {
     return null;
   }
 }
+
+/**
+ * Chuyển đổi topic summary thành TopicSummaryDto (07 §7).
+ *
+ * @param {Record<string, any>} itemDoc
+ * @param {Record<string, any>} [versionDoc]
+ * @returns {{ id: string, versionId: string, title: string, level: string, description: string }}
+ */
+export function toTopicSummaryDto(itemDoc, versionDoc) {
+  const payload = versionDoc?.payload ?? itemDoc.draftPayload ?? {};
+  return {
+    id:
+      itemDoc._id instanceof ObjectId
+        ? itemDoc._id.toHexString()
+        : String(itemDoc._id),
+    versionId:
+      itemDoc.publishedVersionId instanceof ObjectId
+        ? itemDoc.publishedVersionId.toHexString()
+        : String(itemDoc.publishedVersionId),
+    title: itemDoc.title ?? payload.title ?? '',
+    level: itemDoc.level ?? payload.level ?? 'N5',
+    description: payload.description ?? '',
+  };
+}
+
+/**
+ * Chuyển đổi topic version thành TopicVersionDetailDto (07 §7).
+ *
+ * @param {Record<string, any>} versionDoc
+ * @returns {{ id: string, contentId: string, title: string, level: string, description: string, knowledgeCount: number, questionCount: number }}
+ */
+export function toTopicVersionDetailDto(versionDoc) {
+  const payload = versionDoc.payload ?? {};
+  const knowledgeCount = Array.isArray(payload.knowledgeVersionIds)
+    ? payload.knowledgeVersionIds.length
+    : 0;
+  const questionCount = Array.isArray(payload.questionVersionIds)
+    ? payload.questionVersionIds.length
+    : 0;
+
+  return {
+    id:
+      versionDoc._id instanceof ObjectId
+        ? versionDoc._id.toHexString()
+        : String(versionDoc._id),
+    contentId:
+      versionDoc.contentId instanceof ObjectId
+        ? versionDoc.contentId.toHexString()
+        : String(versionDoc.contentId),
+    title: payload.title ?? '',
+    level: payload.level ?? 'N5',
+    description: payload.description ?? '',
+    knowledgeCount,
+    questionCount,
+  };
+}
+
+/**
+ * Chuyển đổi knowledge version thành KnowledgeItemDto (07 §7).
+ * Tuyệt đối không chứa roleA, roleB hay đáp án ngân hàng.
+ *
+ * @param {Record<string, any>} versionDoc
+ * @returns {{ id: string, versionId: string, type: 'vocabulary' | 'grammar', expression: string, reading?: string, meaning: string, examples: Array<{ japanese: string, vietnamese: string }> }}
+ */
+export function toKnowledgeItemDto(versionDoc) {
+  const payload = versionDoc.payload ?? {};
+  /** @type {{ id: string, versionId: string, type: 'vocabulary' | 'grammar', expression: string, reading?: string, meaning: string, examples: Array<{ japanese: string, vietnamese: string }> }} */
+  const dto = {
+    id:
+      versionDoc.contentId instanceof ObjectId
+        ? versionDoc.contentId.toHexString()
+        : String(versionDoc.contentId),
+    versionId:
+      versionDoc._id instanceof ObjectId
+        ? versionDoc._id.toHexString()
+        : String(versionDoc._id),
+    type: payload.type,
+    expression: payload.expression,
+    meaning: payload.meaning,
+    examples: Array.isArray(payload.examples) ? payload.examples : [],
+  };
+
+  if (payload.reading) {
+    dto.reading = payload.reading;
+  }
+
+  return dto;
+}

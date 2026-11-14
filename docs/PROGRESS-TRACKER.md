@@ -157,6 +157,45 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Tiếp theo: Nối dependency `assertPairCanEnterSession` và luồng guest-trial trước nghiệm thu đường mời/khách thật. Kiểm hai client, leave một phía, token cũ/vừa refresh/identity đã rời và retry thu hồi trên LiveKit Cloud test qua HTTPS. Tạo PR về develop, chạy CI và nhờ reviewer khác owner theo Tracker; chưa cập nhật Sheets/Done.
 - Bàn giao reconnect: BE-012 chỉ cung cấp nền disconnect và deadline theo phạm vi đã chốt. Nhánh phục hồi phiên đã startedAt hiện trả 503 và rollback receipt/presence; task tiếp theo thay nhánh này bằng reconnecting→active và phục hồi đầy đủ. Consumer có observedAt để chốt mất kết nối, checkedAt để recheck deadline; giữ controller, thời gian còn lại và SID guards. Không nghiệm thu toàn bộ PB-11/AT-07 từ task này. Maintenance toàn cục/full guest cleanup vẫn thuộc task sau; cleanup pending cần request/webhook hoặc maintenance tiếp tục xử lý khi dịch vụ trở lại.
 
+### BE-013 — Xuất bản revision và đọc học liệu theo quyền
+
+- Ngày cập nhật: 2026-11-12
+- Trạng thái: Đã triển khai và self-test; sẵn sàng mở PR về `develop` và nhờ Ngọc Dung review.
+- PR: Chưa có; branch `feature/BE-013-content-publishing`, chưa commit/push.
+- Đã làm:
+  - Triển khai `POST /api/v1/admin/content/:id/publish` (TX-11, 06 §7.1, §7.2, 07 §10): kiểm tra CAS `expectedVersion`, xác thực đầy đủ (completeness) và references của bản nháp; tạo revision bất biến mới trong `content_versions`, dedup manifest các mảng ObjectIds (`scenarioVersionIds`, `knowledgeVersionIds`, `questionVersionIds`), cập nhật con trỏ `content_items` (`publishedVersionId`, `latestRevision`, `status: 'published'`, tăng `version`). Từ chối bản nháp thiếu references hoặc vi phạm ngưỡng nội dung tối thiểu (ít nhất 1 kịch bản cho deck, ít nhất 3 câu hỏi cho scenario) với mã `422 CONTENT_INCOMPLETE` và không tạo revision nửa chừng (AC 1).
+  - Triển khai `POST /api/v1/admin/content/:id/hide`: CAS `expectedVersion`, chuyển trạng thái `status: 'hidden'`, bảo toàn `publishedVersionId` để các phiên/lịch sử/mục đã lưu cũ không bị gãy liên kết (AC 3).
+  - Triển khai router đọc học liệu theo quyền `server/modules/content/content-learner-router.js` gắn tại `/api/v1` (07 §7):
+    - `GET /topics` (Quyền Learner `U`): danh sách bộ chủ đề đã xuất bản `{id, versionId, title, level, description}` với phân trang keyset cursor.
+    - `GET /topic-versions/:id` (Quyền `U/G`): metadata phiên bản bộ chủ đề, tính `knowledgeCount` và `questionCount`.
+    - `GET /topic-versions/:id/knowledge` (Quyền `U/G`): danh sách Knowledge của đúng bản nguồn.
+    - `GET /knowledge/:id` (Quyền `U/G`): chi tiết kiến thức; nếu có `versionId` thì trả đúng bản lịch sử, không có thì lấy bản xuất bản mới nhất.
+  - Phân quyền & bảo mật projection (06 §12.1): tuyệt đối không trả `roleA`, `roleB` hoặc đáp án ngân hàng cho Learner/Guest (AC 2).
+  - Cập nhật contract Swagger trong `docs/api/openapi.yaml` cho cả 6 REST endpoints mới, bổ sung components schemas và mã lỗi `422 CONTENT_INCOMPLETE`. Cập nhật `tests/server/openapi-contract.test.js`.
+- File liên quan:
+  - `server/modules/content/content-validator.js`
+  - `server/modules/content/content-dto.js`
+  - `server/modules/content/content-repository.js`
+  - `server/modules/content/content-service.js`
+  - `server/modules/content/content-admin-router.js`
+  - `server/modules/content/content-learner-router.js`
+  - `server/app.js`
+  - `docs/api/openapi.yaml`
+  - `tests/server/openapi-contract.test.js`
+  - `tests/server/content-publishing.test.js`
+  - `tests/integration/content-publishing.integration.test.js`
+- Kiểm chứng:
+  - `npm run openapi:check`: Pass 100% (5/5 tests).
+  - `npm run format:check`: Pass.
+  - `npm run lint`: Pass (0 warnings, 0 errors).
+  - `npm run typecheck`: Pass sạch 100%.
+  - `npm test`: **269/269 unit tests passed** (bao gồm 9 tests `content-publishing.test.js`).
+  - `npm run test:integration`: **120/120 replica-set integration tests passed** (bao gồm 9 tests `content-publishing.integration.test.js`).
+  - `npm run build`: Pass (client production bundle & node checks).
+  - `npm run build-storybook`: Pass.
+  - `npm run check`: **Passed toàn bộ 7/7 bước**.
+- Tiếp theo: Push branch `feature/BE-013-content-publishing`, mở PR về `develop`, gán reviewer Ngọc Dung.
+
 ## Sprint 2
 
 Chưa có cập nhật.
