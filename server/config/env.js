@@ -160,3 +160,74 @@ export function readLiveKitEnv(source = process.env) {
   }
   return { url: parsed.origin, apiKey, apiSecret };
 }
+
+const DEFAULT_BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
+const DEFAULT_BREVO_SENDER_NAME = 'Chiikaiwa';
+const SIMPLE_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+
+// Chỉ đọc khi gửi email transactional (reset mật khẩu), không làm health/auth thông thường phụ thuộc cấu hình Brevo.
+/** @param {NodeJS.ProcessEnv} [source] */
+export function readBrevoEnv(source = process.env) {
+  const authEnv = readAuthEnv(source);
+  const apiKey = source.BREVO_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('BREVO_API_KEY is required');
+  }
+
+  const senderEmail = source.BREVO_SENDER_EMAIL?.trim();
+  if (
+    !senderEmail ||
+    senderEmail.length > 254 ||
+    !SIMPLE_EMAIL_PATTERN.test(senderEmail)
+  ) {
+    throw new Error('BREVO_SENDER_EMAIL must be a valid email address');
+  }
+
+  const rawSenderName = source.BREVO_SENDER_NAME;
+  const senderName =
+    rawSenderName === undefined
+      ? DEFAULT_BREVO_SENDER_NAME
+      : rawSenderName.trim();
+  if (!senderName || senderName.length > 100) {
+    throw new Error('BREVO_SENDER_NAME must be between 1 and 100 characters');
+  }
+
+  const rawApiUrl = source.BREVO_API_URL ?? DEFAULT_BREVO_API_URL;
+  if (!URL.canParse(rawApiUrl)) {
+    throw new Error('BREVO_API_URL must be a valid HTTPS URL');
+  }
+  const parsedApiUrl = new URL(rawApiUrl);
+  const isLocalHost = ['localhost', '127.0.0.1', '[::1]'].includes(
+    parsedApiUrl.hostname,
+  );
+  if (
+    !['http:', 'https:'].includes(parsedApiUrl.protocol) ||
+    parsedApiUrl.username ||
+    parsedApiUrl.password ||
+    parsedApiUrl.search ||
+    parsedApiUrl.hash ||
+    (parsedApiUrl.protocol === 'http:' &&
+      (!isLocalHost || authEnv.nodeEnv === 'production'))
+  ) {
+    throw new Error(
+      'BREVO_API_URL must use HTTPS (HTTP only for local test/development) without credentials or query parameters',
+    );
+  }
+
+  const rawTimeout = source.BREVO_TIMEOUT_MS;
+  const timeoutMs = rawTimeout === undefined ? 5000 : Number(rawTimeout);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 500 || timeoutMs > 30000) {
+    throw new Error(
+      'BREVO_TIMEOUT_MS must be an integer between 500 and 30000',
+    );
+  }
+
+  return {
+    apiKey,
+    senderEmail,
+    senderName,
+    apiUrl: parsedApiUrl.toString(),
+    timeoutMs,
+    appOrigin: authEnv.origin,
+  };
+}

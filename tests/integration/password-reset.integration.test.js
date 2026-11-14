@@ -1,0 +1,822 @@
+import mongoose from 'mongoose';
+import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import request from 'supertest';
+import { createApp } from '../../server/app.js';
+import {
+  connectDatabase,
+  disconnectDatabase,
+} from '../../server/persistence/database.js';
+import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
+import {
+  generatePasswordResetToken,
+  hashGuestCredential,
+  hashPasswordResetToken,
+} from '../../server/modules/identity/crypto.js';
+import {
+  changeUserPassword,
+  NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE,
+  resetPasswordWithToken,
+} from '../../server/modules/identity/identity-service.js';
+
+const { ObjectId } = mongoose.Types;
+const DEFAULT_ORIGIN = 'http://127.0.0.1:5173';
+
+/** @type {MongoMemoryReplSet} */
+let replicaSet;
+/** @type {import('mongoose').mongo.Db} */
+let db;
+
+/**
+ * Captured email dispatches during tests.
+ * @type {Array<{ toEmail: string, displayName?: string, resetToken: string }>}
+ */
+let sentEmails = [];
+
+/**
+ * Optional failure hook for the email sender in tests.
+ * @type {(() => Promise<void>) | null}
+ */
+let emailSenderFailureHook = null;
+
+const app = createApp({
+  sendPasswordResetEmail: async (payload) => {
+    if (emailSenderFailureHook) {
+      await emailSenderFailureHook();
+    }
+    sentEmails.push(payload);
+    return { messageId: `<test-${sentEmails.length}@chiikaiwa.local>` };
+  },
+});
+
+/**
+ * Helper to fetch CSRF cookie and token from the Express app.
+ */
+async function getCsrfContext() {
+  const res = await request(app).get('/api/v1/auth/csrf').expect(200);
+  const csrfToken = res.body.data.csrfToken;
+  const setCookie = res.headers['set-cookie'];
+  const csrfCookie = Array.isArray(setCookie)
+    ? setCookie.map((c) => c.split(';')[0]).join('; ')
+    : String(setCookie ?? '').split(';')[0];
+  return { csrfToken, csrfCookie };
+}
+
+/**
+ * Extracts a specific cookie `name=value` pair from Supertest `set-cookie` headers.
+ * @param {string | string[] | undefined} setCookieHeader
+ * @param {string} cookieName
+ */
+function extractCookiePair(setCookieHeader, cookieName) {
+  const list = Array.isArray(setCookieHeader)
+    ? setCookieHeader
+    : setCookieHeader
+      ? [setCookieHeader]
+      : [];
+  for (const item of list) {
+    if (item.startsWith(`${cookieName}=`)) {
+      return item.split(';')[0] ?? '';
+    }
+  }
+  return '';
+}
+
+/**
+ * Helper to register and login a learner account, returning user info and session cookie.
+ * @param {{ email?: string, password?: string, displayName?: string }} [overrides]
+ */
+async function registerAndLoginLearner({
+  email = 'hanh.nhi@example.com',
+  password = 'InitialPassword123!',
+  displayName = 'Hạnh Nhi',
+} = {}) {
+  const { csrfToken, csrfCookie } = await getCsrfContext();
+
+  const regRes = await request(app)
+    .post('/api/v1/auth/register')
+    .set('Origin', DEFAULT_ORIGIN)
+    .set('Cookie', csrfCookie)
+    .set('X-CSRF-Token', csrfToken)
+    .send({ email, password, displayName })
+    .expect(201);
+
+  const loginRes = await request(app)
+    .post('/api/v1/auth/login')
+    .set('Origin', DEFAULT_ORIGIN)
+    .set('Cookie', csrfCookie)
+    .set('X-CSRF-Token', csrfToken)
+    .send({ email, password })
+    .expect(200);
+
+  const sessionCookie = extractCookiePair(
+    loginRes.headers['set-cookie'],
+    'ck_session',
+  );
+
+  return {
+    user: regRes.body.data.user,
+    sessionCookie,
+    csrfToken,
+    csrfCookie,
+  };
+}
+
+beforeAll(async () => {
+  replicaSet = await MongoMemoryReplSet.create({
+    binary: { version: '8.2.7' },
+    replSet: { count: 1, storageEngine: 'wiredTiger' },
+  });
+  vi.stubEnv('MONGODB_URI', replicaSet.getUri());
+  vi.stubEnv('MONGODB_DB_NAME', 'chiikaiwa_password_reset_integration_test');
+  vi.stubEnv('APP_ORIGIN', DEFAULT_ORIGIN);
+  vi.stubEnv('BREVO_API_KEY', 'xkeysib-test-integration-key');
+  vi.stubEnv('BREVO_SENDER_EMAIL', 'no-reply@chiikaiwa.example.com');
+  vi.stubEnv('BREVO_SENDER_NAME', 'Chiikaiwa');
+  db = await connectDatabase();
+  await applyDesignIndexes(db);
+});
+
+beforeEach(async () => {
+  sentEmails = [];
+  emailSenderFailureHook = null;
+  await Promise.all([
+    db.collection('users').deleteMany({}),
+    db.collection('auth_sessions').deleteMany({}),
+    db.collection('guest_sessions').deleteMany({}),
+    db.collection('password_reset_tokens').deleteMany({}),
+    db.collection('actor_states').deleteMany({}),
+    db.collection('statistics').deleteMany({}),
+    db.collection('rate_limits').deleteMany({}),
+  ]);
+});
+
+afterAll(async () => {
+  await disconnectDatabase();
+  await replicaSet?.stop();
+  vi.unstubAllEnvs();
+});
+
+describe('BE-007 Password change & Brevo password reset replica-set integration tests', () => {
+  describe('POST /api/v1/auth/password-change (U)', () => {
+    it('changes password when currentPassword is correct, increments authVersion/version, revokes all active sessions, and invalidates unused reset tokens', async () => {
+      const { user, sessionCookie, csrfToken, csrfCookie } =
+        await registerAndLoginLearner();
+
+      // Create a second active session (e.g. another browser/tab)
+      const secondLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          email: 'hanh.nhi@example.com',
+          password: 'InitialPassword123!',
+        })
+        .expect(200);
+      const secondSessionCookie = extractCookiePair(
+        secondLogin.headers['set-cookie'],
+        'ck_session',
+      );
+
+      // Also request a password reset token before changing password to verify it gets invalidated
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'hanh.nhi@example.com' })
+        .expect(202);
+      expect(sentEmails).toHaveLength(1);
+      const pendingResetToken = sentEmails[0].resetToken;
+
+      // Change password with valid currentPassword
+      await request(app)
+        .post('/api/v1/auth/password-change')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', `${csrfCookie}; ${sessionCookie}`)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          currentPassword: 'InitialPassword123!',
+          newPassword: 'UpdatedPassword456!',
+        })
+        .expect(204);
+
+      // Verify user authVersion and version incremented
+      const updatedUserDoc = await db
+        .collection('users')
+        .findOne({ _id: new ObjectId(user.id) });
+      expect(updatedUserDoc?.authVersion).toBe(1);
+      expect(updatedUserDoc?.version).toBeGreaterThanOrEqual(2);
+
+      // Both previous sessions must now be rejected with 401 SESSION_EXPIRED on protected endpoints
+      const meFirst = await request(app)
+        .get('/api/v1/auth/me')
+        .set('Cookie', sessionCookie)
+        .expect(401);
+      expect(meFirst.body.error.code).toBe('SESSION_EXPIRED');
+
+      const meSecond = await request(app)
+        .get('/api/v1/auth/me')
+        .set('Cookie', secondSessionCookie)
+        .expect(401);
+      expect(meSecond.body.error.code).toBe('SESSION_EXPIRED');
+
+      // Pending reset token issued before the password change must be invalidated
+      const resetAttempt = await request(app)
+        .post('/api/v1/auth/password-resets')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          token: pendingResetToken,
+          newPassword: 'AnotherPassword789!',
+        })
+        .expect(400);
+      expect(resetAttempt.body.error.code).toBe('RESET_TOKEN_INVALID');
+
+      // Old password can no longer login
+      const oldLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          email: 'hanh.nhi@example.com',
+          password: 'InitialPassword123!',
+        })
+        .expect(401);
+      expect(oldLogin.body.error.code).toBe('INVALID_CREDENTIALS');
+
+      // New password logs in and accesses protected endpoints
+      const newLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          email: 'hanh.nhi@example.com',
+          password: 'UpdatedPassword456!',
+        })
+        .expect(200);
+      const newSessionCookie = extractCookiePair(
+        newLogin.headers['set-cookie'],
+        'ck_session',
+      );
+      await request(app)
+        .get('/api/v1/auth/me')
+        .set('Cookie', newSessionCookie)
+        .expect(200);
+    });
+
+    it('rejects wrong currentPassword with 401 INVALID_CREDENTIALS and invalid newPassword with 422 VALIDATION_FAILED without revoking current session', async () => {
+      const { sessionCookie, csrfToken, csrfCookie } =
+        await registerAndLoginLearner();
+
+      const wrongCurrent = await request(app)
+        .post('/api/v1/auth/password-change')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', `${csrfCookie}; ${sessionCookie}`)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          currentPassword: 'WrongCurrentPassword!',
+          newPassword: 'UpdatedPassword456!',
+        })
+        .expect(401);
+      expect(wrongCurrent.body.error.code).toBe('INVALID_CREDENTIALS');
+
+      const invalidNew = await request(app)
+        .post('/api/v1/auth/password-change')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', `${csrfCookie}; ${sessionCookie}`)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          currentPassword: 'InitialPassword123!',
+          newPassword: 'short',
+        })
+        .expect(422);
+      expect(invalidNew.body.error.code).toBe('VALIDATION_FAILED');
+
+      // Session remains active
+      await request(app)
+        .get('/api/v1/auth/me')
+        .set('Cookie', sessionCookie)
+        .expect(200);
+    });
+
+    it('rejects guest callers (G) on POST /api/v1/auth/password-change with 403 FORBIDDEN', async () => {
+      const { csrfToken, csrfCookie } = await getCsrfContext();
+      const rawGuestToken = 'guest-secret-credential-for-password-change-test';
+      const now = new Date();
+      await db.collection('guest_sessions').insertOne({
+        _id: new ObjectId(),
+        credentialHash: hashGuestCredential(rawGuestToken),
+        status: 'waiting',
+        version: 0,
+        expiresAt: new Date(now.getTime() + 10 * 60 * 1000),
+        purgeAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/auth/password-change')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', `${csrfCookie}; ck_guest=${rawGuestToken}`)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          currentPassword: 'InitialPassword123!',
+          newPassword: 'UpdatedPassword456!',
+        })
+        .expect(403);
+      expect(res.body.error.code).toBe('FORBIDDEN');
+    });
+  });
+
+  describe('POST /api/v1/auth/password-reset-requests (P)', () => {
+    it('returns identical neutral 202 response for existing active email, nonexistent email, and locked account without leaking account status', async () => {
+      const { user, csrfToken, csrfCookie } = await registerAndLoginLearner({
+        email: 'active.user@example.com',
+      });
+
+      const lockedUser = await registerAndLoginLearner({
+        email: 'locked.user@example.com',
+      });
+      await db
+        .collection('users')
+        .updateOne(
+          { _id: new ObjectId(lockedUser.user.id) },
+          { $set: { status: 'locked' } },
+        );
+
+      // 1. Existing active user
+      const activeRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: '  ACTIVE.USER@EXAMPLE.COM ' })
+        .expect(202);
+
+      // 2. Non-existent email
+      const missingRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'nobody@example.com' })
+        .expect(202);
+
+      // 3. Locked account
+      const lockedRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'locked.user@example.com' })
+        .expect(202);
+
+      expect(activeRes.body.data).toEqual({
+        message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE,
+      });
+      expect(missingRes.body.data).toEqual(activeRes.body.data);
+      expect(lockedRes.body.data).toEqual(activeRes.body.data);
+
+      // Only the active user should have a token created and an email sent
+      expect(sentEmails).toHaveLength(1);
+      expect(sentEmails[0].toEmail).toBe('active.user@example.com');
+      const rawToken = sentEmails[0].resetToken;
+
+      const storedTokens = await db
+        .collection('password_reset_tokens')
+        .find({})
+        .toArray();
+      expect(storedTokens).toHaveLength(1);
+      expect(storedTokens[0].userId.toHexString()).toBe(user.id);
+      // Database must store SHA-256 tokenHash and NEVER store raw token
+      expect(storedTokens[0].tokenHash).toBe(hashPasswordResetToken(rawToken));
+      expect(JSON.stringify(storedTokens[0])).not.toContain(rawToken);
+      expect(storedTokens[0].expiresAt).toBeInstanceOf(Date);
+      expect(storedTokens[0].purgeAt).toEqual(storedTokens[0].expiresAt);
+    });
+
+    it('returns 503 SERVICE_UNAVAILABLE, keeps current password intact, and invalidates the newly created token when Brevo fails or times out', async () => {
+      const { user, csrfToken, csrfCookie } = await registerAndLoginLearner({
+        email: 'brevo.fail@example.com',
+        password: 'OriginalPassword123!',
+      });
+
+      const userBefore = await db
+        .collection('users')
+        .findOne({ _id: new ObjectId(user.id) });
+
+      emailSenderFailureHook = async () => {
+        throw new Error('Brevo upstream timeout');
+      };
+
+      const res = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'brevo.fail@example.com' })
+        .expect(503);
+
+      expect(res.body.error.code).toBe('SERVICE_UNAVAILABLE');
+
+      // User's passwordHash and authVersion must not have changed
+      const userAfter = await db
+        .collection('users')
+        .findOne({ _id: new ObjectId(user.id) });
+      expect(userAfter?.passwordHash).toBe(userBefore?.passwordHash);
+      expect(userAfter?.authVersion).toBe(userBefore?.authVersion);
+
+      // Any token created before the email failure must be marked invalidatedAt
+      const tokens = await db
+        .collection('password_reset_tokens')
+        .find({ userId: new ObjectId(user.id) })
+        .toArray();
+      expect(tokens).toHaveLength(1);
+      expect(tokens[0].invalidatedAt).toBeInstanceOf(Date);
+
+      // User can still login with their original password
+      await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          email: 'brevo.fail@example.com',
+          password: 'OriginalPassword123!',
+        })
+        .expect(200);
+    });
+  });
+
+  describe('POST /api/v1/auth/password-resets (P) & DB-T02 concurrency/transaction guarantees', () => {
+    it('resets password with a valid token, does NOT auto-login, revokes existing sessions, and rejects token reuse', async () => {
+      const { user, sessionCookie, csrfToken, csrfCookie } =
+        await registerAndLoginLearner({
+          email: 'reset.flow@example.com',
+          password: 'OldPassword123!',
+        });
+
+      // Request reset #1, then request reset #2 (reset #1 must be invalidated by #2)
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'reset.flow@example.com' })
+        .expect(202);
+      const supersededToken = sentEmails[0].resetToken;
+
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'reset.flow@example.com' })
+        .expect(202);
+      const activeToken = sentEmails[1].resetToken;
+
+      // Superseded token must fail with 400 RESET_TOKEN_INVALID
+      const oldTokenRes = await request(app)
+        .post('/api/v1/auth/password-resets')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          token: supersededToken,
+          newPassword: 'BrandNewPassword123!',
+        })
+        .expect(400);
+      expect(oldTokenRes.body.error.code).toBe('RESET_TOKEN_INVALID');
+
+      // Active token succeeds with 204 and does NOT set ck_session cookie
+      const resetRes = await request(app)
+        .post('/api/v1/auth/password-resets')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          token: activeToken,
+          newPassword: 'BrandNewPassword123!',
+        })
+        .expect(204);
+
+      expect(
+        extractCookiePair(resetRes.headers['set-cookie'], 'ck_session'),
+      ).toBe('');
+
+      // Token is marked usedAt and cannot be reused
+      const reuseRes = await request(app)
+        .post('/api/v1/auth/password-resets')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          token: activeToken,
+          newPassword: 'AnotherNewPassword456!',
+        })
+        .expect(400);
+      expect(reuseRes.body.error.code).toBe('RESET_TOKEN_INVALID');
+
+      // Old session cookie is rejected on protected endpoint
+      const meOldSession = await request(app)
+        .get('/api/v1/auth/me')
+        .set('Cookie', sessionCookie)
+        .expect(401);
+      expect(meOldSession.body.error.code).toBe('SESSION_EXPIRED');
+
+      // Old password cannot login, new password logs in
+      await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          email: 'reset.flow@example.com',
+          password: 'OldPassword123!',
+        })
+        .expect(401);
+
+      const newLogin = await request(app)
+        .post('/api/v1/auth/login')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          email: 'reset.flow@example.com',
+          password: 'BrandNewPassword123!',
+        })
+        .expect(200);
+      expect(newLogin.body.data.user.id).toBe(user.id);
+    });
+
+    it('rejects wrong token and expired token with the same 400 RESET_TOKEN_INVALID error code', async () => {
+      const { user, csrfToken, csrfCookie } = await registerAndLoginLearner({
+        email: 'expired.token@example.com',
+      });
+
+      // 1. Completely unknown token
+      const wrongRes = await request(app)
+        .post('/api/v1/auth/password-resets')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          token: 'non-existent-random-reset-token',
+          newPassword: 'ValidNewPassword123!',
+        })
+        .expect(400);
+      expect(wrongRes.body.error.code).toBe('RESET_TOKEN_INVALID');
+
+      // 2. Expired token (expiresAt in the past)
+      const expiredRawToken = generatePasswordResetToken();
+      const pastDate = new Date(Date.now() - 60 * 1000);
+      await db.collection('password_reset_tokens').insertOne({
+        _id: new ObjectId(),
+        userId: new ObjectId(user.id),
+        tokenHash: hashPasswordResetToken(expiredRawToken),
+        expiresAt: pastDate,
+        purgeAt: pastDate,
+      });
+
+      const expiredRes = await request(app)
+        .post('/api/v1/auth/password-resets')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          token: expiredRawToken,
+          newPassword: 'ValidNewPassword123!',
+        })
+        .expect(400);
+      expect(expiredRes.body.error.code).toBe('RESET_TOKEN_INVALID');
+    });
+
+    it('DB-T02: concurrent password reset requests using the same valid token allow exactly 1 to succeed (204) and reject the rest with 400 RESET_TOKEN_INVALID', async () => {
+      const { user, sessionCookie, csrfToken, csrfCookie } =
+        await registerAndLoginLearner({
+          email: 'concurrent.reset@example.com',
+          password: 'InitialPassword123!',
+        });
+
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'concurrent.reset@example.com' })
+        .expect(202);
+
+      const sharedToken = sentEmails[0].resetToken;
+
+      const candidatePasswords = [
+        'ConcurrentNewPass1!',
+        'ConcurrentNewPass2!',
+        'ConcurrentNewPass3!',
+      ];
+
+      const responses = await Promise.all(
+        candidatePasswords.map((newPassword) =>
+          request(app)
+            .post('/api/v1/auth/password-resets')
+            .set('Origin', DEFAULT_ORIGIN)
+            .set('Cookie', csrfCookie)
+            .set('X-CSRF-Token', csrfToken)
+            .send({
+              token: sharedToken,
+              newPassword,
+            }),
+        ),
+      );
+
+      const succeeded = responses.filter((r) => r.status === 204);
+      const rejected = responses.filter((r) => r.status === 400);
+
+      expect(succeeded).toHaveLength(1);
+      expect(rejected).toHaveLength(2);
+      for (const res of rejected) {
+        expect(res.body.error.code).toBe('RESET_TOKEN_INVALID');
+      }
+
+      // Verify authVersion increased by exactly 1 and token is marked usedAt
+      const updatedUser = await db
+        .collection('users')
+        .findOne({ _id: new ObjectId(user.id) });
+      expect(updatedUser?.authVersion).toBe(1);
+
+      const tokenDoc = await db.collection('password_reset_tokens').findOne({
+        tokenHash: hashPasswordResetToken(sharedToken),
+      });
+      expect(tokenDoc?.usedAt).toBeInstanceOf(Date);
+
+      // Previous session is revoked
+      await request(app)
+        .get('/api/v1/auth/me')
+        .set('Cookie', sessionCookie)
+        .expect(401);
+    });
+
+    it('rolls back all changes in TX-02 if an error occurs mid-transaction during password reset or password change', async () => {
+      const { user, sessionCookie, csrfToken, csrfCookie } =
+        await registerAndLoginLearner({
+          email: 'rollback.test@example.com',
+          password: 'BeforeRollback123!',
+        });
+
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'rollback.test@example.com' })
+        .expect(202);
+
+      const rawToken = sentEmails[0].resetToken;
+      const userBefore = await db
+        .collection('users')
+        .findOne({ _id: new ObjectId(user.id) });
+
+      // 1. Simulate mid-transaction failure in resetPasswordWithToken
+      await expect(
+        resetPasswordWithToken(
+          {
+            token: rawToken,
+            newPassword: 'AbortedPassword456!',
+          },
+          {
+            beforeCommit: async () => {
+              throw new Error('Simulated TX-02 failure before commit');
+            },
+          },
+        ),
+      ).rejects.toThrow('Simulated TX-02 failure before commit');
+
+      // Token must still be unused, user passwordHash/authVersion unchanged, and session still active
+      const tokenAfterRollback = await db
+        .collection('password_reset_tokens')
+        .findOne({ tokenHash: hashPasswordResetToken(rawToken) });
+      expect(tokenAfterRollback?.usedAt).toBeUndefined();
+
+      const userAfterResetRollback = await db
+        .collection('users')
+        .findOne({ _id: new ObjectId(user.id) });
+      expect(userAfterResetRollback?.passwordHash).toBe(
+        userBefore?.passwordHash,
+      );
+      expect(userAfterResetRollback?.authVersion).toBe(userBefore?.authVersion);
+
+      await request(app)
+        .get('/api/v1/auth/me')
+        .set('Cookie', sessionCookie)
+        .expect(200);
+
+      // 2. Simulate mid-transaction failure in changeUserPassword
+      await expect(
+        changeUserPassword(
+          {
+            userId: user.id,
+            rawBody: {
+              currentPassword: 'BeforeRollback123!',
+              newPassword: 'AbortedChange789!',
+            },
+          },
+          {
+            beforeCommit: async () => {
+              throw new Error('Simulated password-change TX-02 failure');
+            },
+          },
+        ),
+      ).rejects.toThrow('Simulated password-change TX-02 failure');
+
+      // Session is still active and token is still usable!
+      await request(app)
+        .get('/api/v1/auth/me')
+        .set('Cookie', sessionCookie)
+        .expect(200);
+
+      // Now complete the reset normally using the same unconsumed token
+      await request(app)
+        .post('/api/v1/auth/password-resets')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          token: rawToken,
+          newPassword: 'FinalCommittedPassword123!',
+        })
+        .expect(204);
+    });
+  });
+
+  describe('Rate limiting on POST /api/v1/auth/password-reset-requests (07 §11)', () => {
+    it('enforces 3 requests / 15 minutes per hashed emailKey (even for nonexistent emails) and returns 429 with Retry-After', async () => {
+      const { csrfToken, csrfCookie } = await getCsrfContext();
+
+      for (let i = 0; i < 3; i += 1) {
+        await request(app)
+          .post('/api/v1/auth/password-reset-requests')
+          .set('Origin', DEFAULT_ORIGIN)
+          .set('Cookie', csrfCookie)
+          .set('X-CSRF-Token', csrfToken)
+          .send({ email: `  NonExistent.User@Example.com ` })
+          .expect(202);
+      }
+
+      const fourthRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'nonexistent.user@example.com' })
+        .expect(429);
+
+      expect(fourthRes.body.error.code).toBe('RATE_LIMITED');
+      expect(Number(fourthRes.headers['retry-after'])).toBeGreaterThan(0);
+
+      // Verify raw email PII is never stored in rate_limits._id
+      const rateLimitDocs = await db
+        .collection('rate_limits')
+        .find({})
+        .toArray();
+      expect(JSON.stringify(rateLimitDocs)).not.toContain(
+        'nonexistent.user@example.com',
+      );
+    });
+
+    it('enforces 20 requests / 15 minutes per IP across distinct emails and returns 429 with Retry-After', async () => {
+      const { csrfToken, csrfCookie } = await getCsrfContext();
+
+      for (let i = 1; i <= 20; i += 1) {
+        await request(app)
+          .post('/api/v1/auth/password-reset-requests')
+          .set('Origin', DEFAULT_ORIGIN)
+          .set('Cookie', csrfCookie)
+          .set('X-CSRF-Token', csrfToken)
+          .send({ email: `distinct.user.${i}@example.com` })
+          .expect(202);
+      }
+
+      const twentyFirstRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'distinct.user.21@example.com' })
+        .expect(429);
+
+      expect(twentyFirstRes.body.error.code).toBe('RATE_LIMITED');
+      expect(Number(twentyFirstRes.headers['retry-after'])).toBeGreaterThan(0);
+    });
+  });
+});
