@@ -17,8 +17,15 @@ import { studyCardKeyPattern } from './study-card-service.js';
 /** @typedef {Awaited<ReturnType<typeof import('../identity/identity-service.js').resolveIdentityFromCookies>>} Identity */
 /** @typedef {import('./study-card-service.js').StudyScope} StudyScope */
 /** @typedef {import('./study-card-service.js').StudyCard} StudyCard */
+/** @typedef {import('./study-card-service.js').StudyPosition} StudyPosition */
 
 const { ObjectId } = mongoose.Types;
+
+/** @param {ObjectId} id @param {Date | undefined} date @returns {StudyPosition} */
+function positionFor(id, date) {
+  return { time: (date ?? id.getTimestamp()).getTime(), id: id.toHexString() };
+}
+
 function studyNotFound() {
   return new AppError({
     status: 404,
@@ -101,12 +108,13 @@ async function readTopicKnowledge(db, versionId, identity) {
   );
 }
 
-/** @param {ReturnType<typeof toKnowledgeItemDto>} knowledge */
-function knowledgeCard(knowledge) {
+/** @param {ReturnType<typeof toKnowledgeItemDto>} knowledge @param {StudyPosition} position */
+function knowledgeCard(knowledge, position) {
   const { id, versionId, expression, meaning, reading, examples } = knowledge;
   return {
     cardKey: `knowledge:${id}`,
     contentVersionId: versionId,
+    position,
     front: expression,
     back: [
       meaning,
@@ -124,8 +132,9 @@ function knowledgeCard(knowledge) {
  * @param {Db} db
  * @param {Identity} identity
  * @param {ObjectId[]} knowledgeIds
+ * @param {ReadonlyMap<string, StudyPosition>} positions
  */
-async function readKnowledgeCards(db, identity, knowledgeIds) {
+async function readKnowledgeCards(db, identity, knowledgeIds, positions) {
   if (!knowledgeIds.length) return [];
   const items = await db
     .collection('content_items')
@@ -164,7 +173,10 @@ async function readKnowledgeCards(db, identity, knowledgeIds) {
         throw error;
       }
     }
-    cards.push(knowledgeCard(toKnowledgeItemDto(version)));
+    const position =
+      positions.get(`knowledge:${item._id}`) ??
+      positionFor(item._id, item.createdAt);
+    cards.push(knowledgeCard(toKnowledgeItemDto(version), position));
   }
   return cards;
 }
@@ -183,11 +195,20 @@ async function readPersonalDeck(db, ownerKey, deckId) {
   if (deck?.status !== 'active') throw studyNotFound();
   const entries = await db
     .collection('deck_entries')
-    .find({ ownerKey, deckId: _id }, { projection: { cardKey: 1 } })
+    .find(
+      { ownerKey, deckId: _id },
+      { projection: { cardKey: 1, createdAt: 1 } },
+    )
     .toArray();
-  const keys = entries
-    .map(({ cardKey }) => cardKey)
-    .filter((key) => typeof key === 'string' && studyCardKeyPattern.test(key));
+  const positions = new Map(
+    entries
+      .filter(
+        ({ cardKey }) =>
+          typeof cardKey === 'string' && studyCardKeyPattern.test(cardKey),
+      )
+      .map((entry) => [entry.cardKey, positionFor(entry._id, entry.createdAt)]),
+  );
+  const keys = [...positions.keys()];
   const manualIds = keys
     .filter((key) => key.startsWith('manual:'))
     .map((key) => new ObjectId(key.slice('manual:'.length)));
@@ -202,15 +223,17 @@ async function readPersonalDeck(db, ownerKey, deckId) {
         .toArray()
     : [];
   return {
+    positions,
     knowledgeIds: keys
       .filter((key) => key.startsWith('knowledge:'))
       .map((key) => new ObjectId(key.slice('knowledge:'.length))),
-    manualCards: manual.map(({ _id, front, back, version }) => ({
-      cardKey: `manual:${_id}`,
-      front,
-      back,
-      manualVersion: version,
-    })),
+    manualCards: manual.flatMap(({ _id, front, back, version }) => {
+      const cardKey = `manual:${_id}`;
+      const position = positions.get(cardKey);
+      return position
+        ? [{ cardKey, front, back, manualVersion: version, position }]
+        : [];
+    }),
   };
 }
 
@@ -238,21 +261,29 @@ export async function resolveStudySet(db, identity, scope, now) {
   let knowledgeIds;
   /** @type {StudyCard[]} */
   let manualCards = [];
+  /** @type {Map<string, StudyPosition>} */
+  let positions = new Map();
   if (scope.type === 'topic') {
     knowledgeIds = source.map((version) => version.contentId);
   } else if (scope.type === 'saved') {
-    const saved = await listSavedItems(ownerKey).select('knowledgeId').lean();
-    knowledgeIds = saved
-      .map(({ knowledgeId }) => knowledgeId)
-      .filter((id) => !guest || sourceContentIds.has(String(id)));
+    const saved = await listSavedItems(ownerKey)
+      .select('knowledgeId savedAt')
+      .lean();
+    const eligible = saved.filter(
+      ({ knowledgeId }) => !guest || sourceContentIds.has(String(knowledgeId)),
+    );
+    knowledgeIds = eligible.map(({ knowledgeId, _id, savedAt }) => {
+      positions.set(`knowledge:${knowledgeId}`, positionFor(_id, savedAt));
+      return knowledgeId;
+    });
   } else {
-    ({ knowledgeIds, manualCards } = await readPersonalDeck(
+    ({ knowledgeIds, manualCards, positions } = await readPersonalDeck(
       db,
       ownerKey,
       scope.deckId,
     ));
   }
-  const cards = await readKnowledgeCards(db, identity, knowledgeIds);
+  const cards = await readKnowledgeCards(db, identity, knowledgeIds, positions);
   return {
     ownerKey,
     scope,

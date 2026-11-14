@@ -760,7 +760,11 @@ paths:
       tags: [Flashcards]
       operationId: queryStudyCards
       summary: Truy vấn mặt hỏi và tiến độ ôn tập
-      description: Chế độ due gồm thẻ mới và thẻ đến hạn tại giờ server. Cursor chỉ dùng lại cho cùng danh tính, phạm vi và chế độ. Hai thao tác study/cards không cần Idempotency-Key.
+      description: >-
+        Chế độ due gồm thẻ mới và thẻ đến hạn tại giờ server. Sắp xếp theo ngày tạo mục kiến thức
+        (topic), ngày lưu (saved) hoặc ngày thêm vào bộ (personalDeck), sau đó theo ID của bản ghi
+        tương ứng, đều giảm dần. Cursor chỉ dùng lại cho cùng danh tính, phạm vi và chế độ.
+        Hai thao tác study/cards không cần Idempotency-Key.
       security: &studySecurity
         - sessionCookie: []
           csrfToken: []

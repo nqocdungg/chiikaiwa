@@ -56,6 +56,10 @@ const cards = [1, 2, 3, 4].map((n) => ({
   front: `Question ${n}`,
   back: `Answer ${n}`,
   contentVersionId: `757f1f77bcf86cd79943903${n}`,
+  position: {
+    time: Date.UTC(2026, 10, n < 3 ? 3 : 2),
+    id: `657f1f77bcf86cd79943903${n}`,
+  },
 }));
 const input = { ownerKey, scope, now, cards };
 const origin = 'http://127.0.0.1:5173';
@@ -290,6 +294,92 @@ describe('BE-014 HTTP', () => {
     );
   });
 
+  it('uses each scope’s timestamp and record ID for descending pagination', async () => {
+    const cookie = account();
+    const knowledge = CONTENT_FIXTURES.knowledgeVersion;
+    const older = new Date('2026-10-31T00:00:00.000Z');
+    const newer = new Date('2026-11-02T00:00:00.000Z');
+    const anotherId = new ObjectId(FIXTURE_CONTENT_IDS.knowledgeB);
+    const anotherVersion = new ObjectId();
+    const anotherKey = `knowledge:${anotherId}`;
+    const manualKey = `manual:${FIXTURE_CONTENT_IDS.cardOwnerA}`;
+    const personal = { type: 'personalDeck', deckId: String(deckId) };
+    await db.collection('content_items').insertOne({
+      ...CONTENT_FIXTURES.knowledge,
+      _id: anotherId,
+      publishedVersionId: anotherVersion,
+      createdAt: older,
+    });
+    await db.collection('content_versions').insertOne({
+      ...knowledge,
+      _id: anotherVersion,
+      contentId: anotherId,
+    });
+    await db.collection('content_versions').updateOne(
+      { _id: new ObjectId(topic.topicVersionId) },
+      {
+        $set: {
+          'payload.knowledgeVersionIds': [anotherVersion, knowledge._id],
+        },
+      },
+    );
+    await db
+      .collection('saved_items')
+      .updateOne(
+        { ownerKey: learner, knowledgeId: knowledge.contentId },
+        { $set: { savedAt: older } },
+      );
+    await db.collection('saved_items').insertOne({
+      ownerKey: learner,
+      knowledgeId: anotherId,
+      isSaved: true,
+      savedAt: newer,
+    });
+    await db.collection('personal_decks').insertOne({
+      _id: deckId,
+      ownerKey: learner,
+      status: 'active',
+    });
+    await db.collection('deck_entries').insertMany([
+      {
+        _id: new ObjectId('657f1f77bcf86cd799439051'),
+        ownerKey: learner,
+        deckId,
+        cardKey: manualKey,
+        createdAt: newer,
+      },
+      {
+        _id: new ObjectId('657f1f77bcf86cd799439052'),
+        ownerKey: learner,
+        deckId,
+        cardKey: anotherKey,
+        createdAt: newer,
+      },
+    ]);
+
+    for (const [studyScope, firstKey, secondKey] of /** @type {const} */ ([
+      [topic, knowledgeKey, anotherKey],
+      [{ type: 'saved' }, anotherKey, knowledgeKey],
+      [personal, anotherKey, manualKey],
+    ])) {
+      const body = { scope: studyScope, mode: 'all', limit: 1 };
+      const first = await studyRequest('query', body, cookie);
+      assertSuccessEnvelope(first);
+      expect(first.body.data.items).toMatchObject([{ cardKey: firstKey }]);
+      expect(first.body.data.nextCursor).toEqual(expect.any(String));
+      const second = await studyRequest(
+        'query',
+        { ...body, cursor: first.body.data.nextCursor },
+        cookie,
+      );
+      assertSuccessEnvelope(second);
+      expect(second.body.data).toMatchObject({
+        items: [{ cardKey: secondKey }],
+        nextCursor: null,
+      });
+    }
+  });
+
   it('restricts guest scope to the joined trial, caps the ticket and denies access after the deadline', async () => {
     const trialId = new ObjectId(FIXTURE_PRACTICE_SESSION_ID);
     const cookie = { guestCookie: RAW_GUEST_TOKENS.active };
@@ -465,10 +555,10 @@ describe('BE-014 study-card service', () => {
       limit: 2,
     });
     expect(first.items.map((card) => card.cardKey)).toEqual([
-      cards[0].cardKey,
       cards[1].cardKey,
+      cards[0].cardKey,
     ]);
-    expect(first.items[0]).toEqual({
+    expect(first.items[1]).toEqual({
       cardKey: cards[0].cardKey,
       front: cards[0].front,
       contentVersionId: cards[0].contentVersionId,
@@ -480,7 +570,7 @@ describe('BE-014 study-card service', () => {
         lapses: 0,
       },
     });
-    expect(first.items[1].progress).toMatchObject({
+    expect(first.items[0].progress).toMatchObject({
       version: 3,
       dueAt: now.toISOString(),
     });
@@ -508,7 +598,7 @@ describe('BE-014 study-card service', () => {
     ).rejects.toMatchObject({ status: 400, code: 'INVALID_CURSOR' });
     const all = await queryStudyCards(db, { ...input, mode: 'all' });
     expect(all.items.map((card) => card.cardKey)).toEqual(
-      cards.map((card) => card.cardKey),
+      [cards[1], cards[0], cards[3], cards[2]].map((card) => card.cardKey),
     );
   });
 
@@ -595,6 +685,7 @@ describe('BE-014 study-card service', () => {
       front: 'Question',
       back: 'Answer',
       manualVersion: 4,
+      position: { time: now.getTime(), id: '657f1f77bcf86cd799439041' },
     };
     const personalDeck = {
       ...input,

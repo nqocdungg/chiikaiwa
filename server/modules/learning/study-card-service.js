@@ -11,7 +11,8 @@ import {
 /** @typedef {import('mongoose').mongo.Db} Db */
 /** @typedef {import('../../integrations/fsrs.js').CardState & {cardKey: string, ownerKey: string, version: number}} StoredProgress */
 /** @typedef {{type: 'topic', topicVersionId: string} | {type: 'saved'} | {type: 'personalDeck', deckId: string}} StudyScope */
-/** @typedef {{cardKey: string, front: string, back: string} & ({contentVersionId: string, manualVersion?: never} | {manualVersion: number, contentVersionId?: never})} StudyCard */
+/** @typedef {{time: number, id: string}} StudyPosition */
+/** @typedef {{cardKey: string, front: string, back: string, position: StudyPosition} & ({contentVersionId: string, manualVersion?: never} | {manualVersion: number, contentVersionId?: never})} StudyCard */
 /** @typedef {{ownerKey: string, scope: StudyScope, cards: readonly StudyCard[], now: Date}} AuthorizedStudySet */
 
 export const studyCardKeyPattern = /^(knowledge|manual):[a-f0-9]{24}$/u;
@@ -30,7 +31,15 @@ function scopeKey(scope) {
   return 'saved';
 }
 
-/** @param {string} cursor @param {string} context */
+/** @param {StudyPosition} left @param {StudyPosition} right */
+function comparePosition(left, right) {
+  return (
+    right.time - left.time ||
+    (right.id > left.id ? 1 : right.id < left.id ? -1 : 0)
+  );
+}
+
+/** @param {string} cursor @param {string} context @returns {StudyPosition} */
 function readCursor(cursor, context) {
   try {
     const decoded = Buffer.from(cursor, 'base64url');
@@ -38,8 +47,10 @@ function readCursor(cursor, context) {
       const data = JSON.parse(decoded.toString('utf8'));
       if (
         data?.context === context &&
-        typeof data.after === 'string' &&
-        studyCardKeyPattern.test(data.after)
+        Number.isSafeInteger(data.after?.time) &&
+        Math.abs(data.after.time) <= 8.64e15 &&
+        typeof data.after.id === 'string' &&
+        /^[a-f0-9]{24}$/u.test(data.after.id)
       ) {
         return data.after;
       }
@@ -101,37 +112,38 @@ export async function queryStudyCards(
     ownerKey,
     scopeKey(scope),
     mode,
-    'cardKey:asc',
+    'time:desc,id:desc',
   ]);
-  const after = cursor === undefined ? '' : readCursor(cursor, context);
-  const candidates = new Map(cards.map((card) => [card.cardKey, card]));
-  const keys = [...candidates.keys()].filter((key) => key > after).sort();
-  const lookupKeys = mode === 'all' ? keys.slice(0, limit + 1) : keys;
-  const stored = lookupKeys.length
+  const after = cursor === undefined ? undefined : readCursor(cursor, context);
+  const candidates = cards
+    .filter(({ position }) => !after || comparePosition(position, after) > 0)
+    .sort((left, right) => comparePosition(left.position, right.position));
+  const lookup = mode === 'all' ? candidates.slice(0, limit + 1) : candidates;
+  const stored = lookup.length
     ? await progressCollection(db)
-        .find({ ownerKey, cardKey: { $in: lookupKeys } })
+        .find({
+          ownerKey,
+          cardKey: { $in: lookup.map(({ cardKey }) => cardKey) },
+        })
         .toArray()
     : [];
   const progressByKey = new Map(stored.map((row) => [row.cardKey, row]));
-  const eligible = lookupKeys.filter((cardKey) => {
+  const eligible = lookup.filter(({ cardKey }) => {
     const progress = progressByKey.get(cardKey);
     return mode === 'all' || !progress || progress.dueAt <= now;
   });
   const page = eligible.slice(0, limit);
-  const items = page.map((cardKey) => {
-    const card = /** @type {StudyCard} */ (candidates.get(cardKey));
-    return {
-      cardKey,
-      front: card.front,
-      ...cardRevision(card),
-      progress: toProgress(cardKey, progressByKey.get(cardKey) ?? null),
-    };
-  });
+  const items = page.map((card) => ({
+    cardKey: card.cardKey,
+    front: card.front,
+    ...cardRevision(card),
+    progress: toProgress(card.cardKey, progressByKey.get(card.cardKey) ?? null),
+  }));
   const nextCursor =
     eligible.length > limit
-      ? Buffer.from(JSON.stringify({ context, after: page.at(-1) })).toString(
-          'base64url',
-        )
+      ? Buffer.from(
+          JSON.stringify({ context, after: page.at(-1)?.position }),
+        ).toString('base64url')
       : null;
   return { items, nextCursor };
 }
