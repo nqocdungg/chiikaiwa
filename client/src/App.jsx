@@ -1,5 +1,8 @@
 import { Link, Route, Routes } from 'react-router';
 import { AuthProvider } from './features/auth/AuthContext.jsx';
+import { LoginPage } from './features/auth/LoginPage.jsx';
+import { LogoutActionBar } from './features/auth/LogoutActionBar.jsx';
+import { RegisterPage } from './features/auth/RegisterPage.jsx';
 import {
   InvitationRoute,
   ProtectedRoute,
@@ -16,6 +19,7 @@ import {
 function RouteShell({ screenId, title, description, children }) {
   return (
     <section data-screen-id={screenId}>
+      <LogoutActionBar />
       <h1 className="text-2xl font-semibold text-ink">{title}</h1>
       {description ? <p className="mt-2 text-muted">{description}</p> : null}
       {children}
@@ -46,14 +50,8 @@ export function App({ skipInitialAuthCheck = false } = {}) {
 
             {/* SC-02: Public Only Auth routes */}
             <Route element={<PublicOnlyRoute />}>
-              <Route
-                path="/login"
-                element={<RouteShell screenId="SC-02" title="Đăng nhập" />}
-              />
-              <Route
-                path="/register"
-                element={<RouteShell screenId="SC-02" title="Đăng ký" />}
-              />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
               <Route
                 path="/forgot-password"
                 element={<RouteShell screenId="SC-02" title="Quên mật khẩu" />}

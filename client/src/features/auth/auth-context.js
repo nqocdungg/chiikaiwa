@@ -38,6 +38,7 @@ import { createContext } from 'react';
  * @property {'learner' | 'admin' | 'guest' | 'anonymous'} role
  * @property {'active' | 'locked' | 'expired' | null} status
  * @property {boolean} isLoading
+ * @property {boolean} [isCheckingAuth]
  * @property {import('../../services/errors.js').ApiError | null} error
  * @property {() => Promise<void>} checkAuth
  * @property {(credentials: {email: string, password: string}) => Promise<SelfUser>} login
@@ -45,6 +46,9 @@ import { createContext } from 'react';
  * @property {(payload: {email: string, password: string, displayName: string}) => Promise<SelfUser>} register
  * @property {(partial: Partial<SelfUser>) => void} updateUser
  * @property {() => Promise<void>} refreshSession
+ * @property {string | null} [authNotice]
+ * @property {() => void} [clearAuthNotice]
+ * @property {(notice?: string | null) => void} [invalidateSession]
  */
 
 /** @type {import('react').Context<AuthState | null>} */
