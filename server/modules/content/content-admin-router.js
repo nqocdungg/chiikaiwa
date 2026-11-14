@@ -4,7 +4,9 @@ import { AppError } from '../../middleware/http-error.js';
 import {
   createDraftContent,
   getContentItemDetail,
+  hideContent,
   listContentItems,
+  publishContent,
   updateDraftContent,
 } from './content-service.js';
 
@@ -25,7 +27,7 @@ export function createAdminContentRouter() {
         kind: typeof kind === 'string' ? kind : undefined,
         status: typeof status === 'string' ? status : undefined,
         level: typeof level === 'string' ? level : undefined,
-        limit: typeof limit === 'string' ? limit : undefined,
+        limit,
         cursor: typeof cursor === 'string' ? cursor : undefined,
       });
 
@@ -122,6 +124,86 @@ export function createAdminContentRouter() {
         expectedVersion: request.body?.expectedVersion,
         draftPayload: request.body?.draftPayload,
         kind: request.body?.kind,
+        adminId: response.locals.identity.userId,
+        actorKey: response.locals.identity.actorKey,
+        idempotencyKey,
+      });
+
+      return response.status(200).json({
+        data: item,
+        meta: response.locals.meta,
+      });
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  router.post('/:id/publish', async (request, response, next) => {
+    try {
+      const rawKey = request.get('Idempotency-Key');
+      const idempotencyKey = typeof rawKey === 'string' ? rawKey.trim() : '';
+
+      if (!idempotencyKey) {
+        throw new AppError({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          message: 'Header Idempotency-Key là bắt buộc và không được để trống.',
+          details: {
+            fields: [
+              {
+                path: 'Idempotency-Key',
+                code: 'REQUIRED',
+                message:
+                  'Header Idempotency-Key là bắt buộc và không được để trống.',
+              },
+            ],
+          },
+        });
+      }
+
+      const item = await publishContent({
+        id: request.params.id,
+        expectedVersion: request.body?.expectedVersion,
+        adminId: response.locals.identity.userId,
+        actorKey: response.locals.identity.actorKey,
+        idempotencyKey,
+      });
+
+      return response.status(200).json({
+        data: item,
+        meta: response.locals.meta,
+      });
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  router.post('/:id/hide', async (request, response, next) => {
+    try {
+      const rawKey = request.get('Idempotency-Key');
+      const idempotencyKey = typeof rawKey === 'string' ? rawKey.trim() : '';
+
+      if (!idempotencyKey) {
+        throw new AppError({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          message: 'Header Idempotency-Key là bắt buộc và không được để trống.',
+          details: {
+            fields: [
+              {
+                path: 'Idempotency-Key',
+                code: 'REQUIRED',
+                message:
+                  'Header Idempotency-Key là bắt buộc và không được để trống.',
+              },
+            ],
+          },
+        });
+      }
+
+      const item = await hideContent({
+        id: request.params.id,
+        expectedVersion: request.body?.expectedVersion,
         adminId: response.locals.identity.userId,
         actorKey: response.locals.identity.actorKey,
         idempotencyKey,
