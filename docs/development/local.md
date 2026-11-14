@@ -39,3 +39,17 @@ Swagger UI: http://127.0.0.1:3000/api/docs. OpenAPI YAML thô: http://127.0.0.1:
 | `npm run openapi:check`    | Kiểm tra contract OpenAPI và Swagger UI  |
 
 Sản phẩm dùng cấu hình Vercel tại `vercel.json`, Node 24, biến môi trường server và `APP_ORIGIN` HTTPS. Preview dùng database riêng. Xem [kiến trúc](../design/05-system-architecture.md) và [migration guide](../../server/persistence/migrations/README.md) trước triển khai.
+
+## LiveKit khi chạy local
+
+Cấu hình `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` trong `.env` bằng project test riêng. Các biến này chỉ dành cho server; không đưa credentials vào `VITE_*` hoặc Git. Kiểm thử tự động dùng credential giả và database tạm, không cần dịch vụ thật.
+
+Để nhận webhook, tạo HTTPS tunnel tới API local rồi đăng ký URL `https://<tunnel>/api/v1/webhooks/livekit` trong project LiveKit test. Ví dụ khi đã cài `cloudflared`:
+
+```sh
+cloudflared tunnel --url http://127.0.0.1:3000
+```
+
+Giữ `APP_ORIGIN` khớp địa chỉ frontend đang dùng. URL tunnel thay đổi thì cập nhật cấu hình webhook. Kiểm media thật bằng hai client; test tự động không thay thế bước này.
+
+Phạm vi đã tích hợp, giới hạn reconnect và việc còn lại xem [Project Progress Handoff](../PROGRESS-TRACKER.md). Contract REST xem [OpenAPI](../api/README.md).

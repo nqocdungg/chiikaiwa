@@ -63,7 +63,8 @@ describe('LiveKit webhook transport', () => {
       .expect(204);
   });
 
-  it('does not acknowledge events when the processing handler is unavailable', async () => {
+  it('does not acknowledge events when LiveKit configuration is unavailable', async () => {
+    vi.stubEnv('LIVEKIT_API_SECRET', '');
     const response = await request(createApp())
       .post(endpoint)
       .set('Content-Type', 'application/webhook+json')

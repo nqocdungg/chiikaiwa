@@ -108,6 +108,55 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Tiếp theo: Review/CI; tích hợp phiên BE-009 và kiểm tra hai thành viên kết nối LiveKit. OPS-003 cấu hình ba env LiveKit; BE-011 xử lý webhook, BE-012 quản lý vòng đời/thu hồi.
 - Lưu ý: Token tối đa 10 phút, giới hạn theo deadline quyền; kiểm tra lại không thay thế thu hồi media. Receipt hiện theo API 07 §2.2; việc miễn media-token cần nhóm chốt contract trước khi bỏ.
 
+### BE-011 — Xử lý webhook LiveKit và xác nhận hiện diện
+
+- Ngày cập nhật: 2026-11-11
+- Trạng thái: Đã triển khai và kiểm thử local; chờ tích hợp consumer vòng đời BE-012, LiveKit thật, review nhóm và CI.
+- PR: Chưa có; branch `feature/BE-011-livekit-webhook`, chưa commit/push.
+- Đã làm: Nối handler mặc định cho `POST /api/v1/webhooks/livekit`; xác minh raw body/Authorization bằng SDK trước ghi DB. Dedup eventId 7 ngày bằng index đã migration; receipt/presence/consumer cùng transaction. Kiểm tra roomName/thành viên/SID/thời điểm/trạng thái, không tin connected từ client; SID đóng không mở lại sau khi receipt bị dọn. Đối soát participant active khi SID mâu thuẫn, không gọi mạng trong transaction và kiểm lại version sau đối soát. Không tự triển khai state machine bắt đầu/kết thúc.
+- File liên quan: `server/integrations/livekit/{webhook,room-service}.js`, `server/modules/sessions/livekit-webhook-{handler,service}.js`, `server/app.js`, chú thích `server/config/env.js`, `.env.example`, `docs/api/openapi.yaml`, `docs/development/local.md`, fixture/test webhook và test OpenAPI/transport.
+- Kiểm chứng: Lint, typecheck, `npm test` (260 ca) và `npm run test:integration` (111 ca trên MongoDB 8.2.7 replica set tạm) pass; `npm run openapi:check` pass 5 ca; `npm run build` và `npm run build-storybook` pass. Node 24.19.0/npm 11.21.1; Storybook còn cảnh báo chunk lớn, không chặn build. Nhóm mục tiêu webhook/transport/OpenAPI pass 43 ca, gồm 20 integration tests kiểm receipt tối thiểu, rollback/retry, hai join đồng thời, SID cũ/cùng giây, thiếu webhook join, race lúc đối soát và terminal/deadline. Fixture consumer mô phỏng bắt đầu một lần để kiểm tra ranh giới transaction, chưa chứng minh BE-012 thật. Format các file task, liên kết tài liệu local và `git diff --check` pass. Review độc lập bằng agent không còn Must fix; chưa có human approval hoặc CI.
+- Giới hạn check: `npm run check` đã chạy nhưng dừng tại format check của `.vscode/settings.json` chưa track có sẵn trước task. Giữ nguyên file này; chạy riêng các gate còn lại, không bỏ test hoặc sửa expected để pass.
+- Điểm nối BE-012: `createApp({ onVerifiedPresence })`; callback nhận `{event,before,after,presenceChanged,reason,session,observedAt}`, ghi nghiệp vụ bằng cùng Mongo session/version và không gọi dịch vụ ngoài. `presenceChanged=false` không công nhận kết nối; join vào ended/hết hạn và `room_finished` vẫn chuyển callback để xử lý deadline/cleanup. Consumer có thể bị driver chạy lại, nên tác dụng ngoài transaction phải lưu trạng thái bền cho BE-012 xử lý tiếp.
+- Tiếp theo: Nối consumer BE-012 và nghiệm thu state machine bắt đầu đúng một lần/thu hồi media thật. Cấu hình project LiveKit test, ba env và webhook qua HTTPS tunnel/Preview theo hướng dẫn local; kiểm media hai tài khoản, ghi build/environment/actual/evidence. Mở PR về `develop`, chạy CI và nhờ reviewer khác owner kiểm AC; chưa cập nhật Sheets hoặc đánh dấu Done.
+- Lưu ý: Khi thiếu consumer, sự kiện participant của thành viên/room_finished thuộc phiên đã biết trả 503 và rollback cả receipt/presence để không nuốt sự kiện. Entry mặc định hiện chưa nối BE-012; không cấu hình webhook thật vào build này để nghiệm thu vòng đời. Không thử credentials thật, Atlas/Vercel hoặc deploy trong task này; không sửa thiết kế 01–07, migration/index hay dependency.
+
+### DATA-005 — Biên soạn dữ liệu seed tình huống và quiz N1
+
+- Ngày cập nhật: 2026-11-12
+- Trạng thái: Đã biên soạn và kiểm chứng schema bằng unit test; sẵn sàng trình duyệt và mở PR về `develop` để Minh Xuân review.
+- PR: Chưa có; branch `feature/DATA-005-seed-n1-content`, chưa commit/push.
+- Đã làm:
+  - Biên soạn bộ dữ liệu học liệu seed N1 tại `server/persistence/seed/n1-content.js` đáp ứng nghiêm ngặt Database Design §7.1, §7.2 và checklist PB-31:
+    - 01 Bộ chủ đề Deck N1: "Thương thảo & Quản trị Doanh nghiệp" (`business_negotiation_n1`), cấp độ `N1`.
+    - 05 Thẻ tình huống N1 hoàn chỉnh: Đàm phán tăng giá/điều khoản hợp đồng; Xử lý sự cố gián đoạn dịch vụ/khiếu nại; Tranh biện định hướng chiến lược ban điều hành; Giải trình chậm tiến độ/thỏa thuận gia hạn; Tái cơ cấu thỏa thuận liên minh. Mỗi tình huống có đầy đủ `title`, `context`, `objective`, 2 vai độc lập `roleA` - `roleB`, gợi ý diễn đạt `hints`, liên kết `knowledgeVersionIds` và $\ge 3$ `questionVersionIds`.
+    - 10 Mục kiến thức N1: Ngữ pháp N1 (`〜を余儀なくされる`, `〜極まりない`, `〜に至っては`, `〜を皮切りに`, `〜ならではの`) và từ vựng thương mại chuẩn mực (`折衝`, `不手際`, `見通し`, `前倒し`, `円満`), đầy đủ cách đọc `reading`, giải nghĩa `meaning` tiếng Việt và ví dụ song ngữ Nhật - Việt `examples`.
+    - 15 Câu hỏi Quiz N1: Đúng 3 câu hỏi cho mỗi tình huống (kết hợp trắc nghiệm `multipleChoice` $\ge 2$ options và điền ngắn `shortAnswer`), có đáp án đúng, giải thích chi tiết `explanation` và liên kết đúng `knowledgeVersionIds`.
+    - Chuẩn hóa toàn bộ ID theo định dạng 24 ký tự hex ObjectId và toàn vẹn tham chiếu chéo (không có reference mồ côi hoặc gãy).
+  - Viết bộ unit test `tests/server/content-seed-n1.test.js` kiểm tra tự động `validateSeedDataset(n1Dataset)` từ `content-validator.js` đạt 0 lỗi.
+- File liên quan:
+  - `server/persistence/seed/n1-content.js`
+  - `tests/server/content-seed-n1.test.js`
+  - `docs/PROGRESS-TRACKER.md`
+- Kiểm chứng:
+  - `npx vitest run tests/server/content-seed-n1.test.js`: **6/6 tests passed**.
+  - `npx eslint server/persistence/seed/n1-content.js tests/server/content-seed-n1.test.js`: Pass (0 errors, 0 warnings).
+  - `npx prettier --check server/persistence/seed/n1-content.js tests/server/content-seed-n1.test.js`: Pass.
+  - `npx tsc -p server/jsconfig.json`: Pass.
+- Tiếp theo: Trình người dùng duyệt nội dung, push nhánh `feature/DATA-005-seed-n1-content` và mở PR về `develop` để reviewer Minh Xuân rà soát chéo.
+
+### BE-012 — Vòng đời chuẩn bị, bắt đầu và kết thúc phòng
+
+- Ngày cập nhật: 2026-11-12
+- Trạng thái: Đã triển khai và kiểm chứng local; chờ tích hợp luồng cấp phòng thật, LiveKit Cloud, review nhóm và CI.
+- PR: Chưa có; branch `feature/BE-012-session-lifecycle`, base `develop@c7508a5`; chưa commit/push.
+- Đã làm: GET Session và leave API theo membership/CSRF/idempotency; nối consumer BE-011 mặc định. Start/controller/counter cùng transaction, GET không cộng clock vào DB. Disconnect chốt clock và giữ deadline, timeout dùng mốc nghiệp vụ, end giải phóng đúng actor resource và cố định hạn khách; lá current thành unfinished. Media cleanup sau commit có retry bền và attempt guard chống worker cũ ghi đè late join; coordination/tạo lời mời cũng xử lý timeout và thu hồi media.
+- File liên quan: `server/modules/sessions/`, `server/integrations/livekit/room-service.js`, `server/app.js`, coordination/invitation services, fixture/test lifecycle và adapter/OpenAPI, `docs/api/openapi.yaml`, `docs/development/local.md`.
+- Kiểm chứng: `npm run lint`, `npm run typecheck`, `npm test` (272 ca), `npm run test:integration` (138 ca), `npm run openapi:check` (6 ca), `npm run build`, `npm run build-storybook` pass. Node 24.19.0/npm 11.21.1, MongoDB 8.2.7 replica set tạm; adapter LiveKit dùng mock/credential giả, không dùng Atlas hoặc dịch vụ thật. Các ca mới kiểm join/leave cạnh tranh, rollback start/end, token ký cạnh tranh leave, deadline qua snapshot GET, đối soát disconnect chậm, room_finished, vai riêng, guest expiry và late join cạnh tranh cleanup. Review độc lập bằng agent không còn Must fix; chưa có human approval hoặc CI. Storybook vẫn cảnh báo chunk lớn, không chặn build.
+- Giới hạn check: Không còn bị chặn bởi format local. Người thực hiện xác nhận `npm run check` pass toàn bộ ngày 2026-11-12 sau khi xóa `.vscode/settings.json`; log cung cấp ghi nhận 138 integration tests pass lúc 20:48:17 và cả hai build thành công. Chưa có kết quả CI hoặc kiểm chứng LiveKit Cloud thật.
+- Tiếp theo: Nối dependency `assertPairCanEnterSession` và luồng guest-trial trước nghiệm thu đường mời/khách thật. Kiểm hai client, leave một phía, token cũ/vừa refresh/identity đã rời và retry thu hồi trên LiveKit Cloud test qua HTTPS. Tạo PR về develop, chạy CI và nhờ reviewer khác owner theo Tracker; chưa cập nhật Sheets/Done.
+- Bàn giao reconnect: BE-012 chỉ cung cấp nền disconnect và deadline theo phạm vi đã chốt. Nhánh phục hồi phiên đã startedAt hiện trả 503 và rollback receipt/presence; task tiếp theo thay nhánh này bằng reconnecting→active và phục hồi đầy đủ. Consumer có observedAt để chốt mất kết nối, checkedAt để recheck deadline; giữ controller, thời gian còn lại và SID guards. Không nghiệm thu toàn bộ PB-11/AT-07 từ task này. Maintenance toàn cục/full guest cleanup vẫn thuộc task sau; cleanup pending cần request/webhook hoặc maintenance tiếp tục xử lý khi dịch vụ trở lại.
+
 ## Sprint 2
 
 Chưa có cập nhật.

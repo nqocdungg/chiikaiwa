@@ -8,6 +8,7 @@ import {
 } from '../../server/openapi.js';
 
 const expectedPaths = [
+  '/webhooks/livekit',
   '/health',
   '/invitations',
   '/invitations/{invitationId}',
@@ -27,6 +28,28 @@ const writeOperations = [
 
 describe('OpenAPI contract', () => {
   const document = /** @type {Record<string, any>} */ (readOpenApiDocument());
+
+  it('documents LiveKit signature auth, raw content type and response statuses without browser auth', () => {
+    const webhook = document.paths['/webhooks/livekit'].post;
+    expect(webhook.security).toEqual([{ livekitWebhookSignature: [] }]);
+    expect(Object.keys(webhook.requestBody.content)).toEqual([
+      'application/webhook+json',
+    ]);
+    expect(Object.keys(webhook.responses)).toEqual([
+      '204',
+      '401',
+      '413',
+      '415',
+      '503',
+    ]);
+    expect(webhook.responses['204']).not.toHaveProperty('content');
+    expect(webhook.parameters ?? []).not.toContainEqual({
+      $ref: '#/components/parameters/IdempotencyKey',
+    });
+    expect(
+      document.components.securitySchemes.livekitWebhookSignature,
+    ).toMatchObject({ in: 'header', name: 'Authorization' });
+  });
 
   it('parses the OpenAPI document and includes the implemented BE-009 paths', () => {
     expect(document.openapi).toBe('3.1.0');
@@ -93,5 +116,37 @@ describe('OpenAPI contract', () => {
       .expect(200)
       .expect('Content-Type', /application\/yaml/u)
       .expect(({ text }) => expect(text).toContain('openapi: 3.1.0'));
+  });
+  it('documents session reads, empty-body idempotent leave and bounded media credentials', () => {
+    const get = document.paths['/sessions/{id}'].get;
+    const leave = document.paths['/sessions/{id}/leave'].post;
+    const token = document.paths['/sessions/{id}/media-token'].post;
+    expect(get.security).toEqual([{ sessionCookie: [] }, { guestCookie: [] }]);
+    expect(leave.parameters).toContainEqual({
+      $ref: '#/components/parameters/IdempotencyKey',
+    });
+    expect(leave.requestBody.content['application/json'].schema).toMatchObject({
+      additionalProperties: false,
+      maxProperties: 0,
+    });
+    expect(leave.responses['200'].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/SessionResponse',
+    });
+    expect(token.responses).toHaveProperty('409');
+    expect(document.components.schemas.Session.additionalProperties).toBe(
+      false,
+    );
+    expect(document.components.schemas.Session.properties).not.toHaveProperty(
+      'mediaCleanup',
+    );
+    expect(
+      document.components.schemas.SessionCurrentCard.properties,
+    ).toHaveProperty('myRole');
+    expect(
+      document.components.schemas.SessionCurrentCard.properties,
+    ).not.toHaveProperty('roleB');
+    expect(
+      document.components.schemas.SessionSlot.properties,
+    ).not.toHaveProperty('scenarioVersionId');
   });
 });

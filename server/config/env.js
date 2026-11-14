@@ -131,7 +131,7 @@ function integer(raw, fallback, maximum, name) {
   return value;
 }
 
-// Chỉ đọc khi xin vé media, tránh làm auth/health phụ thuộc cấu hình LiveKit.
+// Đọc khi dùng media/webhook; không làm auth/health phụ thuộc cấu hình LiveKit.
 /** @param {NodeJS.ProcessEnv} [source] */
 export function readLiveKitEnv(source = process.env) {
   const url = source.LIVEKIT_URL;
