@@ -1019,6 +1019,201 @@
   font-size: 23px;
   margin-top: 18px;
 }
+
+/* Account, Profile & Password screens (SC-02, SC-04) */
+.ck-account-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+}
+.ck-account-page--narrow {
+  max-width: 540px;
+  margin: 0 auto;
+}
+.ck-account-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.ck-account-topbar nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.ck-account-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.ck-account-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ck-account-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ck-account-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.95fr);
+  gap: 22px;
+  align-items: start;
+}
+.ck-account-page .ck-card {
+  min-width: 0;
+  padding: 26px 28px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 5px 24px #40312f08;
+}
+.ck-account-page .ck-card__header {
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.ck-account-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 18px 24px;
+}
+.ck-account-page .ck-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--sage);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ck-account-page .ck-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.ck-account-page :is(.ck-form-grid, .ck-form-row) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+}
+.ck-account-page .ck-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ck-account-page :is(.ck-field > label, .ck-fieldset > legend, .ck-legend) {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.ck-account-page .ck-field :is(input, select) {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+}
+.ck-account-page .ck-field :is(input, select)[aria-invalid='true'] {
+  border-color: #963c45;
+  background: #fff9f9;
+}
+.ck-account-page .ck-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ck-account-page .ck-choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 8px;
+}
+.ck-account-page :is(.ck-choice-pill, .ck-choice-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.ck-account-page :is(.ck-choice-pill, .ck-choice-chip):hover {
+  background: var(--pink);
+  color: var(--accent);
+}
+.ck-account-page :is(.ck-choice-pill--active, .ck-choice-chip--selected) {
+  background: var(--pink);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.ck-account-page .ck-choice-chip--disabled {
+  opacity: 0.65;
+}
+.ck-account-page :is(.ck-choice-pill, .ck-choice-chip) input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+.ck-account-page .ck-field-error {
+  color: #963c45;
+  font-size: 12px;
+  font-weight: 600;
+}
+:is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert {
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+.ck-account-page .ck-alert__body {
+  margin-bottom: 10px;
+}
+:is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert--error {
+  background: #fbe9e9;
+  border-color: #e4b4b9;
+  color: #7c2832;
+}
+:is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert--success {
+  background: var(--sage);
+  border-color: #c5d4b1;
+  color: #2f4733;
+}
+:is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert--warning {
+  background: #faedcf;
+  border-color: #e2c891;
+  color: #694b1b;
+}
+:is(.ck-account-page, [data-screen-id='SC-02']) .ck-alert--info {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--muted);
+}
+.ck-account-page a.ck-button {
+  text-decoration: none;
+}
 @media (max-width: 1100px) {
   .ck-workspace {
     grid-template-columns: 148px minmax(0, 1fr) 248px;
@@ -1125,6 +1320,9 @@
   .ck-demo-bar {
     padding: 6px 15px;
     gap: 6px 10px;
+  }
+  .ck-account-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 /* Small windows/zoom retain both people and safe controls. Opening tools replaces
@@ -1240,6 +1438,15 @@
   }
   .ck-summary aside .ck-friends {
     max-height: 180px;
+  }
+  .ck-account-page :is(.ck-form-grid, .ck-form-row) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ck-account-page .ck-card {
+    padding: 20px 18px;
+  }
+  .ck-account-summary .ck-badge {
+    margin-left: 0;
   }
 }
 @media (max-height: 500px) {

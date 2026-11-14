@@ -227,6 +227,13 @@ export function SessionMemberRoute({ children }) {
   return children ? <>{children}</> : <Outlet />;
 }
 
+const PUBLIC_ONLY_PATHS = new Set([
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+]);
+
 /**
  * Route guard that redirects already logged-in users away from guest/auth routes (e.g. login, register).
  *
@@ -249,15 +256,30 @@ export function PublicOnlyRoute({ children }) {
     );
   }
 
+  // Recovery links must remain usable even when a browser has an active session.
+  if (
+    location.pathname === '/forgot-password' ||
+    location.pathname === '/reset-password'
+  ) {
+    return children ? <>{children}</> : <Outlet />;
+  }
+
   if (kind === 'user' && status !== 'locked') {
     const rawFrom = /** @type {{from?: {pathname?: string}}} */ (location.state)
       ?.from?.pathname;
+    const isSafeRedirectTarget =
+      typeof rawFrom === 'string' &&
+      rawFrom.startsWith('/') &&
+      !PUBLIC_ONLY_PATHS.has(rawFrom);
     if (role === 'admin') {
       const target =
-        rawFrom && rawFrom.startsWith('/admin') ? rawFrom : '/admin';
+        isSafeRedirectTarget && rawFrom.startsWith('/admin')
+          ? rawFrom
+          : '/admin';
       return <Navigate to={target} replace />;
     }
-    const target = rawFrom && !rawFrom.startsWith('/admin') ? rawFrom : '/home';
+    const target =
+      isSafeRedirectTarget && !rawFrom.startsWith('/admin') ? rawFrom : '/home';
     return <Navigate to={target} replace />;
   }
 

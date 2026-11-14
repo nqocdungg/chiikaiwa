@@ -45,6 +45,9 @@ import { createContext } from 'react';
  * @property {(payload: {email: string, password: string, displayName: string}) => Promise<SelfUser>} register
  * @property {(partial: Partial<SelfUser>) => void} updateUser
  * @property {() => Promise<void>} refreshSession
+ * @property {string | null} [authNotice]
+ * @property {() => void} [clearAuthNotice]
+ * @property {(notice?: string | null) => void} [invalidateSession]
  */
 
 /** @type {import('react').Context<AuthState | null>} */

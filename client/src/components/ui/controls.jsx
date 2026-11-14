@@ -39,11 +39,17 @@ export function Icon({ name, size = 20 }) {
   );
 }
 
-/** @param {{children: import('react').ReactNode, onClick?: () => void, variant?: 'primary'|'secondary'|'danger', disabled?: boolean}} props */
-export function Button({ children, onClick, variant = 'secondary', disabled }) {
+/** @param {{children: import('react').ReactNode, onClick?: () => void, variant?: 'primary'|'secondary'|'danger', disabled?: boolean, type?: 'button'|'submit'|'reset'}} props */
+export function Button({
+  children,
+  onClick,
+  variant = 'secondary',
+  disabled,
+  type = 'button',
+}) {
   return (
     <button
-      type="button"
+      type={type}
       className={`ck-button ck-button--${variant}`}
       onClick={onClick}
       disabled={disabled}
