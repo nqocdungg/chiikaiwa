@@ -36,6 +36,7 @@ describe('ApiClient and cache isolation', () => {
     expect(isIdempotencyExempt('/auth/password-resets')).toBe(true);
     expect(isIdempotencyExempt('/auth/register')).toBe(true);
     expect(isIdempotencyExempt('/study/cards/reveal')).toBe(true);
+    expect(isIdempotencyExempt('/study/cards/query')).toBe(true);
     expect(isIdempotencyExempt('/matching/searches/123/heartbeat')).toBe(true);
 
     expect(isIdempotencyExempt('/me/profile')).toBe(false);
