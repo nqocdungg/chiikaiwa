@@ -1,5 +1,5 @@
-/** @param {{name: string, size?: number}} props */
-export function Icon({ name, size = 20 }) {
+/** @param {{name: string, size?: number, className?: string}} props */
+export function Icon({ name, size = 20, className }) {
   const paths = {
     home: 'm3 10 9-7 9 7v10H3Z M9 20v-7h6v7',
     book: 'M12 5C8 2 3 4 3 4v15s5-2 9 1c4-3 9-1 9-1V4s-5-2-9 1Zm0 0v15',
@@ -17,6 +17,10 @@ export function Icon({ name, size = 20 }) {
     clock: 'M12 8v5l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',
     swap: 'M4 7h16 m-4-4 4 4-4 4 M20 17H4 m4-4-4 4 4 4',
     close: 'm5 5 14 14 M19 5 5 19',
+    eye: 'M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
+    eyeOff:
+      'm3 3 18 18 M10.6 6.1A11 11 0 0 1 12 6c6.5 0 10 6 10 6a16 16 0 0 1-2.1 2.8 M6.7 6.7C3.6 8.4 2 12 2 12s3.5 6 10 6a11 11 0 0 0 4.2-.8 M9.9 9.9a3 3 0 0 0 4.2 4.2',
+    search: 'm21 21-4.3-4.3 M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
     translate:
       'M3 5h12 M9 2v3 M5 8c1 4 4 7 8 9 M12 5c0 5-3 9-8 12 M14 21l4-11 4 11 M16 17h4',
   };
@@ -24,6 +28,7 @@ export function Icon({ name, size = 20 }) {
     <svg
       width={size}
       height={size}
+      className={className}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -39,35 +44,89 @@ export function Icon({ name, size = 20 }) {
   );
 }
 
-/** @param {{children: import('react').ReactNode, onClick?: () => void, variant?: 'primary'|'secondary'|'danger', disabled?: boolean, type?: 'button'|'submit'|'reset'}} props */
+/**
+ * @param {{
+ * children: import('react').ReactNode,
+ * onClick?: import('react').MouseEventHandler<HTMLButtonElement>,
+ * variant?: 'primary'|'secondary'|'ghost'|'danger',
+ * size?: 'compact'|'default'|'hero',
+ * disabled?: boolean,
+ * loading?: boolean,
+ * leadingIcon?: import('react').ReactNode,
+ * trailingIcon?: import('react').ReactNode,
+ * fullWidth?: boolean,
+ * type?: 'button'|'submit'|'reset',
+ * className?: string,
+ * 'aria-label'?: string,
+ * }} props
+ */
 export function Button({
   children,
   onClick,
   variant = 'secondary',
-  disabled,
+  size = 'default',
+  disabled = false,
+  loading = false,
+  leadingIcon,
+  trailingIcon,
+  fullWidth = false,
   type = 'button',
+  className = '',
+  'aria-label': ariaLabel,
 }) {
+  const classes = [
+    'ck-button',
+    `ck-button--${variant}`,
+    size !== 'default' ? `ck-button--${size}` : '',
+    fullWidth ? 'ck-button--full' : '',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <button
       type={type}
-      className={`ck-button ck-button--${variant}`}
+      className={classes}
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      aria-label={ariaLabel}
+      data-loading={loading || undefined}
     >
-      {children}
+      {loading ? (
+        <span className="ck-button__spinner" aria-hidden="true" />
+      ) : null}
+      <span
+        className={`ck-button__content${loading ? ' ck-button__content--loading' : ''}`}
+      >
+        {leadingIcon}
+        {children}
+        {trailingIcon}
+      </span>
     </button>
   );
 }
 
-/** @param {{name: string, label: string, onClick: () => void, pressed?: boolean, disabled?: boolean}} props */
-export function IconButton({ name, label, onClick, pressed, disabled }) {
+/** @param {{name: string, label: string, onClick?: import('react').MouseEventHandler<HTMLButtonElement>, pressed?: boolean, disabled?: boolean, type?: 'button'|'submit'|'reset', className?: string, buttonRef?: import('react').Ref<HTMLButtonElement>}} props */
+export function IconButton({
+  name,
+  label,
+  onClick,
+  pressed,
+  disabled,
+  type = 'button',
+  className = '',
+  buttonRef,
+}) {
   return (
     <button
-      type="button"
-      className="ck-icon-button"
+      ref={buttonRef}
+      type={type}
+      className={`ck-icon-button ${className}`.trim()}
       aria-label={label}
       title={label}
-      aria-pressed={pressed}
+      aria-pressed={typeof pressed === 'boolean' ? pressed : undefined}
       onClick={onClick}
       disabled={disabled}
     >

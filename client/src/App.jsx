@@ -1,4 +1,7 @@
-import { Link, Route, Routes } from 'react-router';
+/// <reference types="vite/client" />
+
+import { lazy, Suspense } from 'react';
+import { Link, Route, Routes, useLocation } from 'react-router';
 import { AuthProvider } from './features/auth/AuthContext.jsx';
 import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage.jsx';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage.jsx';
@@ -10,6 +13,14 @@ import {
   PublicOnlyRoute,
   SessionMemberRoute,
 } from './components/RouteGuards.jsx';
+
+const ComponentPreview = import.meta.env.DEV
+  ? lazy(() =>
+      import('./demo/ComponentPreview.jsx').then((module) => ({
+        default: module.ComponentPreview,
+      })),
+    )
+  : null;
 
 /**
  * Minimal route shell container for FE-001 routing hierarchy (SC-01–20).
@@ -44,6 +55,18 @@ function LoginRouteShell() {
  * @param {{ skipInitialAuthCheck?: boolean }} [props]
  */
 export function App({ skipInitialAuthCheck = false } = {}) {
+  const { pathname } = useLocation();
+
+  if (ComponentPreview && pathname === '/__dev/components') {
+    return (
+      <div className="ck-app">
+        <Suspense fallback={null}>
+          <ComponentPreview />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <AuthProvider skipInitialCheck={skipInitialAuthCheck}>
       <div className="ck-app">

@@ -19,8 +19,12 @@ export const Primary = {
   args: { variant: 'primary', children: 'Tìm bạn luyện' },
 };
 export const Secondary = { args: { children: 'Ở lại phòng' } };
+export const Ghost = { args: { variant: 'ghost', children: 'Để sau' } };
 export const Danger = { args: { variant: 'danger', children: 'Rời phòng' } };
 export const Disabled = { args: { children: 'Chờ kết nối', disabled: true } };
+export const Loading = {
+  args: { variant: 'primary', children: 'Đang tìm bạn', loading: true },
+};
 export const SaveIcon = {
   render: () => (
     <IconButton
