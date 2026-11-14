@@ -217,7 +217,7 @@ async function toSavedItemDto(db, item, guest, session) {
     return null;
   const filter = { kind: 'knowledge', contentId: item.knowledgeId };
   let version;
-  if (parent.status === 'hidden') {
+  if (guest || parent.status === 'hidden') {
     const sources = await SavedSource.find({
       ownerKey: item.ownerKey,
       savedItemId: item._id,

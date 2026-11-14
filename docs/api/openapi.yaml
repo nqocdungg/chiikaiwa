@@ -759,6 +759,7 @@ paths:
       tags: [Learning Content]
       operationId: listSavedItems
       summary: Liệt kê mục đã lưu của người gọi
+      description: Với khách, nội dung dùng revision mới nhất có nguồn đã lưu trong bộ của lượt thử.
       security: &savedReadSecurity
         - sessionCookie: []
         - guestCookie: []
@@ -805,7 +806,10 @@ paths:
       tags: [Learning Content]
       operationId: saveKnowledgeItem
       summary: Lưu kiến thức và nguồn
-      description: Dùng chung một mục cho mỗi kiến thức. Khi lưu từ phiên, phải gửi cả sessionId và scenarioVersionId của lá đã bốc.
+      description: >-
+        Dùng chung một mục cho mỗi kiến thức. Khi lưu từ phiên, phải gửi cả sessionId và
+        scenarioVersionId của lá đã bốc. Với khách, phản hồi dùng revision mới nhất có nguồn
+        đã lưu trong bộ của lượt thử, kể cả khi gửi lại cùng yêu cầu.
       security: &savedWriteSecurity
         - sessionCookie: []
           csrfToken: []

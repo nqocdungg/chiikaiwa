@@ -203,7 +203,8 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - PR: Chưa có. Nhánh `feature/BE-016-saved-items-api` từ `develop@cd99d6c`.
 - Đã làm: Thêm API danh sách, lưu, bỏ lưu và đọc nguồn. Kiểm tra owner và quan hệ deck/knowledge; nguồn phiên phải thuộc phiên người gọi tham gia và đúng lá đã bốc. Lưu nhiều nguồn giữ một mục; bỏ lưu theo version giữ nguồn lịch sử và tiến độ FSRS. Request ghi và receipt cùng transaction; retry kiểm lại quyền. Dữ liệu khách giới hạn ở lượt thử và kế thừa hạn xóa khi đã có deadline.
 - File liên quan: [Router](../server/modules/learning/saved-item-router.js), [service](../server/modules/learning/saved-item-service.js), [OpenAPI](api/openapi.yaml), [kiểm thử HTTP](../tests/integration/saved-item-api.test.js).
-- Kiểm chứng: `npm run openapi:check` đạt 6/6. `npm run check` đạt 310 ca unit/HTTP/component, 164 ca integration và cả hai bản build. 6 ca HTTP BE-016 đạt khi chạy đảo thứ tự với seed 20261115 trên MongoDB 8.2.7 replica set tạm. DB-T08 giữ một mục với hai nguồn và giữ nguyên tiến độ khi bỏ rồi lưu lại. Storybook có cảnh báo kích thước chunk.
+- Sửa sau review: Danh sách và phản hồi lưu/retry của khách dùng revision mới nhất có nguồn đã lưu trong bộ của lượt thử, kể cả sau khi học liệu được xuất bản lại.
+- Kiểm chứng: `npm run openapi:check` đạt 6/6. `npm run check` đạt 310 ca unit/HTTP/component, 165 ca integration và cả hai bản build. 7 ca HTTP BE-016 đạt khi chạy đảo thứ tự với seed 20261115 trên MongoDB 8.2.7 replica set tạm. DB-T08 giữ một mục với hai nguồn và giữ nguyên tiến độ khi bỏ rồi lưu lại. Ca xuất bản lại xác nhận revision ngoài lượt thử không xuất hiện trong danh sách hoặc phản hồi lưu/retry của khách. Storybook có cảnh báo kích thước chunk.
 - Tiếp theo: QA-008 chạy lại DB-T08 với lá được bốc qua API thật. FE-007 nối danh sách và thao tác lưu/bỏ lưu; BE-021 dùng nguồn trong tổng kết. Schema, index và cấu hình môi trường dùng nền hiện có.
 
 ## Sprint 2

@@ -342,6 +342,67 @@ it('checks membership again on replay and preserves an old source after publicat
   expect(await db.collection('saved_sources').countDocuments()).toBe(1);
 });
 
+it('keeps guest saved-item responses on the revision allowed by the trial after republish', async () => {
+  await db.collection('practice_sessions').insertOne({
+    _id: trialId,
+    originKind: 'invitation',
+    originId: new ObjectId(),
+    roomName: 'saved-api-republish-trial',
+    members: [{ actorKey: learner }, { actorKey: guest }],
+    deckVersionId: deck,
+  });
+  await db
+    .collection('guest_sessions')
+    .updateOne(
+      { _id: new ObjectId(FIXTURE_GUEST_IDS.active) },
+      { $set: { status: 'active' } },
+    );
+  const key = createTestIdempotencyKey();
+  const first = await api('post', '', { guest: true, key })
+    .send(input)
+    .expect(200);
+  const savedId = first.body.data.id;
+  const newer = new ObjectId();
+  await db.collection('content_versions').insertOne({
+    ...knowledge,
+    _id: newer,
+    revision: 2,
+    payload: { ...knowledge.payload, meaning: 'Bản ngoài lượt thử' },
+  });
+  await db
+    .collection('content_items')
+    .updateOne(
+      { _id: knowledge.contentId },
+      { $set: { publishedVersionId: newer, latestRevision: 2 } },
+    );
+
+  const replay = await api('post', '', { guest: true, key })
+    .send(input)
+    .expect(200);
+  const listed = await api('get', '', { guest: true }).expect(200);
+  const savedAgain = await api('post', '', { guest: true })
+    .send(input)
+    .expect(200);
+  for (const dto of [
+    replay.body.data,
+    ...listed.body.data.items,
+    savedAgain.body.data,
+  ]) {
+    expect(dto).toMatchObject({
+      id: savedId,
+      knowledge: {
+        versionId: String(knowledge._id),
+        meaning: knowledge.payload.meaning,
+      },
+    });
+  }
+  expect(listed.body.data.items).toHaveLength(1);
+  expect(replay.body.data.version).toBe(first.body.data.version);
+  expect(
+    await db.collection('saved_sources').countDocuments({ ownerKey: guest }),
+  ).toBe(1);
+});
+
 it('guards guest writes and replays against the trial and its deadline', async () => {
   const expiresAt = new Date(Date.now() + 300_000);
   await db.collection('practice_sessions').insertOne({
