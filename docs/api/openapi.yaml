@@ -16,6 +16,8 @@ tags:
   - name: System
   - name: Invitations
   - name: Invitation Requests
+  - name: Content Admin
+  - name: Learning Content
 
 paths:
   /sessions/{id}:
@@ -498,6 +500,260 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /admin/content/{id}/publish:
+    post:
+      tags: [Content Admin]
+      operationId: publishContentItem
+      summary: Xuất bản revision bất biến cho học liệu (BE-013, 07 §10)
+      description: >-
+        Tạo một content_versions mới bất biến, khử trùng lặp các ID tham chiếu và
+        cập nhật con trỏ publishedVersionId trong cùng MongoDB transaction.
+        Nếu thiếu references hoặc không đạt ngưỡng tối thiểu sẽ trả lỗi 422 CONTENT_INCOMPLETE.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion:
+                  type: integer
+                  minimum: 0
+            example:
+              expectedVersion: 0
+      responses:
+        '200':
+          description: Bản ghi học liệu sau khi xuất bản
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ContentIncomplete'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /admin/content/{id}/hide:
+    post:
+      tags: [Content Admin]
+      operationId: hideContentItem
+      summary: Ẩn học liệu nhưng giữ nguyên revision tham chiếu (BE-013, 07 §10)
+      description: >-
+        Chuyển trạng thái sang hidden, bảo toàn publishedVersionId để các phiên,
+        lượt quiz hoặc mục đã lưu trước đó không bị gãy liên kết.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion:
+                  type: integer
+                  minimum: 0
+            example:
+              expectedVersion: 1
+      responses:
+        '200':
+          description: Bản ghi học liệu sau khi ẩn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /topics:
+    get:
+      tags: [Learning Content]
+      operationId: listPublishedTopics
+      summary: Lấy danh sách bộ chủ đề đã xuất bản dành cho Learner (07 §7)
+      description: >-
+        Chỉ trả các bộ deck có status là published. Dùng phân trang keyset cursor.
+        Tuyệt đối không chứa roleA, roleB hay đáp án ngân hàng.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [N5, N4, N3, N2, N1]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Danh sách tóm tắt các bộ chủ đề đã xuất bản
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /topic-versions/{id}:
+    get:
+      tags: [Learning Content]
+      operationId: getTopicVersionDetail
+      summary: Lấy chi tiết phiên bản bộ chủ đề dành cho Learner hoặc Guest (07 §7)
+      description: >-
+        Trả thông tin metadata, số lượng kịch bản và câu hỏi của đúng phiên bản bộ.
+        Không chứa nội dung kịch bản hay đáp án.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+      responses:
+        '200':
+          description: Chi tiết phiên bản bộ chủ đề
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicVersionDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /topic-versions/{id}/knowledge:
+    get:
+      tags: [Learning Content]
+      operationId: getTopicVersionKnowledge
+      summary: Lấy danh sách kiến thức của đúng bản nguồn chủ đề (07 §7)
+      description: >-
+        Trả danh sách KnowledgeItem của đúng bản nguồn chủ đề, phục vụ người học
+        xem học liệu mà không cần tham gia cuộc gọi trước (FR-LRN-01).
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Danh sách kiến thức thuộc phiên bản chủ đề
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /knowledge/{id}:
+    get:
+      tags: [Learning Content]
+      operationId: getKnowledgeDetail
+      summary: Lấy chi tiết mục kiến thức (07 §7)
+      description: >-
+        Nếu có versionId thì lấy đúng bản lịch sử đã lưu; nếu không có thì lấy bản
+        xuất bản mới nhất. Tuyệt đối không trả roleA, roleB hay đáp án ngân hàng.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - name: versionId
+          in: query
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+      responses:
+        '200':
+          description: Chi tiết mục kiến thức
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
 components:
   securitySchemes:
     livekitWebhookSignature:
@@ -834,6 +1090,187 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
       additionalProperties: false
+    ContentItem:
+      type: object
+      required: [id, kind, status, latestRevision, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        kind:
+          type: string
+          enum: [deck, scenario, knowledge, question]
+        status:
+          type: string
+          enum: [draft, published, hidden]
+        latestRevision:
+          type: integer
+          minimum: 0
+        version:
+          type: integer
+          minimum: 0
+        publishedVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        draftPayload:
+          type: object
+        level:
+          type: string
+          enum: [N5, N4, N3, N2, N1]
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    ContentItemResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/ContentItem'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    TopicSummary:
+      type: object
+      required: [id, versionId, title, level, description]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        versionId:
+          $ref: '#/components/schemas/ObjectId'
+        title:
+          type: string
+        level:
+          type: string
+          enum: [N5, N4, N3, N2, N1]
+        description:
+          type: string
+      additionalProperties: false
+    TopicList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSummary'
+        nextCursor:
+          type: string
+          nullable: true
+      additionalProperties: false
+    TopicListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/TopicList'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    TopicVersionDetail:
+      type: object
+      required:
+        [
+          id,
+          contentId,
+          title,
+          level,
+          description,
+          knowledgeCount,
+          questionCount,
+        ]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        contentId:
+          $ref: '#/components/schemas/ObjectId'
+        title:
+          type: string
+        level:
+          type: string
+          enum: [N5, N4, N3, N2, N1]
+        description:
+          type: string
+        knowledgeCount:
+          type: integer
+          minimum: 0
+        questionCount:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    TopicVersionDetailResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/TopicVersionDetail'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    KnowledgeExample:
+      type: object
+      required: [japanese, vietnamese]
+      properties:
+        japanese:
+          type: string
+        vietnamese:
+          type: string
+      additionalProperties: false
+    KnowledgeItem:
+      type: object
+      required: [id, versionId, type, expression, meaning, examples]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        versionId:
+          $ref: '#/components/schemas/ObjectId'
+        type:
+          type: string
+          enum: [vocabulary, grammar]
+        expression:
+          type: string
+        reading:
+          type: string
+        meaning:
+          type: string
+        examples:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeExample'
+      additionalProperties: false
+    KnowledgeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeItem'
+        nextCursor:
+          type: string
+          nullable: true
+      additionalProperties: false
+    KnowledgeListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/KnowledgeList'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    KnowledgeDetailResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/KnowledgeItem'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
     FieldError:
       type: object
       required: [path, code, message]
@@ -893,6 +1330,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     ValidationFailed:
       description: Request không đạt validation contract
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ContentIncomplete:
+      description: Học liệu thiếu references hoặc không đạt ngưỡng tối thiểu trước khi xuất bản (422)
       content:
         application/json:
           schema:
