@@ -16,6 +16,12 @@ const expectedPaths = [
   '/invitation-requests',
   '/invitation-requests/{requestId}',
   '/invitation-requests/{requestId}/responses',
+  '/admin/content/{id}/publish',
+  '/admin/content/{id}/hide',
+  '/topics',
+  '/topic-versions/{id}',
+  '/topic-versions/{id}/knowledge',
+  '/knowledge/{id}',
 ];
 
 const writeOperations = [
@@ -24,6 +30,8 @@ const writeOperations = [
   ['/invitation-requests', 'post'],
   ['/invitation-requests/{requestId}', 'delete'],
   ['/invitation-requests/{requestId}/responses', 'post'],
+  ['/admin/content/{id}/publish', 'post'],
+  ['/admin/content/{id}/hide', 'post'],
 ];
 
 describe('OpenAPI contract', () => {
