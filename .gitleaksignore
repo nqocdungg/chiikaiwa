@@ -7,3 +7,6 @@ b7a93203b88ae862eaf39970c78a023821a245ef:tests/server/auth.test.js:generic-api-k
 1e5bbaac368e165dfdf92a20ed6b26ade3419106:tests/integration/profile-catalogs.integration.test.js:generic-api-key:676
 # Synthetic password in mocked client test verifying whitespace preservation, not a service credential.
 11eab5da22bdc3218ad7d33f03546223b0cd7c4a:tests/client/profile-password.test.jsx:generic-api-key:625
+# Synthetic JWT and LiveKit keys in the safety guard integration test setup.
+418a2dba6384c3a28654ee852a6421cffcef3eb4:tests/integration/safety-guard.integration.test.js:generic-api-key:126
+418a2dba6384c3a28654ee852a6421cffcef3eb4:tests/integration/safety-guard.integration.test.js:generic-api-key:129
