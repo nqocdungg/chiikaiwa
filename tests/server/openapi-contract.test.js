@@ -27,6 +27,10 @@ const expectedPaths = [
   '/me/saved-items/{id}/sources',
   '/study/cards/query',
   '/study/cards/reveal',
+  '/quizzes',
+  '/quizzes/{id}',
+  '/quizzes/{id}/submission',
+  '/me/quizzes',
 ];
 
 const writeOperations = [
@@ -63,6 +67,52 @@ describe('OpenAPI contract', () => {
     expect(schemas.StudyRevealResponse.properties.data.required).toContain(
       'reviewTicket',
     );
+  });
+
+  it('documents quiz rights and keeps snapshot answers out of public projection', () => {
+    expect(
+      document.tags.some((/** @type {any} */ tag) => tag.name === 'Quizzes'),
+    ).toBe(true);
+
+    // POST có csrfToken
+    for (const path of ['/quizzes', '/quizzes/{id}/submission']) {
+      const operation = document.paths[path].post;
+      expect(operation.security).toEqual([
+        { sessionCookie: [], csrfToken: [] },
+        { guestCookie: [], csrfToken: [] },
+      ]);
+    }
+
+    // GET không có csrfToken
+    for (const path of ['/quizzes/{id}', '/me/quizzes']) {
+      const operation = document.paths[path].get;
+      expect(operation.security).toEqual([
+        { sessionCookie: [] },
+        { guestCookie: [] },
+      ]);
+    }
+
+    expect(document.paths['/me/quizzes'].get.responses).toHaveProperty('422');
+    expect(document.paths['/me/quizzes'].get.responses).toHaveProperty('403');
+    expect(document.paths['/quizzes/{id}'].get.responses).toHaveProperty('403');
+
+    const schemas = document.components.schemas;
+    expect(schemas.QuizQuestionPublic.properties).not.toHaveProperty(
+      'correctOptionId',
+    );
+    expect(schemas.QuizQuestionPublic.properties).not.toHaveProperty(
+      'acceptedAnswers',
+    );
+    expect(schemas.QuizQuestionPublic.properties).not.toHaveProperty(
+      'explanation',
+    );
+    expect(schemas.QuizQuestionResult.properties).toHaveProperty(
+      'correctOptionId',
+    );
+    expect(schemas.QuizQuestionResult.properties).toHaveProperty('explanation');
+    expect(schemas.SubmitQuizRequest.properties.answers.maxItems).toBe(5);
+    expect(schemas.SubmitQuizAnswerItem.properties.optionId.maxLength).toBe(64);
+    expect(schemas.SubmitQuizAnswerItem.properties.text.maxLength).toBe(500);
   });
 
   it('documents LiveKit signature auth, raw content type and response statuses without browser auth', () => {
