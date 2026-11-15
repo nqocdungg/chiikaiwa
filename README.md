@@ -36,12 +36,15 @@ Trong terminal thứ hai:
 
 ```sh
 npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
 - Frontend: [http://127.0.0.1:5173](http://127.0.0.1:5173).
 - API: `http://127.0.0.1:3000/api/v1` mặc định.
 - Health check: [GET /api/v1/health](http://127.0.0.1:5173/api/v1/health), trả 503 khi database không sẵn sàng.
+
+Lệnh `npm run db:seed` nạp dữ liệu học liệu chuẩn và tài khoản kiểm thử mẫu (cần cấu hình `SEED_ADMIN_PASSWORD` trong `.env` theo hướng dẫn tại `.env.example`).
 
 Vite proxy `/api` tới backend theo `PORT` trong environment hoặc `.env`. Khởi động lại development server sau khi đổi cấu hình. Không commit `.env`.
 
@@ -87,6 +90,7 @@ Lệnh chỉ chạy với Atlas và `chiikaiwa_dev`. Nó tự ghi dữ liệu th
 | `npm start`                                | Chạy API không watch                                               |
 | `npm run preview --workspace client`       | Xem frontend đã build; không chạy API                              |
 | `npm run db:status` / `npm run db:migrate` | Xem / thực hiện migration                                          |
+| `npm run db:seed`                          | Nạp dữ liệu học liệu và tài khoản kiểm thử (idempotent seed)       |
 | `npm run db:verify-atlas-transaction`      | Kiểm chứng rollback transaction trên Atlas `chiikaiwa_dev`         |
 
 Integration tests tự tạo và dọn database tạm, không đọc `.env`. Nếu dùng binary MongoDB đã cài để chạy tests, đặt `MONGOMS_SYSTEM_BINARY` trong environment của terminal.
