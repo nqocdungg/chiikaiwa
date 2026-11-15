@@ -541,11 +541,13 @@ paths:
       summary: Yêu cầu gửi liên kết đặt lại mật khẩu dùng một lần
       description: >-
         Tạo token đặt lại mật khẩu hiệu lực 15 phút (chỉ lưu SHA-256 tokenHash)
-        cho tài khoản đang hoạt động và gửi qua Brevo HTTPS API ngoài
-        transaction. Luôn trả phản hồi 202 trung tính không tiết lộ email có tồn
-        tại hoặc bị khóa hay không, kể cả khi lượt gửi riêng lẻ thất bại (chỉ
-        trả 503 theo trạng thái cấu hình dịch vụ chung). Không thay mật khẩu nếu
-        gửi thư thất bại.
+        cho tài khoản đang hoạt động trong transaction và đăng ký tác vụ gửi
+        qua Brevo HTTPS API cùng hậu xử lý token qua Vercel waitUntil để không
+        chặn phản hồi HTTP 202 (không phải durable queue và không tự retry khi
+        lượt gửi thất bại). Luôn trả phản hồi 202 trung tính không tiết lộ email
+        có tồn tại hoặc bị khóa hay không, kể cả khi lượt gửi riêng lẻ thất bại
+        sau phản hồi (chỉ trả 503 trước khi tra email theo trạng thái cấu hình
+        dịch vụ chung). Không thay mật khẩu nếu gửi thư thất bại.
       security:
         - csrfToken: []
       requestBody:

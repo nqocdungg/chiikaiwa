@@ -28,10 +28,11 @@ import {
 
 /**
  * @param {{
- *   sendPasswordResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>
+ *   sendPasswordResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>,
+ *   waitUntil?: (promise: Promise<unknown>) => void
  * }} [options]
  */
-export function createAuthRouter({ sendPasswordResetEmail } = {}) {
+export function createAuthRouter({ sendPasswordResetEmail, waitUntil } = {}) {
   const router = express.Router();
 
   // GET /api/v1/auth/csrf (P)
@@ -168,6 +169,7 @@ export function createAuthRouter({ sendPasswordResetEmail } = {}) {
 
       const data = await requestPasswordReset(request.body, {
         sendResetEmail: sendPasswordResetEmail,
+        waitUntil,
       });
 
       response.status(202).json({

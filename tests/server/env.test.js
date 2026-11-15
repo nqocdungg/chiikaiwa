@@ -101,6 +101,6 @@ describe('environment', () => {
         BREVO_SENDER_EMAIL: 'no-reply@chiikaiwa.example.com',
         BREVO_TIMEOUT_MS: '100',
       }),
-    ).toThrow('BREVO_TIMEOUT_MS must be an integer between 500 and 30000');
+    ).toThrow('BREVO_TIMEOUT_MS must be an integer between 500 and 20000');
   });
 });

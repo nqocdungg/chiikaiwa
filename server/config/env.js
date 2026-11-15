@@ -216,9 +216,10 @@ export function readBrevoEnv(source = process.env) {
 
   const rawTimeout = source.BREVO_TIMEOUT_MS;
   const timeoutMs = rawTimeout === undefined ? 5000 : Number(rawTimeout);
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 500 || timeoutMs > 30000) {
+  // Cap Brevo timeout at 20s so upstream wait + post-response DB cleanup fit inside Vercel maxDuration (30s).
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 500 || timeoutMs > 20000) {
     throw new Error(
-      'BREVO_TIMEOUT_MS must be an integer between 500 and 30000',
+      'BREVO_TIMEOUT_MS must be an integer between 500 and 20000',
     );
   }
 

@@ -29,7 +29,8 @@ import { checkDatabase } from './persistence/database.js';
  *   handleLivekitWebhook?: import('express').RequestHandler,
  *   onVerifiedPresence?: import('./modules/sessions/livekit-webhook-service.js').PresenceConsumer,
  *   assertPairCanEnterSession?: (input: Record<string, any>) => Promise<void>,
- *   sendPasswordResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>
+ *   sendPasswordResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>,
+ *   waitUntil?: (promise: Promise<unknown>) => void
  * }} [options]
  */
 export function createApp({
@@ -41,6 +42,7 @@ export function createApp({
   }),
   assertPairCanEnterSession,
   sendPasswordResetEmail,
+  waitUntil,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -138,7 +140,10 @@ export function createApp({
     }),
   );
 
-  app.use('/api/v1/auth', createAuthRouter({ sendPasswordResetEmail }));
+  app.use(
+    '/api/v1/auth',
+    createAuthRouter({ sendPasswordResetEmail, waitUntil }),
+  );
   app.use('/api/v1', createProfileRouter());
   app.use('/api/v1', createCoordinationRouter());
   app.use('/api/v1', createInvitationRouter({ assertPairCanEnterSession }));

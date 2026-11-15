@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -49,6 +50,25 @@ let sentEmails = [];
  */
 let emailSenderFailureHook = null;
 
+/**
+ * Background tasks registered via waitUntil during HTTP requests.
+ * @type {Array<Promise<unknown>>}
+ */
+let pendingBackgroundTasks = [];
+
+/**
+ * Awaits and clears all background tasks registered via waitUntil.
+ */
+async function flushBackgroundTasks() {
+  while (pendingBackgroundTasks.length > 0) {
+    const batch = pendingBackgroundTasks.splice(
+      0,
+      pendingBackgroundTasks.length,
+    );
+    await Promise.allSettled(batch);
+  }
+}
+
 const app = createApp({
   sendPasswordResetEmail: async (payload) => {
     if (emailSenderFailureHook) {
@@ -56,6 +76,9 @@ const app = createApp({
     }
     sentEmails.push(payload);
     return { messageId: `<test-${sentEmails.length}@chiikaiwa.local>` };
+  },
+  waitUntil: (promise) => {
+    pendingBackgroundTasks.push(Promise.resolve(promise));
   },
 });
 
@@ -147,6 +170,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await flushBackgroundTasks();
   sentEmails = [];
   emailSenderFailureHook = null;
   await Promise.all([
@@ -158,6 +182,10 @@ beforeEach(async () => {
     db.collection('statistics').deleteMany({}),
     db.collection('rate_limits').deleteMany({}),
   ]);
+});
+
+afterEach(async () => {
+  await flushBackgroundTasks();
 });
 
 afterAll(async () => {
@@ -196,6 +224,7 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         .set('X-CSRF-Token', csrfToken)
         .send({ email: 'hanh.nhi@example.com' })
         .expect(202);
+      await flushBackgroundTasks();
       expect(sentEmails).toHaveLength(1);
       const pendingResetToken = sentEmails[0].resetToken;
 
@@ -391,6 +420,8 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
       expect(missingRes.body.data).toEqual(activeRes.body.data);
       expect(lockedRes.body.data).toEqual(activeRes.body.data);
 
+      await flushBackgroundTasks();
+
       // Only the active user should have a token created and an email sent
       expect(sentEmails).toHaveLength(1);
       expect(sentEmails[0].toEmail).toBe('active.user@example.com');
@@ -462,6 +493,8 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
       });
       expect(missingRes.body.data).toEqual(activeRes.body.data);
       expect(lockedRes.body.data).toEqual(activeRes.body.data);
+
+      await flushBackgroundTasks();
 
       // User's passwordHash and authVersion must not have changed
       const userAfter = await db
@@ -566,6 +599,7 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         .set('X-CSRF-Token', csrfToken)
         .send({ email: 'preserve.link@example.com' })
         .expect(202);
+      await flushBackgroundTasks();
       expect(sentEmails).toHaveLength(1);
       const tokenA = sentEmails[0].resetToken;
 
@@ -581,6 +615,7 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         .set('X-CSRF-Token', csrfToken)
         .send({ email: 'preserve.link@example.com' })
         .expect(202);
+      await flushBackgroundTasks();
 
       // 3. Use link A to reset password: first attempt returns 204, reuse returns 400 RESET_TOKEN_INVALID
       await request(app)
@@ -624,6 +659,7 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         .set('X-CSRF-Token', csrfToken)
         .send({ email: 'reset.flow@example.com' })
         .expect(202);
+      await flushBackgroundTasks();
       const supersededToken = sentEmails[0].resetToken;
 
       await request(app)
@@ -633,6 +669,7 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         .set('X-CSRF-Token', csrfToken)
         .send({ email: 'reset.flow@example.com' })
         .expect(202);
+      await flushBackgroundTasks();
       const activeToken = sentEmails[1].resetToken;
 
       // Superseded token must fail with 400 RESET_TOKEN_INVALID
@@ -879,6 +916,7 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         .set('X-CSRF-Token', csrfToken)
         .send({ email: 'concurrent.reset@example.com' })
         .expect(202);
+      await flushBackgroundTasks();
 
       const sharedToken = sentEmails[0].resetToken;
 
@@ -943,6 +981,7 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         .set('X-CSRF-Token', csrfToken)
         .send({ email: 'rollback.test@example.com' })
         .expect(202);
+      await flushBackgroundTasks();
 
       const rawToken = sentEmails[0].resetToken;
       const userBefore = await db
@@ -1108,7 +1147,9 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
       const entered = deferred();
       const gate = deferred();
       let capturedToken = '';
-      const requestPromise = requestPasswordReset(
+      /** @type {Array<Promise<unknown>>} */
+      const registeredTasks = [];
+      const response = await requestPasswordReset(
         { email },
         {
           sendResetEmail: async ({ resetToken }) => {
@@ -1116,18 +1157,24 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
             entered.resolve();
             await gate.promise;
           },
+          waitUntil: (promise) => {
+            registeredTasks.push(Promise.resolve(promise));
+          },
         },
       );
       await entered.promise;
       return {
         token: capturedToken,
+        response,
         complete: async () => {
           gate.resolve();
-          return requestPromise;
+          await Promise.allSettled(registeredTasks);
+          return response;
         },
         fail: async (error = new Error('Brevo send failed')) => {
           gate.reject(error);
-          return requestPromise;
+          await Promise.allSettled(registeredTasks);
+          return response;
         },
       };
     }
@@ -1256,6 +1303,219 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         resetPasswordWithToken({
           token: reqC.token,
           newPassword: 'ValidTokenC456!',
+        }),
+      ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
+    });
+  });
+
+  describe('Non-blocking waitUntil email dispatch (BE-007 review)', () => {
+    /**
+     * @returns {{ promise: Promise<void>, resolve: () => void, reject: (err: unknown) => void }}
+     */
+    function deferred() {
+      /** @type {() => void} */
+      let resolve = () => {};
+      /** @type {(err: unknown) => void} */
+      let reject = () => {};
+      const promise = new Promise((res, rej) => {
+        resolve = () => res(undefined);
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    it('returns 202 for active accounts while Brevo is still pending, then completes post-response success cleanup via waitUntil', async () => {
+      const { csrfToken, csrfCookie } = await registerAndLoginLearner({
+        email: 'async.active@example.com',
+        password: 'InitialPassword123!',
+      });
+      const locked = await registerAndLoginLearner({
+        email: 'async.locked@example.com',
+      });
+      await db
+        .collection('users')
+        .updateOne(
+          { _id: new ObjectId(locked.user.id) },
+          { $set: { status: 'locked' } },
+        );
+
+      // Issue initial valid link A
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'async.active@example.com' })
+        .expect(202);
+      await flushBackgroundTasks();
+      expect(sentEmails).toHaveLength(1);
+      const tokenA = sentEmails[0].resetToken;
+
+      // Hold Brevo pending for request B on the active account
+      const brevoEntered = deferred();
+      const brevoGate = deferred();
+      let brevoResolved = false;
+      emailSenderFailureHook = async () => {
+        brevoEntered.resolve();
+        await brevoGate.promise;
+        brevoResolved = true;
+      };
+
+      const activeRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'async.active@example.com' })
+        .expect(202);
+
+      // Active account must receive 202 BEFORE Brevo resolves (same as nonexistent and locked)
+      expect(brevoResolved).toBe(false);
+      await brevoEntered.promise;
+      expect(brevoResolved).toBe(false);
+      expect(pendingBackgroundTasks).toHaveLength(1);
+
+      const missingRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'async.missing@example.com' })
+        .expect(202);
+
+      const lockedRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'async.locked@example.com' })
+        .expect(202);
+
+      expect(activeRes.body.data).toEqual({
+        message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE,
+      });
+      expect(missingRes.body.data).toEqual(activeRes.body.data);
+      expect(lockedRes.body.data).toEqual(activeRes.body.data);
+
+      // Now release Brevo and flush waitUntil background work
+      brevoGate.resolve();
+      await flushBackgroundTasks();
+      expect(brevoResolved).toBe(true);
+      expect(sentEmails).toHaveLength(2);
+      const tokenB = sentEmails[1].resetToken;
+
+      // Post-response success invalidated token A and kept token B usable once
+      await expect(
+        resetPasswordWithToken({
+          token: tokenA,
+          newPassword: 'OldLinkPassword123!',
+        }),
+      ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
+
+      await expect(
+        resetPasswordWithToken({
+          token: tokenB,
+          newPassword: 'NewLinkPassword123!',
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('returns 202 while Brevo is pending and preserves earlier valid link if post-response send rejects', async () => {
+      const { csrfToken, csrfCookie } = await registerAndLoginLearner({
+        email: 'async.fail@example.com',
+        password: 'InitialPassword123!',
+      });
+
+      // Issue initial valid link A
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'async.fail@example.com' })
+        .expect(202);
+      await flushBackgroundTasks();
+      const tokenA = sentEmails[0].resetToken;
+
+      // Hold Brevo pending for link B, then reject post-response
+      const brevoEntered = deferred();
+      const brevoGate = deferred();
+      emailSenderFailureHook = async () => {
+        brevoEntered.resolve();
+        await brevoGate.promise;
+      };
+
+      const res = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'async.fail@example.com' })
+        .expect(202);
+
+      expect(res.body.data).toEqual({
+        message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE,
+      });
+      await brevoEntered.promise;
+      expect(pendingBackgroundTasks).toHaveLength(1);
+
+      brevoGate.reject(new Error('Brevo upstream timeout'));
+      await flushBackgroundTasks();
+
+      // Undelivered token B was invalidated; earlier valid link A remains usable
+      await expect(
+        resetPasswordWithToken({
+          token: tokenA,
+          newPassword: 'RecoveredAfterAsyncFail123!',
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('invalidates newly issued token in post-response transaction if account is locked while Brevo is in flight', async () => {
+      const { user, csrfToken, csrfCookie } = await registerAndLoginLearner({
+        email: 'async.lockrace@example.com',
+        password: 'InitialPassword123!',
+      });
+
+      const brevoEntered = deferred();
+      const brevoGate = deferred();
+      emailSenderFailureHook = async () => {
+        brevoEntered.resolve();
+        await brevoGate.promise;
+      };
+
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'async.lockrace@example.com' })
+        .expect(202);
+
+      await brevoEntered.promise;
+
+      // Admin locks account while Brevo request is still in flight
+      await db
+        .collection('users')
+        .updateOne(
+          { _id: new ObjectId(user.id) },
+          { $set: { status: 'locked' } },
+        );
+
+      brevoGate.resolve();
+      await flushBackgroundTasks();
+
+      expect(sentEmails).toHaveLength(1);
+      const deliveredToken = sentEmails[0].resetToken;
+      const stored = await db
+        .collection('password_reset_tokens')
+        .findOne({ tokenHash: hashPasswordResetToken(deliveredToken) });
+      expect(stored?.invalidatedAt).toBeInstanceOf(Date);
+
+      await expect(
+        resetPasswordWithToken({
+          token: deliveredToken,
+          newPassword: 'ShouldNotWorkLocked123!',
         }),
       ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
     });

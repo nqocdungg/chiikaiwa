@@ -1,3 +1,4 @@
+import { waitUntil as vercelWaitUntil } from '@vercel/functions';
 import mongoose from 'mongoose';
 import { readAuthEnv } from '../../config/env.js';
 import { AppError } from '../../middleware/http-error.js';
@@ -747,24 +748,31 @@ export async function changeUserPassword(
 
 /**
  * Issues a one-time 15-minute password reset token (storing only SHA-256 `tokenHash`)
- * for an active account and sends the reset link via Brevo outside the DB transaction (05 §6.4, 06 §4.2, 07 §4).
- * Always returns a neutral 202 payload without revealing whether the email is registered or locked,
- * including when an individual email dispatch fails or times out (503 is only thrown for global
- * email service misconfiguration before looking up any account).
- * If email dispatch fails or times out, invalidates only the newly issued undelivered token,
- * preserves any earlier valid token, and leaves the password untouched.
+ * for an active account and registers Brevo email dispatch + post-dispatch token housekeeping
+ * with `waitUntil` outside the DB transaction so the public 202 response does not wait on Brevo
+ * (05 §6.4, 06 §4.2, 07 §4). Always returns a neutral 202 payload without revealing whether the
+ * email is registered or locked (503 is only thrown for global email service misconfiguration
+ * before looking up any account). If post-response email dispatch fails or times out, invalidates
+ * only the newly issued undelivered token, preserves any earlier valid token, and leaves the
+ * password untouched.
  *
  * @param {unknown} rawBody
  * @param {{
  *   now?: Date,
  *   envSource?: NodeJS.ProcessEnv,
- *   sendResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>
+ *   sendResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>,
+ *   waitUntil?: (promise: Promise<unknown>) => void
  * }} [options]
  * @returns {Promise<{ message: string }>}
  */
 export async function requestPasswordReset(
   rawBody,
-  { now = new Date(), envSource = process.env, sendResetEmail } = {},
+  {
+    now = new Date(),
+    envSource = process.env,
+    sendResetEmail,
+    waitUntil = vercelWaitUntil,
+  } = {},
 ) {
   const { emailKey } = validatePasswordResetRequestInput(rawBody);
 
@@ -824,55 +832,107 @@ export async function requestPasswordReset(
     sendResetEmail ??
     ((params) => sendPasswordResetEmail(params, { env: envSource }));
 
-  try {
-    await dispatchEmail({
-      toEmail: String(userDoc.email),
-      displayName:
-        typeof userDoc.displayName === 'string'
-          ? userDoc.displayName
-          : undefined,
-      resetToken: rawToken,
-    });
-  } catch {
-    // Invalidate only the newly created undelivered token; keep any earlier valid link intact
-    // and return the neutral 202 response so individual send failures never leak account status.
-    await db
-      .collection('password_reset_tokens')
-      .updateOne(
-        {
-          _id: tokenId,
-          usedAt: { $exists: false },
-          invalidatedAt: { $exists: false },
-        },
-        {
-          $set: { invalidatedAt: new Date() },
-        },
-      )
-      .catch(() => {});
+  // Register the entire email dispatch and DB housekeeping promise with Vercel waitUntil
+  // before returning 202 so active accounts do not block on Brevo while background work
+  // continues past response completion.
+  const postResponseTask = (async () => {
+    try {
+      await dispatchEmail({
+        toEmail: String(userDoc.email),
+        displayName:
+          typeof userDoc.displayName === 'string'
+            ? userDoc.displayName
+            : undefined,
+        resetToken: rawToken,
+      });
+    } catch {
+      // Invalidate only the newly created undelivered token; keep any earlier valid link intact.
+      try {
+        await db.collection('password_reset_tokens').updateOne(
+          {
+            _id: tokenId,
+            usedAt: { $exists: false },
+            invalidatedAt: { $exists: false },
+          },
+          {
+            $set: { invalidatedAt: new Date() },
+          },
+        );
+      } catch {
+        // Contain background DB errors to avoid unhandled rejections or leaking reset secrets.
+      }
+      return;
+    }
 
-    return { message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE };
-  }
+    // Re-verify account and token state atomically inside a transaction after Brevo returns
+    // so concurrent resetPasswordWithToken, password-change, or account locking cannot race
+    // with invalidating older tokens.
+    try {
+      await withTransaction(async (session) => {
+        const attemptNow = new Date();
+        const currentUser = await db
+          .collection('users')
+          .findOne(
+            { _id: userDoc._id },
+            { session, projection: { status: 1 } },
+          );
 
-  // Only supersede tokens issued strictly before this token (`issuedVersion < this.issuedVersion`)
-  // so concurrent reset requests never mutually invalidate each other regardless of email completion order.
-  await db
-    .collection('password_reset_tokens')
-    .updateMany(
-      {
-        userId: userDoc._id,
-        _id: { $ne: tokenId },
-        usedAt: { $exists: false },
-        invalidatedAt: { $exists: false },
-        $or: [
-          { issuedVersion: { $lt: issuedVersion } },
-          { issuedVersion: { $exists: false } },
-        ],
-      },
-      {
-        $set: { invalidatedAt: new Date() },
-      },
-    )
-    .catch(() => {});
+        if (!currentUser || currentUser.status !== 'active') {
+          await db.collection('password_reset_tokens').updateOne(
+            {
+              _id: tokenId,
+              usedAt: { $exists: false },
+              invalidatedAt: { $exists: false },
+            },
+            {
+              $set: { invalidatedAt: attemptNow },
+            },
+            { session },
+          );
+          return;
+        }
+
+        const currentToken = await db
+          .collection('password_reset_tokens')
+          .findOne(
+            {
+              _id: tokenId,
+              usedAt: { $exists: false },
+              invalidatedAt: { $exists: false },
+              expiresAt: { $gt: attemptNow },
+            },
+            { session, projection: { _id: 1 } },
+          );
+
+        if (!currentToken) {
+          return;
+        }
+
+        // Only supersede tokens issued strictly before this token (`issuedVersion < this.issuedVersion`)
+        // so concurrent reset requests never mutually invalidate each other regardless of email order.
+        await db.collection('password_reset_tokens').updateMany(
+          {
+            userId: userDoc._id,
+            _id: { $ne: tokenId },
+            usedAt: { $exists: false },
+            invalidatedAt: { $exists: false },
+            $or: [
+              { issuedVersion: { $lt: issuedVersion } },
+              { issuedVersion: { $exists: false } },
+            ],
+          },
+          {
+            $set: { invalidatedAt: attemptNow },
+          },
+          { session },
+        );
+      });
+    } catch {
+      // Contain background DB errors to avoid unhandled rejections or leaking reset secrets.
+    }
+  })();
+
+  waitUntil(postResponseTask);
 
   return { message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE };
 }
