@@ -22,6 +22,9 @@ const expectedPaths = [
   '/topic-versions/{id}',
   '/topic-versions/{id}/knowledge',
   '/knowledge/{id}',
+  '/me/saved-items',
+  '/me/saved-items/{id}',
+  '/me/saved-items/{id}/sources',
   '/study/cards/query',
   '/study/cards/reveal',
 ];
@@ -34,6 +37,8 @@ const writeOperations = [
   ['/invitation-requests/{requestId}/responses', 'post'],
   ['/admin/content/{id}/publish', 'post'],
   ['/admin/content/{id}/hide', 'post'],
+  ['/me/saved-items', 'post'],
+  ['/me/saved-items/{id}', 'delete'],
 ];
 
 describe('OpenAPI contract', () => {
@@ -118,6 +123,7 @@ describe('OpenAPI contract', () => {
     for (const path of [
       '/invitations/{invitationId}',
       '/invitation-requests/{requestId}',
+      '/me/saved-items/{id}',
     ]) {
       expect(document.paths[path].delete.parameters).toContainEqual({
         $ref: '#/components/parameters/ExpectedVersion',
