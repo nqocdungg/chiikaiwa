@@ -8,7 +8,6 @@ import {
 } from '../../persistence/database.js';
 import {
   assertBrevoReady,
-  createEmailServiceUnavailableError,
   sendPasswordResetEmail,
 } from '../../integrations/brevo.js';
 import { runIdempotentOperation } from '../coordination/coordination-service.js';
@@ -749,9 +748,11 @@ export async function changeUserPassword(
 /**
  * Issues a one-time 15-minute password reset token (storing only SHA-256 `tokenHash`)
  * for an active account and sends the reset link via Brevo outside the DB transaction (05 §6.4, 06 §4.2, 07 §4).
- * Always returns a neutral 202 payload without revealing whether the email is registered or locked.
- * If email dispatch fails or times out, invalidates the newly issued token, leaves the password untouched,
- * and throws 503 SERVICE_UNAVAILABLE.
+ * Always returns a neutral 202 payload without revealing whether the email is registered or locked,
+ * including when an individual email dispatch fails or times out (503 is only thrown for global
+ * email service misconfiguration before looking up any account).
+ * If email dispatch fails or times out, invalidates only the newly issued undelivered token,
+ * preserves any earlier valid token, and leaves the password untouched.
  *
  * @param {unknown} rawBody
  * @param {{
@@ -785,47 +786,37 @@ export async function requestPasswordReset(
   }
 
   const tokenId = new ObjectId();
-  let issued = false;
+  /** @type {number | undefined} */
+  let issuedVersion;
 
   await withTransaction(async (session) => {
-    const userUpdate = await db.collection('users').updateOne(
+    const updatedUser = await db.collection('users').findOneAndUpdate(
       { _id: userDoc._id, status: 'active' },
       {
         $inc: { version: 1 },
         $set: { updatedAt: now },
       },
-      { session },
+      { session, returnDocument: 'after', projection: { version: 1 } },
     );
-    if (userUpdate.matchedCount === 0) {
+    if (!updatedUser || typeof updatedUser.version !== 'number') {
       return;
     }
 
-    await db.collection('password_reset_tokens').updateMany(
-      {
-        userId: userDoc._id,
-        usedAt: { $exists: false },
-        invalidatedAt: { $exists: false },
-      },
-      {
-        $set: { invalidatedAt: now },
-      },
-      { session },
-    );
-
+    issuedVersion = updatedUser.version;
     await db.collection('password_reset_tokens').insertOne(
       {
         _id: tokenId,
         userId: userDoc._id,
         tokenHash,
+        issuedVersion,
         expiresAt,
         purgeAt: expiresAt,
       },
       { session },
     );
-    issued = true;
   });
 
-  if (!issued) {
+  if (issuedVersion === undefined) {
     return { message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE };
   }
 
@@ -842,7 +833,9 @@ export async function requestPasswordReset(
           : undefined,
       resetToken: rawToken,
     });
-  } catch (err) {
+  } catch {
+    // Invalidate only the newly created undelivered token; keep any earlier valid link intact
+    // and return the neutral 202 response so individual send failures never leak account status.
     await db
       .collection('password_reset_tokens')
       .updateOne(
@@ -857,11 +850,29 @@ export async function requestPasswordReset(
       )
       .catch(() => {});
 
-    if (err instanceof AppError && err.status === 503) {
-      throw err;
-    }
-    throw createEmailServiceUnavailableError();
+    return { message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE };
   }
+
+  // Only supersede tokens issued strictly before this token (`issuedVersion < this.issuedVersion`)
+  // so concurrent reset requests never mutually invalidate each other regardless of email completion order.
+  await db
+    .collection('password_reset_tokens')
+    .updateMany(
+      {
+        userId: userDoc._id,
+        _id: { $ne: tokenId },
+        usedAt: { $exists: false },
+        invalidatedAt: { $exists: false },
+        $or: [
+          { issuedVersion: { $lt: issuedVersion } },
+          { issuedVersion: { $exists: false } },
+        ],
+      },
+      {
+        $set: { invalidatedAt: new Date() },
+      },
+    )
+    .catch(() => {});
 
   return { message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE };
 }
@@ -879,7 +890,7 @@ export async function requestPasswordReset(
  */
 export async function resetPasswordWithToken(
   rawBody,
-  { now = new Date(), beforeCommit } = {},
+  { now, beforeCommit } = {},
 ) {
   const { token, newPassword } = validatePasswordResetInput(rawBody);
   const tokenHash = hashPasswordResetToken(token);
@@ -888,6 +899,9 @@ export async function resetPasswordWithToken(
 
   try {
     await withTransaction(async (session) => {
+      // Evaluate current server time on every transaction attempt so a token that expires
+      // during password hashing or before a transaction retry cannot be consumed.
+      const attemptNow = now ?? new Date();
       const tokenDoc = await db
         .collection('password_reset_tokens')
         .findOneAndUpdate(
@@ -895,10 +909,10 @@ export async function resetPasswordWithToken(
             tokenHash,
             usedAt: { $exists: false },
             invalidatedAt: { $exists: false },
-            expiresAt: { $gt: now },
+            expiresAt: { $gt: attemptNow },
           },
           {
-            $set: { usedAt: now },
+            $set: { usedAt: attemptNow },
           },
           {
             session,
@@ -922,7 +936,7 @@ export async function resetPasswordWithToken(
         {
           $set: {
             passwordHash: newPasswordHash,
-            updatedAt: now,
+            updatedAt: attemptNow,
           },
           $inc: {
             authVersion: 1,
@@ -948,7 +962,7 @@ export async function resetPasswordWithToken(
           invalidatedAt: { $exists: false },
         },
         {
-          $set: { invalidatedAt: now },
+          $set: { invalidatedAt: attemptNow },
         },
         { session },
       );
@@ -959,7 +973,7 @@ export async function resetPasswordWithToken(
           revokedAt: { $exists: false },
         },
         {
-          $set: { revokedAt: now },
+          $set: { revokedAt: attemptNow },
         },
         { session },
       );

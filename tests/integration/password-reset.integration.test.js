@@ -16,6 +16,7 @@ import {
   disconnectDatabase,
 } from '../../server/persistence/database.js';
 import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
+import * as identityCrypto from '../../server/modules/identity/crypto.js';
 import {
   generatePasswordResetToken,
   hashGuestCredential,
@@ -24,6 +25,7 @@ import {
 import {
   changeUserPassword,
   NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE,
+  requestPasswordReset,
   resetPasswordWithToken,
 } from '../../server/modules/identity/identity-service.js';
 
@@ -407,11 +409,20 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
       expect(storedTokens[0].purgeAt).toEqual(storedTokens[0].expiresAt);
     });
 
-    it('returns 503 SERVICE_UNAVAILABLE, keeps current password intact, and invalidates the newly created token when Brevo fails or times out', async () => {
+    it('returns identical neutral 202 response for active, nonexistent, and locked emails when Brevo fails or times out, keeping password intact and invalidating the undelivered token', async () => {
       const { user, csrfToken, csrfCookie } = await registerAndLoginLearner({
         email: 'brevo.fail@example.com',
         password: 'OriginalPassword123!',
       });
+      const lockedUser = await registerAndLoginLearner({
+        email: 'brevo.fail.locked@example.com',
+      });
+      await db
+        .collection('users')
+        .updateOne(
+          { _id: new ObjectId(lockedUser.user.id) },
+          { $set: { status: 'locked' } },
+        );
 
       const userBefore = await db
         .collection('users')
@@ -421,15 +432,36 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         throw new Error('Brevo upstream timeout');
       };
 
-      const res = await request(app)
+      const activeRes = await request(app)
         .post('/api/v1/auth/password-reset-requests')
         .set('Origin', DEFAULT_ORIGIN)
         .set('Cookie', csrfCookie)
         .set('X-CSRF-Token', csrfToken)
         .send({ email: 'brevo.fail@example.com' })
-        .expect(503);
+        .expect(202);
 
-      expect(res.body.error.code).toBe('SERVICE_UNAVAILABLE');
+      const missingRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'nobody.brevo.fail@example.com' })
+        .expect(202);
+
+      const lockedRes = await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'brevo.fail.locked@example.com' })
+        .expect(202);
+
+      // All three email groups receive the exact same HTTP status and public payload (excluding per-request meta)
+      expect(activeRes.body.data).toEqual({
+        message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE,
+      });
+      expect(missingRes.body.data).toEqual(activeRes.body.data);
+      expect(lockedRes.body.data).toEqual(activeRes.body.data);
 
       // User's passwordHash and authVersion must not have changed
       const userAfter = await db
@@ -457,6 +489,122 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
           password: 'OriginalPassword123!',
         })
         .expect(200);
+    });
+
+    it('returns identical 503 SERVICE_UNAVAILABLE for active, nonexistent, and locked emails when Brevo configuration is globally unavailable', async () => {
+      await registerAndLoginLearner({
+        email: 'brevo.unconfigured.active@example.com',
+      });
+      const lockedUser = await registerAndLoginLearner({
+        email: 'brevo.unconfigured.locked@example.com',
+      });
+      await db
+        .collection('users')
+        .updateOne(
+          { _id: new ObjectId(lockedUser.user.id) },
+          { $set: { status: 'locked' } },
+        );
+
+      const unconfiguredApp = createApp({ checkHealth: async () => {} });
+      const csrfRes = await request(unconfiguredApp)
+        .get('/api/v1/auth/csrf')
+        .expect(200);
+      const unconfiguredCsrfToken = csrfRes.body.data.csrfToken;
+      const unconfiguredCsrfCookie = extractCookiePair(
+        csrfRes.headers['set-cookie'],
+        'ck_csrf',
+      );
+
+      vi.stubEnv('BREVO_API_KEY', '');
+      try {
+        const activeRes = await request(unconfiguredApp)
+          .post('/api/v1/auth/password-reset-requests')
+          .set('Origin', DEFAULT_ORIGIN)
+          .set('Cookie', unconfiguredCsrfCookie)
+          .set('X-CSRF-Token', unconfiguredCsrfToken)
+          .send({ email: 'brevo.unconfigured.active@example.com' })
+          .expect(503);
+
+        const missingRes = await request(unconfiguredApp)
+          .post('/api/v1/auth/password-reset-requests')
+          .set('Origin', DEFAULT_ORIGIN)
+          .set('Cookie', unconfiguredCsrfCookie)
+          .set('X-CSRF-Token', unconfiguredCsrfToken)
+          .send({ email: 'nobody.unconfigured@example.com' })
+          .expect(503);
+
+        const lockedRes = await request(unconfiguredApp)
+          .post('/api/v1/auth/password-reset-requests')
+          .set('Origin', DEFAULT_ORIGIN)
+          .set('Cookie', unconfiguredCsrfCookie)
+          .set('X-CSRF-Token', unconfiguredCsrfToken)
+          .send({ email: 'brevo.unconfigured.locked@example.com' })
+          .expect(503);
+
+        expect(activeRes.body.error).toEqual({
+          code: 'SERVICE_UNAVAILABLE',
+          message: expect.any(String),
+        });
+        expect(missingRes.body.error).toEqual(activeRes.body.error);
+        expect(lockedRes.body.error).toEqual(activeRes.body.error);
+      } finally {
+        vi.stubEnv('BREVO_API_KEY', 'xkeysib-test-integration-key');
+      }
+    });
+
+    it('preserves an existing valid reset link A when resending link B fails due to Brevo timeout, then allows A to reset once', async () => {
+      const { csrfToken, csrfCookie } = await registerAndLoginLearner({
+        email: 'preserve.link@example.com',
+        password: 'OldPassword123!',
+      });
+
+      // 1. Send link A successfully
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'preserve.link@example.com' })
+        .expect(202);
+      expect(sentEmails).toHaveLength(1);
+      const tokenA = sentEmails[0].resetToken;
+
+      // 2. Simulate Brevo timeout when sending link B for the same account
+      emailSenderFailureHook = async () => {
+        throw new DOMException('The operation was aborted', 'TimeoutError');
+      };
+
+      await request(app)
+        .post('/api/v1/auth/password-reset-requests')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ email: 'preserve.link@example.com' })
+        .expect(202);
+
+      // 3. Use link A to reset password: first attempt returns 204, reuse returns 400 RESET_TOKEN_INVALID
+      await request(app)
+        .post('/api/v1/auth/password-resets')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          token: tokenA,
+          newPassword: 'RecoveredPassword123!',
+        })
+        .expect(204);
+
+      const reuseRes = await request(app)
+        .post('/api/v1/auth/password-resets')
+        .set('Origin', DEFAULT_ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({
+          token: tokenA,
+          newPassword: 'AnotherPassword456!',
+        })
+        .expect(400);
+      expect(reuseRes.body.error.code).toBe('RESET_TOKEN_INVALID');
     });
   });
 
@@ -601,6 +749,120 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
         })
         .expect(400);
       expect(expiredRes.body.error.code).toBe('RESET_TOKEN_INVALID');
+    });
+
+    it('rejects a token that is valid when the HTTP request starts but expires during password hashing or before a transaction retry', async () => {
+      const { user, csrfToken, csrfCookie } = await registerAndLoginLearner({
+        email: 'expire.midflight@example.com',
+        password: 'OriginalPassword123!',
+      });
+      const userBefore = await db
+        .collection('users')
+        .findOne({ _id: new ObjectId(user.id) });
+
+      const t0 = new Date('2026-11-15T12:00:00.000Z');
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        // Case 1: Token is valid at request start (t0), but expires while hashPassword runs (t0 + 1500ms > expiresAt)
+        vi.setSystemTime(t0);
+        const rawToken = generatePasswordResetToken();
+        const tokenHash = hashPasswordResetToken(rawToken);
+        const expiresAt = new Date(t0.getTime() + 1000);
+        await db.collection('password_reset_tokens').insertOne({
+          _id: new ObjectId(),
+          userId: new ObjectId(user.id),
+          tokenHash,
+          expiresAt,
+          purgeAt: expiresAt,
+        });
+
+        const originalHashPassword = identityCrypto.hashPassword;
+        const hashSpy = vi
+          .spyOn(identityCrypto, 'hashPassword')
+          .mockImplementationOnce(async (pw) => {
+            vi.setSystemTime(new Date(t0.getTime() + 1500));
+            return originalHashPassword(pw);
+          });
+
+        const res = await request(app)
+          .post('/api/v1/auth/password-resets')
+          .set('Origin', DEFAULT_ORIGIN)
+          .set('Cookie', csrfCookie)
+          .set('X-CSRF-Token', csrfToken)
+          .send({
+            token: rawToken,
+            newPassword: 'ShouldNotApplyPassword123!',
+          })
+          .expect(400);
+
+        hashSpy.mockRestore();
+        expect(res.body.error.code).toBe('RESET_TOKEN_INVALID');
+
+        const userAfterHashExpiry = await db
+          .collection('users')
+          .findOne({ _id: new ObjectId(user.id) });
+        expect(userAfterHashExpiry?.passwordHash).toBe(
+          userBefore?.passwordHash,
+        );
+        expect(userAfterHashExpiry?.authVersion).toBe(userBefore?.authVersion);
+
+        const tokenDocAfterHashExpiry = await db
+          .collection('password_reset_tokens')
+          .findOne({ tokenHash });
+        expect(tokenDocAfterHashExpiry?.usedAt).toBeUndefined();
+
+        // Case 2: Token is valid on transaction attempt 1, then expires before transaction retry attempt 2
+        vi.setSystemTime(t0);
+        const retryToken = generatePasswordResetToken();
+        const retryTokenHash = hashPasswordResetToken(retryToken);
+        await db.collection('password_reset_tokens').insertOne({
+          _id: new ObjectId(),
+          userId: new ObjectId(user.id),
+          tokenHash: retryTokenHash,
+          expiresAt,
+          purgeAt: expiresAt,
+        });
+
+        let attempts = 0;
+        await expect(
+          resetPasswordWithToken(
+            {
+              token: retryToken,
+              newPassword: 'ShouldNotApplyRetry123!',
+            },
+            {
+              beforeCommit: async () => {
+                attempts += 1;
+                if (attempts === 1) {
+                  vi.setSystemTime(new Date(t0.getTime() + 1500));
+                  const transientErr = new mongoose.mongo.MongoError(
+                    'Simulated transient transaction conflict',
+                  );
+                  transientErr.addErrorLabel('TransientTransactionError');
+                  throw transientErr;
+                }
+              },
+            },
+          ),
+        ).rejects.toMatchObject({
+          status: 400,
+          code: 'RESET_TOKEN_INVALID',
+        });
+
+        expect(attempts).toBe(1);
+        const userAfterRetryExpiry = await db
+          .collection('users')
+          .findOne({ _id: new ObjectId(user.id) });
+        expect(userAfterRetryExpiry?.passwordHash).toBe(
+          userBefore?.passwordHash,
+        );
+        const retryTokenDoc = await db
+          .collection('password_reset_tokens')
+          .findOne({ tokenHash: retryTokenHash });
+        expect(retryTokenDoc?.usedAt).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('DB-T02: concurrent password reset requests using the same valid token allow exactly 1 to succeed (204) and reject the rest with 400 RESET_TOKEN_INVALID', async () => {
@@ -817,6 +1079,185 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
 
       expect(twentyFirstRes.body.error.code).toBe('RATE_LIMITED');
       expect(Number(twentyFirstRes.headers['retry-after'])).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Concurrent requestPasswordReset email dispatch ordering (BE-007 review)', () => {
+    /**
+     * @returns {{ promise: Promise<void>, resolve: () => void, reject: (err: unknown) => void }}
+     */
+    function deferred() {
+      /** @type {() => void} */
+      let resolve = () => {};
+      /** @type {(err: unknown) => void} */
+      let reject = () => {};
+      const promise = new Promise((res, rej) => {
+        resolve = () => res(undefined);
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    /**
+     * Starts a requestPasswordReset call and pauses inside `sendResetEmail` until
+     * the returned gate is resolved/rejected, deterministically controlling completion order.
+     *
+     * @param {string} email
+     */
+    async function startPausedResetRequest(email) {
+      const entered = deferred();
+      const gate = deferred();
+      let capturedToken = '';
+      const requestPromise = requestPasswordReset(
+        { email },
+        {
+          sendResetEmail: async ({ resetToken }) => {
+            capturedToken = resetToken;
+            entered.resolve();
+            await gate.promise;
+          },
+        },
+      );
+      await entered.promise;
+      return {
+        token: capturedToken,
+        complete: async () => {
+          gate.resolve();
+          return requestPromise;
+        },
+        fail: async (error = new Error('Brevo send failed')) => {
+          gate.reject(error);
+          return requestPromise;
+        },
+      };
+    }
+
+    it('keeps the newer token valid when A completes email dispatch before B', async () => {
+      await registerAndLoginLearner();
+
+      const reqA = await startPausedResetRequest('hanh.nhi@example.com');
+      const reqB = await startPausedResetRequest('hanh.nhi@example.com');
+
+      await reqA.complete();
+      await reqB.complete();
+
+      // Older token A is superseded; newer token B remains usable once.
+      await expect(
+        resetPasswordWithToken({
+          token: reqA.token,
+          newPassword: 'NewPasswordA123!',
+        }),
+      ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
+
+      await expect(
+        resetPasswordWithToken({
+          token: reqB.token,
+          newPassword: 'NewPasswordB123!',
+        }),
+      ).resolves.toBeUndefined();
+
+      // Single-use check
+      await expect(
+        resetPasswordWithToken({
+          token: reqB.token,
+          newPassword: 'NewPasswordB456!',
+        }),
+      ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
+    });
+
+    it('keeps the newer token valid when B completes email dispatch before A (no mutual invalidation)', async () => {
+      await registerAndLoginLearner();
+
+      const reqA = await startPausedResetRequest('hanh.nhi@example.com');
+      const reqB = await startPausedResetRequest('hanh.nhi@example.com');
+
+      await reqB.complete();
+      await reqA.complete();
+
+      await expect(
+        resetPasswordWithToken({
+          token: reqA.token,
+          newPassword: 'NewPasswordA123!',
+        }),
+      ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
+
+      await expect(
+        resetPasswordWithToken({
+          token: reqB.token,
+          newPassword: 'NewPasswordB123!',
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('keeps A valid when B fails email dispatch (whether A finishes before or after B)', async () => {
+      await registerAndLoginLearner();
+
+      const reqA = await startPausedResetRequest('hanh.nhi@example.com');
+      const reqB = await startPausedResetRequest('hanh.nhi@example.com');
+
+      const resB = await reqB.fail();
+      const resA = await reqA.complete();
+
+      // Neutral 202 payload is preserved even on failure
+      expect(resA).toEqual(resB);
+
+      await expect(
+        resetPasswordWithToken({
+          token: reqB.token,
+          newPassword: 'FailedTokenB123!',
+        }),
+      ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
+
+      await expect(
+        resetPasswordWithToken({
+          token: reqA.token,
+          newPassword: 'ValidTokenA123!',
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('keeps an existing valid link C intact when concurrent requests A and B both fail email dispatch', async () => {
+      await registerAndLoginLearner();
+
+      const reqC = await startPausedResetRequest('hanh.nhi@example.com');
+      await reqC.complete();
+
+      const reqA = await startPausedResetRequest('hanh.nhi@example.com');
+      const reqB = await startPausedResetRequest('hanh.nhi@example.com');
+
+      const resB = await reqB.fail();
+      const resA = await reqA.fail();
+
+      expect(resA).toEqual({ message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE });
+      expect(resB).toEqual(resA);
+
+      await expect(
+        resetPasswordWithToken({
+          token: reqA.token,
+          newPassword: 'FailedTokenA123!',
+        }),
+      ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
+
+      await expect(
+        resetPasswordWithToken({
+          token: reqB.token,
+          newPassword: 'FailedTokenB123!',
+        }),
+      ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
+
+      await expect(
+        resetPasswordWithToken({
+          token: reqC.token,
+          newPassword: 'ValidTokenC123!',
+        }),
+      ).resolves.toBeUndefined();
+
+      await expect(
+        resetPasswordWithToken({
+          token: reqC.token,
+          newPassword: 'ValidTokenC456!',
+        }),
+      ).rejects.toMatchObject({ status: 400, code: 'RESET_TOKEN_INVALID' });
     });
   });
 });
