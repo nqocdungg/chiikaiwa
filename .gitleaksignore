@@ -63,3 +63,5 @@ tests/client/profile-password.test.jsx:generic-api-key:821
 tests/client/profile-password.test.jsx:generic-api-key:865
 tests/client/profile-password.test.jsx:generic-api-key:1091
 tests/client/profile-password.test.jsx:generic-api-key:1135
+98a6a2bdaf8f92f557866ccc904b09f3e06ada7e:tests/integration/profile-catalogs.integration.test.js:generic-api-key:676
+eca4ebaa3b07f24e6d01ad13a2c13aa7e5a66300:docs/design/07-api-specification.md:generic-api-key:317
