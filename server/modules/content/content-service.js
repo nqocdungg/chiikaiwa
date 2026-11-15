@@ -868,10 +868,12 @@ export async function listPublishedTopics({ level, limit, cursor }) {
  * @param {any} params.identity - Identity được giải mã từ cookie (user / guest)
  * @param {import('mongoose').Types.ObjectId} params.deckVersionId - ID của ContentVersion kind=deck
  * @param {Record<string, any>} params.parentItem - Document ContentItem cha
+ * @param {import('mongoose').ClientSession} [params.session]
+ * @param {boolean} [params.allowAdmin]
  */
-async function assertDeckVersionSourceAccess(
+export async function assertDeckVersionSourceAccess(
   db,
-  { identity, deckVersionId, parentItem },
+  { identity, deckVersionId, parentItem, session, allowAdmin = true },
 ) {
   if (!identity) {
     throw new AppError({
@@ -882,15 +884,15 @@ async function assertDeckVersionSourceAccess(
   }
 
   // 1. Admin: luôn có quyền đọc
-  if (identity.kind === 'user' && identity.role === 'admin') {
+  if (allowAdmin && identity.kind === 'user' && identity.role === 'admin') {
     return;
   }
 
   // 2. Guest (07 §7, 06 §4.3): Khách chỉ đọc học liệu trong lượt thử được cấp
   if (identity.kind === 'guest') {
-    const guestDoc = await db.collection('guest_sessions').findOne({
-      _id: identity.guestId,
-    });
+    const guestDoc = await db
+      .collection('guest_sessions')
+      .findOne({ _id: identity.guestId }, { session });
     const practiceSessionId =
       guestDoc?.practiceSessionId || identity.guestSession?.practiceSessionId;
 
@@ -903,12 +905,15 @@ async function assertDeckVersionSourceAccess(
       });
     }
 
-    const sessionDoc = await db.collection('practice_sessions').findOne({
-      _id:
-        practiceSessionId instanceof ObjectId
-          ? practiceSessionId
-          : new ObjectId(practiceSessionId),
-    });
+    const sessionDoc = await db.collection('practice_sessions').findOne(
+      {
+        _id:
+          practiceSessionId instanceof ObjectId
+            ? practiceSessionId
+            : new ObjectId(practiceSessionId),
+      },
+      { session },
+    );
 
     if (
       !sessionDoc ||
@@ -941,18 +946,23 @@ async function assertDeckVersionSourceAccess(
   // Phải có nguồn hợp lệ: Từng tham gia phiên luyện có deckVersionId này, hoặc đã lưu trong saved_sources
   const actorKey = identity.actorKey;
 
-  const [hasSession, hasSaved] = await Promise.all([
-    db.collection('practice_sessions').findOne({
+  const hasSession = await db.collection('practice_sessions').findOne(
+    {
       'members.actorKey': actorKey,
       deckVersionId,
-    }),
-    db.collection('saved_sources').findOne({
+    },
+    { session },
+  );
+  if (hasSession) return;
+  const hasSaved = await db.collection('saved_sources').findOne(
+    {
       ownerKey: actorKey,
       deckVersionId,
-    }),
-  ]);
+    },
+    { session },
+  );
 
-  if (hasSession || hasSaved) {
+  if (hasSaved) {
     return;
   }
 
@@ -973,10 +983,19 @@ async function assertDeckVersionSourceAccess(
  * @param {import('mongoose').Types.ObjectId} params.knowledgeId - ID của ContentItem kind=knowledge
  * @param {import('mongoose').Types.ObjectId} [params.knowledgeVersionId] - ID của ContentVersion kind=knowledge (nếu có)
  * @param {Record<string, any>} params.parentItem - Document ContentItem cha
+ * @param {import('mongoose').ClientSession} [params.session]
+ * @param {boolean} [params.allowAdmin]
  */
-async function assertKnowledgeSourceAccess(
+export async function assertKnowledgeSourceAccess(
   db,
-  { identity, knowledgeId, knowledgeVersionId, parentItem },
+  {
+    identity,
+    knowledgeId,
+    knowledgeVersionId,
+    parentItem,
+    session,
+    allowAdmin = true,
+  },
 ) {
   if (!identity) {
     throw new AppError({
@@ -987,15 +1006,18 @@ async function assertKnowledgeSourceAccess(
   }
 
   // 1. Admin: luôn có quyền đọc
-  if (identity.kind === 'user' && identity.role === 'admin') {
+  if (allowAdmin && identity.kind === 'user' && identity.role === 'admin') {
     return;
   }
 
   // 2. Guest: chỉ đọc học liệu trong lượt thử
   if (identity.kind === 'guest') {
-    const guestDoc = await db.collection('guest_sessions').findOne({
-      _id: identity.guestId,
-    });
+    const guestDoc = await db.collection('guest_sessions').findOne(
+      {
+        _id: identity.guestId,
+      },
+      { session },
+    );
     const practiceSessionId =
       guestDoc?.practiceSessionId || identity.guestSession?.practiceSessionId;
 
@@ -1008,12 +1030,15 @@ async function assertKnowledgeSourceAccess(
       });
     }
 
-    const sessionDoc = await db.collection('practice_sessions').findOne({
-      _id:
-        practiceSessionId instanceof ObjectId
-          ? practiceSessionId
-          : new ObjectId(practiceSessionId),
-    });
+    const sessionDoc = await db.collection('practice_sessions').findOne(
+      {
+        _id:
+          practiceSessionId instanceof ObjectId
+            ? practiceSessionId
+            : new ObjectId(practiceSessionId),
+      },
+      { session },
+    );
 
     if (!sessionDoc || !sessionDoc.deckVersionId) {
       throw new AppError({
@@ -1024,9 +1049,12 @@ async function assertKnowledgeSourceAccess(
       });
     }
 
-    const trialDeck = await db.collection('content_versions').findOne({
-      _id: sessionDoc.deckVersionId,
-    });
+    const trialDeck = await db.collection('content_versions').findOne(
+      {
+        _id: sessionDoc.deckVersionId,
+      },
+      { session },
+    );
     const knowledgeIdsInDeck = Array.isArray(
       trialDeck?.payload?.knowledgeVersionIds,
     )
@@ -1037,11 +1065,14 @@ async function assertKnowledgeSourceAccess(
       if (knowledgeIdsInDeck.includes(String(knowledgeVersionId))) {
         return;
       }
-      const hasSaved = await db.collection('saved_sources').findOne({
-        ownerKey: identity.actorKey,
-        knowledgeId,
-        knowledgeVersionId,
-      });
+      const hasSaved = await db.collection('saved_sources').findOne(
+        {
+          ownerKey: identity.actorKey,
+          knowledgeId,
+          knowledgeVersionId,
+        },
+        { session },
+      );
       if (hasSaved) return;
     } else {
       if (
@@ -1050,10 +1081,13 @@ async function assertKnowledgeSourceAccess(
       ) {
         return;
       }
-      const hasSavedItem = await db.collection('saved_items').findOne({
-        ownerKey: identity.actorKey,
-        knowledgeId,
-      });
+      const hasSavedItem = await db.collection('saved_items').findOne(
+        {
+          ownerKey: identity.actorKey,
+          knowledgeId,
+        },
+        { session },
+      );
       if (hasSavedItem) return;
     }
 
@@ -1070,10 +1104,13 @@ async function assertKnowledgeSourceAccess(
       return;
     }
 
-    const hasSource = await db.collection('saved_items').findOne({
-      ownerKey: identity.actorKey,
-      knowledgeId,
-    });
+    const hasSource = await db.collection('saved_items').findOne(
+      {
+        ownerKey: identity.actorKey,
+        knowledgeId,
+      },
+      { session },
+    );
     if (hasSource) return;
 
     throw new AppError({
@@ -1093,11 +1130,14 @@ async function assertKnowledgeSourceAccess(
     return;
   }
 
-  const hasSavedSource = await db.collection('saved_sources').findOne({
-    ownerKey: identity.actorKey,
-    knowledgeId,
-    knowledgeVersionId,
-  });
+  const hasSavedSource = await db.collection('saved_sources').findOne(
+    {
+      ownerKey: identity.actorKey,
+      knowledgeId,
+      knowledgeVersionId,
+    },
+    { session },
+  );
 
   if (hasSavedSource) {
     return;
@@ -1105,29 +1145,32 @@ async function assertKnowledgeSourceAccess(
 
   const sessionWithKnowledge = await db
     .collection('practice_sessions')
-    .aggregate([
-      {
-        $match: {
-          'members.actorKey': identity.actorKey,
-          deckVersionId: { $exists: true },
+    .aggregate(
+      [
+        {
+          $match: {
+            'members.actorKey': identity.actorKey,
+            deckVersionId: { $exists: true },
+          },
         },
-      },
-      {
-        $lookup: {
-          from: 'content_versions',
-          localField: 'deckVersionId',
-          foreignField: '_id',
-          as: 'deckVersion',
+        {
+          $lookup: {
+            from: 'content_versions',
+            localField: 'deckVersionId',
+            foreignField: '_id',
+            as: 'deckVersion',
+          },
         },
-      },
-      { $unwind: '$deckVersion' },
-      {
-        $match: {
-          'deckVersion.payload.knowledgeVersionIds': knowledgeVersionId,
+        { $unwind: '$deckVersion' },
+        {
+          $match: {
+            'deckVersion.payload.knowledgeVersionIds': knowledgeVersionId,
+          },
         },
-      },
-      { $limit: 1 },
-    ])
+        { $limit: 1 },
+      ],
+      { session },
+    )
     .toArray();
 
   if (sessionWithKnowledge.length > 0) {
