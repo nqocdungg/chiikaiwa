@@ -1088,7 +1088,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         .spyOn(console, 'log')
         .mockImplementation(() => {});
 
-      const secretToken = 'raw-secret-reset-token-1234567890abcdef';
+      const secretToken = 'raw-secret-reset-token-1234567890abcdef'; // gitleaks:allow
       const postSpy = vi.spyOn(api, 'post').mockRejectedValueOnce(
         new ApiError({
           status: 400,
@@ -1132,7 +1132,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
     });
 
     it('resets password with valid token (204), does NOT auto-login, and provides link to /login', async () => {
-      const validToken = 'valid-one-time-token-abcdef1234567890';
+      const validToken = 'valid-one-time-token-abcdef1234567890'; // gitleaks:allow
       const postSpy = vi.spyOn(api, 'post').mockResolvedValueOnce({
         data: null,
         meta: { requestId: 'reset-204' },

@@ -54,3 +54,12 @@ c27df621bacc1aa2cda5c70f7be3a46af3fc66b1:.env.example:generic-api-key:30
 .env.example:generic-api-key:4
 .env.example:generic-api-key:29
 .env.example:generic-api-key:30
+# Synthetic reset password tokens in FE-003 client tests
+11eab5da22bdc3218ad7d33f03546223b0cd7c4a:tests/client/profile-password.test.jsx:generic-api-key:821
+11eab5da22bdc3218ad7d33f03546223b0cd7c4a:tests/client/profile-password.test.jsx:generic-api-key:865
+b27642054ff46b4539efb9514f7b605f1df639c4:tests/client/profile-password.test.jsx:generic-api-key:1091
+b27642054ff46b4539efb9514f7b605f1df639c4:tests/client/profile-password.test.jsx:generic-api-key:1135
+tests/client/profile-password.test.jsx:generic-api-key:821
+tests/client/profile-password.test.jsx:generic-api-key:865
+tests/client/profile-password.test.jsx:generic-api-key:1091
+tests/client/profile-password.test.jsx:generic-api-key:1135
