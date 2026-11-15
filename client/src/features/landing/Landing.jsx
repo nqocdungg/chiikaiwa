@@ -13,7 +13,7 @@ import hachiwareImg from '../../assets/mascots/hachiware.png';
  * Không ép đăng nhập; người đã đăng nhập có lối vào theo role (SC-03 cho learner, /admin cho admin).
  */
 export function Landing() {
-  const { kind, user, role } = useAuth();
+  const { kind, user, role, isLoading } = useAuth();
   const isAuthenticated = kind === 'user' && Boolean(user);
   const isAdmin = role === 'admin';
   const ctaPath = isAdmin ? '/admin' : '/home';
@@ -39,8 +39,18 @@ export function Landing() {
         </Link>
         <h1 className="sr-only">Chiikaiwa</h1>
         <nav aria-label="Điều hướng chính">
-          {isAuthenticated ? (
-            <Link to={ctaPath} className="ck-nav-link" aria-current="page">
+          {isLoading ? (
+            <div
+              className="flex items-center gap-3 opacity-0 pointer-events-none"
+              aria-hidden="true"
+            >
+              <span className="ck-nav-link">Đăng nhập</span>
+              <span className="ck-button ck-button--secondary text-xs !min-h-0 !py-1.5 !px-3.5 !rounded-full">
+                Đăng ký
+              </span>
+            </div>
+          ) : isAuthenticated ? (
+            <Link to={ctaPath} className="ck-nav-link">
               {ctaNavLabel}
             </Link>
           ) : (
@@ -65,7 +75,7 @@ export function Landing() {
           {/* Linh vật thỏ Usagi bên trái */}
           <div className="ck-hero-mascot ck-hero-mascot--left">
             <div className="ck-speech-bubble ck-speech-bubble--left">
-              <span lang="ja" aria-label="Cùng nhau nhé?">
+              <span lang="ja" aria-hidden="true">
                 いっしょに？
               </span>
             </div>
@@ -128,7 +138,7 @@ export function Landing() {
           {/* Linh vật mèo Hachiware bên phải */}
           <div className="ck-hero-mascot ck-hero-mascot--right">
             <div className="ck-speech-bubble ck-speech-bubble--right">
-              <span lang="ja" aria-label="Nói chuyện nào!">
+              <span lang="ja" aria-hidden="true">
                 話そう！
               </span>
             </div>

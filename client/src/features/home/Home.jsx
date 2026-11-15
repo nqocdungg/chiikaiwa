@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { PageContainer } from '../../components/layout/PageContainer.jsx';
 import { Button, Icon } from '../../components/ui/controls.jsx';
 import { Avatar, Badge, Card } from '../../components/ui/surfaces.jsx';
@@ -9,6 +9,16 @@ import chiiLogo from '../../assets/brand/chii-logo.svg';
 import usagiImg from '../../assets/mascots/usagi.png';
 import hachiwareImg from '../../assets/mascots/hachiware.png';
 import waitingMascotImg from '../../assets/mascots/Waiting mascot.png';
+import { activeLocationRef } from './navigation-tracker.js';
+
+const VALID_COORDINATION_MODES = [
+  'idle',
+  'searching',
+  'proposed',
+  'inviting',
+  'requestingInvite',
+  'inSession',
+];
 
 /**
  * SC-03: Trang chính (Home) dành cho Người học sau đăng nhập (04 §5.1, §3.2, docs/frontend/design-system.md).
@@ -19,10 +29,27 @@ import waitingMascotImg from '../../assets/mascots/Waiting mascot.png';
  */
 export function Home({ onStart } = {}) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
+
+  const [prevLocationState, setPrevLocationState] = useState(location.state);
+  const [logoutNotice, setLogoutNotice] = useState(
+    Boolean(location.state?.logoutFailed),
+  );
+  const logoutInFlight = useRef(false);
+
+  if (location.state !== prevLocationState) {
+    setPrevLocationState(location.state);
+    if (location.state?.logoutFailed) {
+      setLogoutNotice(true);
+    }
+  }
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const triggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
+  const retryRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
+  const menuId = 'ck-account-menu';
 
   const [coordination, setCoordination] = useState(
     /** @type {{ mode: string, resourceId?: string } | null} */ (null),
@@ -36,6 +63,31 @@ export function Home({ onStart } = {}) {
     setCoordinationError(false);
     setRetryKey((k) => k + 1);
   };
+
+  useEffect(() => {
+    if (location.state?.logoutFailed) {
+      navigate(
+        {
+          pathname: location.pathname,
+          search: location.search,
+          hash: location.hash,
+        },
+        { replace: true, state: null },
+      );
+    }
+  }, [
+    location.hash,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+  ]);
+
+  useEffect(() => {
+    if (logoutNotice) {
+      retryRef.current?.focus();
+    }
+  }, [logoutNotice]);
 
   useEffect(() => {
     if (!isDropdownOpen) return;
@@ -52,8 +104,11 @@ export function Home({ onStart } = {}) {
 
     /** @param {KeyboardEvent} event */
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setIsDropdownOpen(false);
+      if (event.key !== 'Escape') return;
+      const focusInside = dropdownRef.current?.contains(document.activeElement);
+      setIsDropdownOpen(false);
+      if (focusInside) {
+        triggerRef.current?.focus();
       }
     };
 
@@ -67,11 +122,43 @@ export function Home({ onStart } = {}) {
   }, [isDropdownOpen]);
 
   const handleLogout = async () => {
+    if (logoutInFlight.current) return;
+    logoutInFlight.current = true;
     setIsDropdownOpen(false);
-    if (typeof logout === 'function') {
+    const originKey = location.key;
+    const homeLocation = {
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+    };
+    let logoutSuccess = false;
+    try {
       await logout();
+      logoutSuccess = true;
+    } catch (err) {
+      const errorObj = /** @type {{ code?: string } | null} */ (
+        err && typeof err === 'object' ? err : null
+      );
+      if (errorObj?.code === 'AUTH_SUPERSEDED') {
+        return;
+      }
+      // Nếu người dùng đã điều hướng sang trang khác trong lúc chờ logout
+      const currentLoc = activeLocationRef.current;
+      if (
+        currentLoc &&
+        (currentLoc.key !== originKey ||
+          currentLoc.pathname !== homeLocation.pathname)
+      ) {
+        return;
+      }
+      navigate(homeLocation, { replace: true, state: { logoutFailed: true } });
+    } finally {
+      logoutInFlight.current = false;
     }
-    navigate('/login');
+
+    if (logoutSuccess) {
+      navigate('/login', { replace: true });
+    }
   };
 
   useEffect(() => {
@@ -84,11 +171,21 @@ export function Home({ onStart } = {}) {
         const data = /** @type {{ mode?: string, resourceId?: string }} */ (
           res.data
         );
-        if (data?.mode) {
+        const mode = data?.mode;
+        const resourceId =
+          typeof data?.resourceId === 'string' ? data.resourceId.trim() : '';
+        const isValidMode = Boolean(
+          mode && VALID_COORDINATION_MODES.includes(mode),
+        );
+        const isValidSession = mode !== 'inSession' || Boolean(resourceId);
+
+        if (isValidMode && isValidSession && mode) {
           setCoordination({
-            mode: data.mode,
-            resourceId: data.resourceId,
+            mode,
+            resourceId,
           });
+        } else {
+          setCoordinationError(true);
         }
       })
       .catch(() => {
@@ -160,38 +257,30 @@ export function Home({ onStart } = {}) {
             className="ck-nav-tab-link"
             onClick={handleStart}
             disabled={isStartDisabled}
-            aria-label="Luyện hội thoại"
           >
             Luyện nói
           </button>
-          <Link
-            to="/topics"
-            className="ck-nav-tab-link"
-            aria-label="Học theo chủ đề"
-          >
+          <Link to="/topics" className="ck-nav-tab-link">
             Kho chủ đề
           </Link>
-          <Link to="/saved" className="ck-nav-tab-link" aria-label="Ôn cá nhân">
+          <Link to="/saved" className="ck-nav-tab-link">
             Đã lưu
           </Link>
-          <Link
-            to="/history"
-            className="ck-nav-tab-link"
-            aria-label="Lịch sử luyện tập"
-          >
+          <Link to="/history" className="ck-nav-tab-link">
             Lịch sử
           </Link>
         </nav>
 
-        {/* Right User Profile pill with dropdown menu (Reviewer feedback PR #33) */}
+        {/* Right User Profile pill with dropdown menu */}
         <div className="ck-profile-dropdown-container" ref={dropdownRef}>
           <button
+            ref={triggerRef}
             type="button"
             className="ck-profile-pill"
             onClick={() => setIsDropdownOpen((prev) => !prev)}
             aria-expanded={isDropdownOpen}
-            aria-haspopup="menu"
-            aria-label={`Menu tài khoản: ${displayName}`}
+            aria-controls={isDropdownOpen ? menuId : undefined}
+            aria-label={`Menu tài khoản: ${displayName}${level ? ` ${level}` : ''}`}
           >
             <Avatar name={displayName} size={32} />
             <span className="font-semibold">{displayName}</span>
@@ -202,15 +291,10 @@ export function Home({ onStart } = {}) {
           </button>
 
           {isDropdownOpen && (
-            <div
-              className="ck-profile-dropdown"
-              role="menu"
-              aria-label="Tùy chọn tài khoản"
-            >
+            <div id={menuId} className="ck-profile-dropdown">
               <Link
                 to="/profile"
                 className="ck-profile-dropdown-item"
-                role="menuitem"
                 onClick={() => setIsDropdownOpen(false)}
               >
                 <span>Hồ sơ của tôi</span>
@@ -218,7 +302,6 @@ export function Home({ onStart } = {}) {
               <button
                 type="button"
                 className="ck-profile-dropdown-item ck-profile-dropdown-item--danger"
-                role="menuitem"
                 onClick={handleLogout}
               >
                 <span>Đăng xuất</span>
@@ -229,6 +312,41 @@ export function Home({ onStart } = {}) {
       </header>
 
       <PageContainer as="main" id="ck-home" className="ck-home">
+        {/* Banner thông báo khi đăng xuất chưa hoàn tất (A1–A4) */}
+        {logoutNotice && (
+          <section className="mb-6 max-w-3xl mx-auto w-full" role="alert">
+            <Card className="ck-home-preview">
+              <div className="flex-1">
+                <h2 className="text-base font-semibold text-ink">
+                  Chưa đăng xuất được
+                </h2>
+                <p className="text-sm text-muted mt-1">
+                  Yêu cầu đăng xuất chưa hoàn tất. Hãy thử lại.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  ref={retryRef}
+                  type="button"
+                  className="ck-button ck-button--primary"
+                  onClick={handleLogout}
+                >
+                  Thử đăng xuất lại
+                </button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setLogoutNotice(false);
+                    triggerRef.current?.focus();
+                  }}
+                >
+                  Đóng
+                </Button>
+              </div>
+            </Card>
+          </section>
+        )}
+
         {/* Thông báo lỗi khi không thể tải trạng thái điều phối */}
         {coordinationError && (
           <section
@@ -283,7 +401,7 @@ export function Home({ onStart } = {}) {
                 {coordination.mode === 'inSession' &&
                   coordination.resourceId && (
                     <Link
-                      to={`/room/${coordination.resourceId}`}
+                      to={`/room/${encodeURIComponent(coordination.resourceId)}`}
                       className="ck-button ck-button--primary"
                     >
                       Vào lại phòng <Icon name="arrow" />
@@ -314,7 +432,7 @@ export function Home({ onStart } = {}) {
           {/* Linh vật thỏ Usagi bên trái */}
           <div className="ck-hero-mascot ck-hero-mascot--left">
             <div className="ck-speech-bubble ck-speech-bubble--left">
-              <span lang="ja" aria-label="Cùng nhau nhé?">
+              <span lang="ja" aria-hidden="true">
                 いっしょに？
               </span>
             </div>
@@ -346,7 +464,6 @@ export function Home({ onStart } = {}) {
                 disabled={isStartDisabled}
                 leadingIcon={<Icon name="search" size={20} />}
                 trailingIcon={<Icon name="arrow" size={20} />}
-                aria-label="Tìm bạn luyện hội thoại"
               >
                 Tìm bạn luyện nói
               </Button>
@@ -359,7 +476,6 @@ export function Home({ onStart } = {}) {
                 className="ck-button ck-button--secondary ck-hero-btn-pill"
                 onClick={() => navigate('/invitation')}
                 disabled={isStartDisabled}
-                aria-label="Tạo mã mời"
               >
                 <Icon name="note" size={16} />
                 <span>Tạo mã mời</span>
@@ -369,7 +485,6 @@ export function Home({ onStart } = {}) {
                 className="ck-button ck-button--secondary ck-hero-btn-pill"
                 onClick={() => navigate('/invitation')}
                 disabled={isStartDisabled}
-                aria-label="Dùng mã mời"
               >
                 <Icon name="cards" size={16} />
                 <span>Nhập mã</span>
@@ -378,21 +493,13 @@ export function Home({ onStart } = {}) {
 
             {/* 3 Chip chủ đề nhanh */}
             <div className="ck-hero-topics">
-              <Link
-                to="/topics"
-                className="ck-topic-chip ck-topic-chip--pink"
-                aria-label="Chủ đề: Ở quán cà phê"
-              >
+              <Link to="/topics" className="ck-topic-chip ck-topic-chip--pink">
                 <span className="ck-topic-chip-ja" lang="ja">
                   カフェで
                 </span>
                 <span className="ck-topic-chip-vi">Ở quán cà phê</span>
               </Link>
-              <Link
-                to="/topics"
-                className="ck-topic-chip ck-topic-chip--blue"
-                aria-label="Chủ đề: Hỏi đường"
-              >
+              <Link to="/topics" className="ck-topic-chip ck-topic-chip--blue">
                 <span className="ck-topic-chip-ja" lang="ja">
                   道を聞く
                 </span>
@@ -401,7 +508,6 @@ export function Home({ onStart } = {}) {
               <Link
                 to="/topics"
                 className="ck-topic-chip ck-topic-chip--yellow"
-                aria-label="Chủ đề: Việc làm thêm"
               >
                 <span className="ck-topic-chip-ja" lang="ja">
                   アルバイト
@@ -414,7 +520,7 @@ export function Home({ onStart } = {}) {
           {/* Linh vật mèo Hachiware bên phải */}
           <div className="ck-hero-mascot ck-hero-mascot--right">
             <div className="ck-speech-bubble ck-speech-bubble--right">
-              <span lang="ja" aria-label="Nói chuyện nào!">
+              <span lang="ja" aria-hidden="true">
                 話そう！
               </span>
             </div>

@@ -1,10 +1,11 @@
 /// <reference types="vite/client" />
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Link, Route, Routes, useLocation } from 'react-router';
 import { AuthProvider } from './features/auth/AuthContext.jsx';
 import { Landing } from './features/landing/Landing.jsx';
 import { Home } from './features/home/Home.jsx';
+import { activeLocationRef } from './features/home/navigation-tracker.js';
 import {
   InvitationRoute,
   ProtectedRoute,
@@ -40,7 +41,11 @@ function RouteShell({ screenId, title, description, children }) {
  * @param {{ skipInitialAuthCheck?: boolean }} [props]
  */
 export function App({ skipInitialAuthCheck = false } = {}) {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  useEffect(() => {
+    activeLocationRef.current = location;
+  }, [location]);
+  const { pathname } = location;
 
   if (ComponentPreview && pathname === '/__dev/components') {
     return (
