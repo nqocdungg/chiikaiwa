@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { PageContainer } from '../../components/layout/PageContainer.jsx';
 import { Button, Icon } from '../../components/ui/controls.jsx';
@@ -19,7 +19,10 @@ import waitingMascotImg from '../../assets/mascots/Waiting mascot.png';
  */
 export function Home({ onStart } = {}) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 
   const [coordination, setCoordination] = useState(
     /** @type {{ mode: string, resourceId?: string } | null} */ (null),
@@ -32,6 +35,43 @@ export function Home({ onStart } = {}) {
     setCoordinationLoading(true);
     setCoordinationError(false);
     setRetryKey((k) => k + 1);
+  };
+
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+
+    /** @param {MouseEvent} event */
+    const handleClickOutside = (event) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(/** @type {Node} */ (event.target))
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    /** @param {KeyboardEvent} event */
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDropdownOpen]);
+
+  const handleLogout = async () => {
+    setIsDropdownOpen(false);
+    if (typeof logout === 'function') {
+      await logout();
+    }
+    navigate('/login');
   };
 
   useEffect(() => {
@@ -143,19 +183,49 @@ export function Home({ onStart } = {}) {
           </Link>
         </nav>
 
-        {/* Right User Profile pill linking directly to /profile (SC-04) */}
-        <Link
-          to="/profile"
-          className="ck-profile-pill"
-          aria-label={`Hồ sơ cá nhân: ${displayName}`}
-        >
-          <Avatar name={displayName} size={32} />
-          <span className="font-semibold">{displayName}</span>
-          {level ? <Badge tone="accent">{level}</Badge> : null}
-          <span className="text-xs text-muted" aria-hidden="true">
-            ▾
-          </span>
-        </Link>
+        {/* Right User Profile pill with dropdown menu (Reviewer feedback PR #33) */}
+        <div className="ck-profile-dropdown-container" ref={dropdownRef}>
+          <button
+            type="button"
+            className="ck-profile-pill"
+            onClick={() => setIsDropdownOpen((prev) => !prev)}
+            aria-expanded={isDropdownOpen}
+            aria-haspopup="menu"
+            aria-label={`Menu tài khoản: ${displayName}`}
+          >
+            <Avatar name={displayName} size={32} />
+            <span className="font-semibold">{displayName}</span>
+            {level ? <Badge tone="accent">{level}</Badge> : null}
+            <span className="text-xs text-muted" aria-hidden="true">
+              ▾
+            </span>
+          </button>
+
+          {isDropdownOpen && (
+            <div
+              className="ck-profile-dropdown"
+              role="menu"
+              aria-label="Tùy chọn tài khoản"
+            >
+              <Link
+                to="/profile"
+                className="ck-profile-dropdown-item"
+                role="menuitem"
+                onClick={() => setIsDropdownOpen(false)}
+              >
+                <span>Hồ sơ của tôi</span>
+              </Link>
+              <button
+                type="button"
+                className="ck-profile-dropdown-item ck-profile-dropdown-item--danger"
+                role="menuitem"
+                onClick={handleLogout}
+              >
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       <PageContainer as="main" id="ck-home" className="ck-home">
@@ -282,24 +352,28 @@ export function Home({ onStart } = {}) {
               </Button>
             </div>
 
-            {/* Hàng nút phụ: Tạo mã mời / Nhập mã */}
+            {/* Hàng nút phụ: Tạo mã mời / Nhập mã (Tuân thủ trạng thái điều phối) */}
             <div className="ck-hero-secondary-actions">
-              <Link
-                to="/invitation"
+              <button
+                type="button"
                 className="ck-button ck-button--secondary ck-hero-btn-pill"
+                onClick={() => navigate('/invitation')}
+                disabled={isStartDisabled}
                 aria-label="Tạo mã mời"
               >
                 <Icon name="note" size={16} />
                 <span>Tạo mã mời</span>
-              </Link>
-              <Link
-                to="/invitation"
+              </button>
+              <button
+                type="button"
                 className="ck-button ck-button--secondary ck-hero-btn-pill"
+                onClick={() => navigate('/invitation')}
+                disabled={isStartDisabled}
                 aria-label="Dùng mã mời"
               >
                 <Icon name="cards" size={16} />
                 <span>Nhập mã</span>
-              </Link>
+              </button>
             </div>
 
             {/* 3 Chip chủ đề nhanh */}
@@ -354,17 +428,6 @@ export function Home({ onStart } = {}) {
             />
           </div>
         </div>
-
-        {/* Nút trợ giúp tròn góc phải dưới */}
-        <button
-          type="button"
-          className="ck-help-floating-btn"
-          aria-label="Trợ giúp và hướng dẫn"
-          title="Trợ giúp và hướng dẫn"
-          onClick={() => navigate('/topics')}
-        >
-          ?
-        </button>
 
         <footer className="ck-home-footer" role="contentinfo">
           <span>ちいさな会話 · chiikaiwa</span>

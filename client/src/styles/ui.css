@@ -406,9 +406,63 @@
   box-shadow: 0 3px 10px rgba(184, 116, 141, 0.16);
 }
 
-.ck-profile-dropdown-item:hover {
+.ck-profile-dropdown-container {
+  position: relative;
+  display: inline-flex;
+}
+
+.ck-profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 170px;
+  background: #ffffff;
+  border: 1.5px solid var(--color-border);
+  border-radius: 16px;
+  padding: 6px;
+  box-shadow: 0 4px 16px rgba(184, 116, 141, 0.16);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ck-profile-dropdown-item {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 10px;
+  color: var(--color-text);
+  font-family: var(--font-body) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 1.5 !important;
+  letter-spacing: 0 !important;
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.ck-profile-dropdown-item:hover,
+.ck-profile-dropdown-item:focus-visible {
   background: var(--color-selected);
   color: var(--color-accent);
+}
+
+.ck-profile-dropdown-item--danger {
+  color: var(--color-text-muted);
+}
+
+.ck-profile-dropdown-item--danger:hover,
+.ck-profile-dropdown-item--danger:focus-visible {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .ck-home-hero {
@@ -633,33 +687,13 @@
   margin-top: 2px;
 }
 
-.ck-help-floating-btn {
-  position: fixed;
-  bottom: 24px;
-  right: 28px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 1.5px solid var(--color-border);
-  color: var(--color-text-muted);
-  font-size: 15px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
-  transition: all 120ms ease;
-  z-index: 40;
-}
-
-.ck-help-floating-btn:hover {
-  color: var(--color-text);
-  border-color: var(--color-accent);
-  box-shadow: 0 4px 12px rgba(184, 116, 141, 0.18);
-}
-
 @media (max-width: 960px) {
+  .ck-home-header {
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+  }
+
   .ck-home-hero {
     flex-direction: column;
     gap: 20px;
@@ -671,7 +705,12 @@
   }
 
   .ck-nav-pill-bar {
-    display: none;
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
   }
 }
 
@@ -1557,9 +1596,15 @@
   .ck-home-header .ck-brand {
     font-size: 21px !important;
   }
-  .ck-home-header nav,
   .ck-profile > span:last-child {
     display: none;
+  }
+  .ck-nav-pill-bar {
+    border-radius: 16px;
+  }
+  .ck-nav-tab-link {
+    padding: 6px 10px;
+    font-size: 13px;
   }
   .ck-home {
     padding: 30px 22px 20px;

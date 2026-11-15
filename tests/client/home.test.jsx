@@ -94,10 +94,22 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     // Avatar hiển thị initials MH theo Avatar component chuẩn
     expect(screen.getByText('MH')).toBeVisible();
 
-    // Link đến hồ sơ cá nhân /profile (Account pill)
+    // Nút mở dropdown menu tài khoản
+    const accountBtn = screen.getByRole('button', {
+      name: /Menu tài khoản: Minh Hoàng/i,
+    });
+    expect(accountBtn).toBeVisible();
+
+    // Click mở menu
+    fireEvent.click(accountBtn);
+
+    // Link đến hồ sơ cá nhân /profile (Mục 1 trong dropdown)
     expect(
-      screen.getByRole('link', { name: /Hồ sơ cá nhân: Minh Hoàng/i }),
+      screen.getByRole('menuitem', { name: /Hồ sơ của tôi/i }),
     ).toHaveAttribute('href', '/profile');
+
+    // Nút đăng xuất (Mục 2 trong dropdown)
+    expect(screen.getByRole('menuitem', { name: /Đăng xuất/i })).toBeVisible();
   });
 
   it('renders navigation links to learning areas without mock demo previews', async () => {
@@ -121,17 +133,25 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
       screen.getByRole('link', { name: 'Lịch sử luyện tập' }),
     ).toHaveAttribute('href', '/history');
 
-    // Nút dùng mã mời dẫn tới /invitation
-    expect(screen.getByRole('link', { name: 'Dùng mã mời' })).toHaveAttribute(
-      'href',
-      '/invitation',
-    );
+    // Chờ coordination check hoàn tất và chuyển sang trạng thái rảnh (idle)
+    const inviteBtn = screen.getByRole('button', { name: 'Dùng mã mời' });
+    expect(inviteBtn).toBeVisible();
+    await vi.waitFor(() => {
+      expect(inviteBtn).not.toBeDisabled();
+    });
+
+    // Nút tạo mã mời (active khi idle)
+    const createInviteBtn = screen.getByRole('button', { name: 'Tạo mã mời' });
+    expect(createInviteBtn).toBeVisible();
+    await vi.waitFor(() => {
+      expect(createInviteBtn).not.toBeDisabled();
+    });
 
     // Không còn text demo "Bản demo · Dữ liệu mẫu"
     expect(screen.queryByText(/Bản demo · Dữ liệu mẫu/i)).toBeNull();
   });
 
-  it('keeps start button disabled while coordination check is pending', () => {
+  it('keeps start button and invitation CTAs disabled while coordination check is pending', () => {
     // Return a promise that does not resolve immediately
     vi.spyOn(api, 'get').mockImplementationOnce(() => new Promise(() => {}));
 
@@ -148,6 +168,10 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     expect(
       screen.getByRole('button', { name: 'Luyện hội thoại' }),
     ).toBeDisabled();
+
+    // Hai CTA mã mời cũng bị disabled để chống tạo luồng khi chưa xác nhận rảnh (04 §3.4)
+    expect(screen.getByRole('button', { name: 'Tạo mã mời' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Dùng mã mời' })).toBeDisabled();
   });
 
   it('displays busy banner and prevents second flow when actor is inSession (SC-03 contract)', async () => {
@@ -174,10 +198,12 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     const resumeBtn = screen.getByRole('link', { name: /Vào lại phòng/i });
     expect(resumeBtn).toHaveAttribute('href', '/room/507f1f77bcf86cd799439011');
 
-    // Nút tìm bạn mới bị disabled để chống tạo luồng thứ hai
+    // Nút tìm bạn mới và các CTA mã mời bị disabled để chống tạo luồng thứ hai
     expect(
       screen.getByRole('button', { name: /Tìm bạn luyện/i }),
     ).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Tạo mã mời' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Dùng mã mời' })).toBeDisabled();
   });
 
   it('displays busy banner when actor is in searching queue (SC-03)', async () => {
@@ -253,5 +279,36 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     fireEvent.click(startBtn);
 
     expect(onStartMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens account dropdown on avatar click and invokes logout when clicking Đăng xuất', async () => {
+    vi.spyOn(api, 'get').mockResolvedValueOnce({
+      data: { mode: 'idle', version: 1 },
+      meta: {},
+      epoch: getIdentityEpoch(),
+    });
+
+    const { mockLogout } = renderHome();
+
+    // Ban đầu dropdown chưa mở
+    expect(screen.queryByRole('menuitem', { name: /Đăng xuất/i })).toBeNull();
+
+    // Click mở menu
+    const accountBtn = screen.getByRole('button', {
+      name: /Menu tài khoản: Minh Hoàng/i,
+    });
+    fireEvent.click(accountBtn);
+
+    // Menu đã mở với 2 lựa chọn: Hồ sơ của tôi và Đăng xuất
+    const profileItem = screen.getByRole('menuitem', {
+      name: /Hồ sơ của tôi/i,
+    });
+    const logoutBtn = screen.getByRole('menuitem', { name: /Đăng xuất/i });
+    expect(profileItem).toBeVisible();
+    expect(logoutBtn).toBeVisible();
+
+    // Bấm Đăng xuất
+    fireEvent.click(logoutBtn);
+    expect(mockLogout).toHaveBeenCalledTimes(1);
   });
 });

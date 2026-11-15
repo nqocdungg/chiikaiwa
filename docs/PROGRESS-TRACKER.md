@@ -26,13 +26,23 @@ File này giúp agent hoặc thành viên tiếp theo nắm nhanh task đã làm
 ### FE-002 — Tích hợp Home có sẵn và bổ sung landing
 
 - Ngày cập nhật: 2026-11-15
-- Trạng thái: Đã hoàn thành triển khai và đồng bộ Design System Foundation; sẵn sàng mở PR cho Ngọc Dung review.
-- PR: Chưa có; branch `feature/FE-002-home-landing`, base `develop`.
-- Đã làm: Bổ sung màn hình Landing công khai (`SC-01`) tại route `/` và Trang chính (`SC-03`) tại `/home`. Đồng bộ hoàn toàn với bản thiết kế Figma Make mới và Design System Foundation (`docs/frontend/design-system.md`): bọc `PageContainer`, nhúng logo vector `chii-logo.svg`, thanh điều hướng Floating Pill Bar 5 tab với mascot icon, khối tài khoản Pill có bo viền (`.ck-profile-pill`) liên kết trực tiếp tới `/profile`, Centered Hero với 2 linh vật Usagi & Hachiware (đã xử lý trong suốt 100%), nút chính FlowButton `Tìm bạn luyện nói →`, cặp nút `Tạo mã mời`/`Nhập mã` và 3 chip chủ đề nhanh. Nối dữ liệu người học thật qua `AuthContext` (`GET /auth/me`), gọi `GET /me/coordination` hiển thị banner điều phối chống tạo luồng kép (`FR-LRN-01`). Chuyển các nút góc học tập sang React Router (`/topics`, `/saved`, `/history`). Giữ prop `onStart` tùy chọn bảo đảm tương thích ngược với Storybook.
+- Trạng thái: Đã hoàn thành triển khai, xử lý toàn bộ nhận xét review PR #33; sẵn sàng cập nhật PR.
+- PR: PR #33; branch `feature/FE-002-home-landing`, base `develop`.
+- Đã làm: Bổ sung màn hình Landing công khai (`SC-01`) tại route `/` và Trang chính (`SC-03`) tại `/home`. Đồng bộ hoàn toàn với bản thiết kế Figma Make mới và Design System Foundation (`docs/frontend/design-system.md`): bọc `PageContainer`, nhúng logo vector `chii-logo.svg`, thanh điều hướng Floating Pill Bar 5 tab với mascot icon, Centered Hero với 2 linh vật Usagi & Hachiware (đã xử lý trong suốt 100%), nút chính FlowButton `Tìm bạn luyện nói →`, cặp nút `Tạo mã mời`/`Nhập mã` và 3 chip chủ đề nhanh. Nối dữ liệu người học thật qua `AuthContext` (`GET /auth/me`), gọi `GET /me/coordination` hiển thị banner điều phối chống tạo luồng kép (`FR-LRN-01`).
+- Sửa theo Reviewer PR #33 (Ngọc Dung):
+  - **Lối Đăng xuất trên Home**: Bổ sung Dropdown menu khi click vào Avatar/Profile Pill trên Header, gồm 2 mục: `Hồ sơ của tôi` (dẫn tới `/profile`) và `Đăng xuất` (gọi `logout()` và chuyển hướng về `/login`). Hỗ trợ click outside và phím `Escape` đóng menu, đảm bảo chuẩn a11y `role="menu"`, `role="menuitem"`, `aria-expanded`. Đồng bộ tuyệt đối typography và layout (triệt tiêu browser button styling bằng `all: unset`, khóa font 14px 500 đồng nhất).
+  - **Coordination Guard cho CTA mã mời**: Hai nút `Tạo mã mời` và `Nhập mã` tại Hero section được tích hợp điều kiện `disabled={isStartDisabled}`. Khi đang tải, tải lỗi hoặc tài khoản đang bận (`isBusy`), hai nút này bị vô hiệu hóa để chống tạo luồng kép (04 §3.4). Người học có phòng mời sẵn vẫn dùng nút `Xem phòng mời` trong banner điều phối.
+  - **Responsive thanh điều hướng**: Xóa bỏ hoàn toàn `display: none` trên `.ck-nav-pill-bar` ở cả media query $\le 960px$ và $\le 650px$; cấu hình Header cho phép wrap và thanh điều hướng 5 tab chuyển xuống dòng 2 căn giữa với bo góc thích ứng. Người học duyệt bằng phím `Tab` hay chuột đều truy cập đầy đủ 5 mục (bao gồm `Đã lưu` và `Lịch sử`), đáp ứng kiểm thử zoom từ 200% đến $\ge 250\%$ - 400% theo WCAG 2.1 AA Reflow và Design System.
+  - **Làm sạch UI ngoài đặc tả**: Gỡ bỏ nút nổi `?` (phần tử thừa từ template mẫu Figma Make) để bám sát 100% tài liệu thiết kế `04-ui-ux-design.md`.
 - File liên quan: `client/src/features/landing/Landing.jsx`, `client/src/features/home/Home.jsx`, `client/src/components/layout/PageContainer.jsx`, `client/src/App.jsx`, `client/src/styles/ui.css`, `client/src/assets/mascots/hachiware.png`, `tests/client/landing.test.jsx`, `tests/client/home.test.jsx`, `docs/PROGRESS-TRACKER.md`.
-- Kiểm chứng: `npm run check` pass 100%: format check, ESLint 0 warnings, TypeScript 0 errors, 321 unit tests pass (gồm 4 tests landing và 7 tests home), 158 integration tests pass, build client Vite và Storybook pass thành công.
-- Tiếp theo: Mở PR về `develop`, theo dõi kết quả CI Actions và nhờ Ngọc Dung review theo phân công.
-- Lưu ý/blocker: Không có.
+- Kiểm chứng:
+  - `npm run lint`: Pass 0 errors, 0 warnings.
+  - `npm run format:check`: Pass 100%.
+  - `npm run typecheck`: Pass 0 errors.
+  - `tests/client` suite: 7/7 files passed, 57/57 tests passed (gồm 8/8 tests home, 4/4 tests landing, 13/13 tests routes).
+  - `npm run build`: Pass 100% (client Vite dist + syntax check server).
+  - `npm run build-storybook`: Pass 100%.
+- Tiếp theo: Commit các thay đổi, merge `origin/develop` vào nhánh con và push cập nhật PR #33 để reviewer nghiệm thu.
 
 ### OPS-004 — Thiết lập CI cho pull request
 
