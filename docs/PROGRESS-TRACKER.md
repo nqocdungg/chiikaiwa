@@ -25,12 +25,12 @@ File này giúp agent hoặc thành viên tiếp theo nắm nhanh task đã làm
 
 ### FE-002 — Tích hợp Home có sẵn và bổ sung landing
 
-- Ngày cập nhật: 2026-11-12
-- Trạng thái: Đã hoàn thành triển khai và kiểm chứng local; chờ review của Ngọc Dung.
+- Ngày cập nhật: 2026-11-15
+- Trạng thái: Đã hoàn thành triển khai và đồng bộ Design System Foundation; sẵn sàng mở PR cho Ngọc Dung review.
 - PR: Chưa có; branch `feature/FE-002-home-landing`, base `develop`.
-- Đã làm: Bổ sung màn hình Landing công khai (`SC-01`) tại route `/` (giới thiệu luyện 1-1, thẻ tình huống, dàn nhân vật `Friends` alt rỗng, CTA Đăng nhập/Đăng ký/Mã mời, không ép đăng nhập, không số liệu giả). Tích hợp Trang chính (`SC-03`) tại `/home` với dữ liệu người học thật từ `AuthContext` (`GET /auth/me`), gọi `GET /me/coordination` hiển thị banner quay lại luồng đang chiếm chỗ (inSession, searching, proposed, inviting) chống tạo luồng thứ hai. Chuyển các nút góc học tập sang link React Router (`/topics`, `/saved`, `/history`), loại bỏ modal mockup và footer demo. Giữ prop `onStart` tùy chọn bảo đảm tương thích ngược với `KaiwaDemo.jsx` và Storybook.
-- File liên quan: `client/src/features/landing/Landing.jsx`, `client/src/features/home/Home.jsx`, `client/src/App.jsx`, `tests/client/landing.test.jsx`, `tests/client/home.test.jsx`, `docs/PROGRESS-TRACKER.md`.
-- Kiểm chứng: `npm run check` pass 100%: format check, ESLint 0 warnings, TypeScript 0 errors, 270 unit tests pass (gồm 3 tests landing và 7 tests home), 111 integration tests pass, build client Vite và Storybook pass thành công. `npm audit --audit-level=high` pass (0 high/critical).
+- Đã làm: Bổ sung màn hình Landing công khai (`SC-01`) tại route `/` và Trang chính (`SC-03`) tại `/home`. Đồng bộ hoàn toàn với bản thiết kế Figma Make mới và Design System Foundation (`docs/frontend/design-system.md`): bọc `PageContainer`, nhúng logo vector `chii-logo.svg`, thanh điều hướng Floating Pill Bar 5 tab với mascot icon, khối tài khoản Pill có bo viền (`.ck-profile-pill`) liên kết trực tiếp tới `/profile`, Centered Hero với 2 linh vật Usagi & Hachiware (đã xử lý trong suốt 100%), nút chính FlowButton `Tìm bạn luyện nói →`, cặp nút `Tạo mã mời`/`Nhập mã` và 3 chip chủ đề nhanh. Nối dữ liệu người học thật qua `AuthContext` (`GET /auth/me`), gọi `GET /me/coordination` hiển thị banner điều phối chống tạo luồng kép (`FR-LRN-01`). Chuyển các nút góc học tập sang React Router (`/topics`, `/saved`, `/history`). Giữ prop `onStart` tùy chọn bảo đảm tương thích ngược với Storybook.
+- File liên quan: `client/src/features/landing/Landing.jsx`, `client/src/features/home/Home.jsx`, `client/src/components/layout/PageContainer.jsx`, `client/src/App.jsx`, `client/src/styles/ui.css`, `client/src/assets/mascots/hachiware.png`, `tests/client/landing.test.jsx`, `tests/client/home.test.jsx`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng: `npm run check` pass 100%: format check, ESLint 0 warnings, TypeScript 0 errors, 321 unit tests pass (gồm 4 tests landing và 7 tests home), 158 integration tests pass, build client Vite và Storybook pass thành công.
 - Tiếp theo: Mở PR về `develop`, theo dõi kết quả CI Actions và nhờ Ngọc Dung review theo phân công.
 - Lưu ý/blocker: Không có.
 

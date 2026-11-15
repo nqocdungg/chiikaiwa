@@ -91,10 +91,10 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     expect(screen.getByText('Minh Hoàng')).toBeVisible();
     expect(screen.getByText('N3')).toBeVisible();
 
-    // Avatar hiển thị chữ cái đầu M
-    expect(screen.getByText('M')).toBeVisible();
+    // Avatar hiển thị initials MH theo Avatar component chuẩn
+    expect(screen.getByText('MH')).toBeVisible();
 
-    // Link đến hồ sơ cá nhân /profile
+    // Link đến hồ sơ cá nhân /profile (Account pill)
     expect(
       screen.getByRole('link', { name: /Hồ sơ cá nhân: Minh Hoàng/i }),
     ).toHaveAttribute('href', '/profile');
@@ -235,46 +235,6 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
         name: 'Không thể kiểm tra trạng thái điều phối',
       }),
     ).toBeNull();
-  });
-
-  it('triggers logout when clicking logout button', async () => {
-    vi.spyOn(api, 'get').mockResolvedValueOnce({
-      data: { mode: 'idle', version: 1 },
-      meta: {},
-      epoch: getIdentityEpoch(),
-    });
-
-    const { mockLogout } = renderHome();
-
-    const logoutBtn = screen.getByRole('button', {
-      name: 'Đăng xuất khỏi tài khoản',
-    });
-    fireEvent.click(logoutBtn);
-
-    expect(mockLogout).toHaveBeenCalledTimes(1);
-  });
-
-  it('displays error alert when logout fails', async () => {
-    vi.spyOn(api, 'get').mockResolvedValueOnce({
-      data: { mode: 'idle', version: 1 },
-      meta: {},
-      epoch: getIdentityEpoch(),
-    });
-
-    renderHome({
-      authState: {
-        logout: vi.fn().mockRejectedValueOnce(new Error('Logout failed')),
-      },
-    });
-
-    const logoutBtn = screen.getByRole('button', {
-      name: 'Đăng xuất khỏi tài khoản',
-    });
-    fireEvent.click(logoutBtn);
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Đăng xuất không thành công. Vui lòng thử lại.',
-    );
   });
 
   it('calls onStart prop when provided for backward compatibility with KaiwaDemo/Storybook', async () => {

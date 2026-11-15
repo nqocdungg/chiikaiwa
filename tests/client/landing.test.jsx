@@ -54,7 +54,11 @@ describe('FE-002: SC-01 Public Landing Page', () => {
     });
 
     // Tiêu đề & khẩu hiệu chính
-    expect(screen.getByRole('heading', { name: 'Chiikaiwa' })).toBeVisible();
+    expect(
+      screen.getByRole('heading', {
+        name: 'Không gian luyện nói tiếng Nhật 1-1',
+      }),
+    ).toBeVisible();
     expect(
       screen.getByText(/Luyện hội thoại tiếng Nhật 1-1 cùng bạn học/i),
     ).toBeVisible();
@@ -78,10 +82,12 @@ describe('FE-002: SC-01 Public Landing Page', () => {
     // Ghi chú thiết bị mic/camera là tùy chọn
     expect(screen.getByText(/Mic và camera là tùy chọn/i)).toBeVisible();
 
-    // Dàn nhân vật minh họa Friends với alt="" chuẩn a11y trang trí (NFR-08)
-    const friendsImg = container.querySelector('.ck-friends');
-    expect(friendsImg).toBeInTheDocument();
-    expect(friendsImg).toHaveAttribute('alt', '');
+    // Dàn linh vật minh họa Usagi & Hachiware với alt="" chuẩn a11y trang trí (NFR-08)
+    const mascotImgs = container.querySelectorAll('.ck-mascot-img');
+    expect(mascotImgs.length).toBeGreaterThanOrEqual(2);
+    mascotImgs.forEach((img) => {
+      expect(img).toHaveAttribute('alt', '');
+    });
   });
 
   it('renders landing page with entry to Home when learner is already logged in (04 SC-01)', () => {
