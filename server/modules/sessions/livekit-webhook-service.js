@@ -14,7 +14,7 @@ const participantEvents = new Set([
 /**
  * BE-012 supplies a transactional consumer. It must use the supplied Mongo session,
  * and must not call external services: MongoDB may rerun the transaction callback.
- * @typedef {(input: {event: import('livekit-server-sdk').WebhookEvent, before: import('mongoose').mongo.WithId<import('mongoose').mongo.Document>, after: import('mongoose').mongo.WithId<import('mongoose').mongo.Document>, presenceChanged: boolean, reason: string, session: import('mongoose').ClientSession, observedAt: Date}) => Promise<void>} PresenceConsumer
+ * @typedef {(input: {event: import('livekit-server-sdk').WebhookEvent, before: import('mongoose').mongo.WithId<import('mongoose').mongo.Document>, after: import('mongoose').mongo.WithId<import('mongoose').mongo.Document>, presenceChanged: boolean, reason: string, session: import('mongoose').ClientSession, observedAt: Date, checkedAt?: Date, roomEmpty?: boolean}) => Promise<void>} PresenceConsumer
  */
 
 /**
@@ -64,6 +64,17 @@ export async function processLivekitWebhook(
     const previous = before?.presence?.find(
       (/** @type {Record<string, any>} */ item) => item.actorKey === actorKey,
     );
+    let roomEmpty = false;
+    if (
+      event.event === 'room_finished' &&
+      before &&
+      before.status !== 'ended'
+    ) {
+      roomEmpty = true;
+      for (const member of before.members) {
+        if (await readParticipant(roomName, member.actorKey)) roomEmpty = false;
+      }
+    }
     const joining = event.event === 'participant_joined';
     const eligible =
       participantEvent &&
@@ -219,6 +230,8 @@ export async function processLivekitWebhook(
           reason: event.event === 'room_finished' ? 'room.finished' : reason,
           session,
           observedAt,
+          checkedAt: now(),
+          roomEmpty,
         });
         return false;
       });

@@ -8,7 +8,12 @@ import {
 } from 'livekit-server-sdk';
 import { createApp } from '../../server/app.js';
 import { createLivekitWebhookHandler } from '../../server/modules/sessions/livekit-webhook-handler.js';
-import { readMediaParticipant } from '../../server/integrations/livekit/room-service.js';
+import {
+  readMediaParticipant,
+  removeMediaParticipant,
+  closeMediaRoom,
+  notifyMediaSession,
+} from '../../server/integrations/livekit/room-service.js';
 import {
   LIVEKIT_TEST_KEY,
   LIVEKIT_TEST_SECRET,
@@ -28,6 +33,45 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+});
+
+describe('BE-012 media lifecycle adapter', () => {
+  it('removes each identity with an explicit current revocation cutoff', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_250);
+    const remove = vi
+      .spyOn(RoomServiceClient.prototype, 'removeParticipant')
+      .mockResolvedValue(undefined);
+    await removeMediaParticipant('room', 'user:member');
+    expect(remove).toHaveBeenCalledWith('room', 'user:member', {
+      revokeTokenTs: 1_800_000_002n,
+    });
+  });
+  it('does not hide failed identity revocation; a missing room is safe to close repeatedly', async () => {
+    const missing = new ServerError('not_found', 'absent', 404, 'not_found');
+    vi.spyOn(
+      RoomServiceClient.prototype,
+      'removeParticipant',
+    ).mockRejectedValue(missing);
+    await expect(removeMediaParticipant('room', 'user:member')).rejects.toBe(
+      missing,
+    );
+    vi.spyOn(RoomServiceClient.prototype, 'deleteRoom').mockRejectedValue(
+      missing,
+    );
+    await expect(closeMediaRoom('room')).resolves.toBeUndefined();
+  });
+  it('publishes only the version notification payload', async () => {
+    const send = vi
+      .spyOn(RoomServiceClient.prototype, 'sendData')
+      .mockResolvedValue(undefined);
+    await notifyMediaSession('room', 'session', 12);
+    const data = send.mock.calls[0][1];
+    expect(JSON.parse(Buffer.from(data).toString())).toEqual({
+      type: 'session.updated',
+      sessionId: 'session',
+      version: 12,
+    });
+  });
 });
 
 /** @param {import('express').Express} app @param {string} body @param {string} [authorization] */

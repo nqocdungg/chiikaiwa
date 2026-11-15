@@ -7,12 +7,17 @@ import { createCsrfMiddleware } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { AppError } from './middleware/http-error.js';
 import { createAdminContentRouter } from './modules/content/content-admin-router.js';
+import { createLearnerContentRouter } from './modules/content/content-learner-router.js';
 import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
 import { createAuthRouter } from './modules/identity/auth-router.js';
 import { createProfileRouter } from './modules/identity/profile-router.js';
 import { createInvitationRouter } from './modules/invitations/invitation-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
-import { createLivekitWebhookHandler } from './modules/sessions/livekit-webhook-handler.js';
+import {
+  createLivekitWebhookHandler,
+  finishWebhookEffects,
+} from './modules/sessions/livekit-webhook-handler.js';
+import { createSessionPresenceConsumer } from './modules/sessions/session-lifecycle-service.js';
 import { createOpenApiRouter } from './openapi.js';
 import { checkDatabase } from './persistence/database.js';
 
@@ -21,8 +26,11 @@ import { checkDatabase } from './persistence/database.js';
  */
 export function createApp({
   checkHealth = checkDatabase,
-  onVerifiedPresence,
-  handleLivekitWebhook = createLivekitWebhookHandler({ onVerifiedPresence }),
+  onVerifiedPresence = createSessionPresenceConsumer(),
+  handleLivekitWebhook = createLivekitWebhookHandler({
+    onVerifiedPresence,
+    afterCommit: finishWebhookEffects,
+  }),
   assertPairCanEnterSession,
 } = {}) {
   const app = express();
@@ -128,6 +136,7 @@ export function createApp({
 
   app.use('/api/v1/sessions', createSessionsRouter());
   app.use('/api/v1/admin/content', createAdminContentRouter());
+  app.use('/api/v1', createLearnerContentRouter());
 
   app.use((_request, response) => {
     response.status(404).json({

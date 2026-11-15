@@ -16,6 +16,12 @@ const expectedPaths = [
   '/invitation-requests',
   '/invitation-requests/{requestId}',
   '/invitation-requests/{requestId}/responses',
+  '/admin/content/{id}/publish',
+  '/admin/content/{id}/hide',
+  '/topics',
+  '/topic-versions/{id}',
+  '/topic-versions/{id}/knowledge',
+  '/knowledge/{id}',
 ];
 
 const writeOperations = [
@@ -24,6 +30,8 @@ const writeOperations = [
   ['/invitation-requests', 'post'],
   ['/invitation-requests/{requestId}', 'delete'],
   ['/invitation-requests/{requestId}/responses', 'post'],
+  ['/admin/content/{id}/publish', 'post'],
+  ['/admin/content/{id}/hide', 'post'],
 ];
 
 describe('OpenAPI contract', () => {
@@ -116,5 +124,37 @@ describe('OpenAPI contract', () => {
       .expect(200)
       .expect('Content-Type', /application\/yaml/u)
       .expect(({ text }) => expect(text).toContain('openapi: 3.1.0'));
+  });
+  it('documents session reads, empty-body idempotent leave and bounded media credentials', () => {
+    const get = document.paths['/sessions/{id}'].get;
+    const leave = document.paths['/sessions/{id}/leave'].post;
+    const token = document.paths['/sessions/{id}/media-token'].post;
+    expect(get.security).toEqual([{ sessionCookie: [] }, { guestCookie: [] }]);
+    expect(leave.parameters).toContainEqual({
+      $ref: '#/components/parameters/IdempotencyKey',
+    });
+    expect(leave.requestBody.content['application/json'].schema).toMatchObject({
+      additionalProperties: false,
+      maxProperties: 0,
+    });
+    expect(leave.responses['200'].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/SessionResponse',
+    });
+    expect(token.responses).toHaveProperty('409');
+    expect(document.components.schemas.Session.additionalProperties).toBe(
+      false,
+    );
+    expect(document.components.schemas.Session.properties).not.toHaveProperty(
+      'mediaCleanup',
+    );
+    expect(
+      document.components.schemas.SessionCurrentCard.properties,
+    ).toHaveProperty('myRole');
+    expect(
+      document.components.schemas.SessionCurrentCard.properties,
+    ).not.toHaveProperty('roleB');
+    expect(
+      document.components.schemas.SessionSlot.properties,
+    ).not.toHaveProperty('scenarioVersionId');
   });
 });

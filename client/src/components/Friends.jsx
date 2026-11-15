@@ -1,4 +1,5 @@
-const friends = new URL('../assets/study-friends.png', import.meta.url).href;
+const friends = new URL('../assets/mascots/study-friends.png', import.meta.url)
+  .href;
 
 export function Friends() {
   return (

@@ -4,7 +4,8 @@ import { readLiveKitEnv } from '../../config/env.js';
 /** @param {{roomName: string, actorKey: string, expiresAt: Date}} input */
 export async function signMediaToken({ roomName, actorKey, expiresAt }) {
   const config = readLiveKitEnv();
-  const ttl = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
+  // LiveKit starts the TTL when signing, which can fall in the next second.
+  const ttl = Math.floor((expiresAt.getTime() - Date.now()) / 1000) - 1;
   if (ttl < 1) throw new Error('Media permission expires too soon');
   // SDK ký vé tại server bằng secret; bước này không gọi mạng LiveKit.
   const token = new AccessToken(config.apiKey, config.apiSecret, {
