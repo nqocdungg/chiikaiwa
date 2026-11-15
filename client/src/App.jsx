@@ -3,6 +3,10 @@
 import { lazy, Suspense } from 'react';
 import { Link, Route, Routes, useLocation } from 'react-router';
 import { AuthProvider } from './features/auth/AuthContext.jsx';
+import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage.jsx';
+import { ResetPasswordPage } from './features/auth/ResetPasswordPage.jsx';
+import { useAuth } from './features/auth/use-auth.js';
+import { ProfilePage } from './features/profile/ProfilePage.jsx';
 import {
   InvitationRoute,
   ProtectedRoute,
@@ -34,6 +38,19 @@ function RouteShell({ screenId, title, description, children }) {
   );
 }
 
+function LoginRouteShell() {
+  const { authNotice } = useAuth();
+  return (
+    <RouteShell screenId="SC-02" title="Đăng nhập">
+      {authNotice ? (
+        <div className="ck-alert ck-alert--success mt-4" role="status">
+          <p>{authNotice}</p>
+        </div>
+      ) : null}
+    </RouteShell>
+  );
+}
+
 /**
  * @param {{ skipInitialAuthCheck?: boolean }} [props]
  */
@@ -50,10 +67,17 @@ export function App({ skipInitialAuthCheck = false } = {}) {
     );
   }
 
+  const isFullBleedAuthRoute =
+    pathname === '/forgot-password' || pathname === '/reset-password';
+
   return (
     <AuthProvider skipInitialCheck={skipInitialAuthCheck}>
       <div className="ck-app">
-        <main className="mx-auto max-w-4xl px-6 py-12">
+        <main
+          className={
+            isFullBleedAuthRoute ? 'w-full' : 'ck-page-container py-10'
+          }
+        >
           <Routes>
             {/* SC-01: Public Landing */}
             <Route
@@ -69,24 +93,13 @@ export function App({ skipInitialAuthCheck = false } = {}) {
 
             {/* SC-02: Public Only Auth routes */}
             <Route element={<PublicOnlyRoute />}>
-              <Route
-                path="/login"
-                element={<RouteShell screenId="SC-02" title="Đăng nhập" />}
-              />
+              <Route path="/login" element={<LoginRouteShell />} />
               <Route
                 path="/register"
                 element={<RouteShell screenId="SC-02" title="Đăng ký" />}
               />
-              <Route
-                path="/forgot-password"
-                element={<RouteShell screenId="SC-02" title="Quên mật khẩu" />}
-              />
-              <Route
-                path="/reset-password"
-                element={
-                  <RouteShell screenId="SC-02" title="Đặt lại mật khẩu" />
-                }
-              />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
             </Route>
 
             {/* SC-03 - SC-05, SC-13, SC-16, SC-18: User-only routes (U) */}
@@ -95,10 +108,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
                 path="/home"
                 element={<RouteShell screenId="SC-03" title="Trang chính" />}
               />
-              <Route
-                path="/profile"
-                element={<RouteShell screenId="SC-04" title="Hồ sơ cá nhân" />}
-              />
+              <Route path="/profile" element={<ProfilePage />} />
               <Route
                 path="/match"
                 element={
