@@ -147,6 +147,8 @@ Giữ nghiệp vụ trong service và xử lý HTTP trong controller. Không imp
 
 Application startup không tự tạo collection/index hoặc chạy migration. Migration nền hiện tại tạo các collection cần thiết và áp index theo design 06; không nạp dữ liệu nghiệp vụ. Chạy migration trên database đích trước khi mở API ghi dữ liệu.
 
+Chạy migration đăng ký cấu hình FSRS-6 trước khi sử dụng `POST /api/v1/study/cards/reveal`. API trả `503 SERVICE_UNAVAILABLE` nếu cấu hình cần dùng chưa có hoặc sai. Migration giữ nguyên cấu hình đã đăng ký và từ chối bản lưu có cùng ID nhưng khác tham số.
+
 Xem [migration guide](server/persistence/migrations/README.md) để thêm migration, xử lý lock và kiểm tra checksum.
 
 ## Deployment

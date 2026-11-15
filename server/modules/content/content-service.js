@@ -868,10 +868,11 @@ export async function listPublishedTopics({ level, limit, cursor }) {
  * @param {any} params.identity - Identity được giải mã từ cookie (user / guest)
  * @param {import('mongoose').Types.ObjectId} params.deckVersionId - ID của ContentVersion kind=deck
  * @param {Record<string, any>} params.parentItem - Document ContentItem cha
+ * @param {boolean} [params.allowAdmin]
  */
-async function assertDeckVersionSourceAccess(
+export async function assertDeckVersionSourceAccess(
   db,
-  { identity, deckVersionId, parentItem },
+  { identity, deckVersionId, parentItem, allowAdmin = true },
 ) {
   if (!identity) {
     throw new AppError({
@@ -882,7 +883,7 @@ async function assertDeckVersionSourceAccess(
   }
 
   // 1. Admin: luôn có quyền đọc
-  if (identity.kind === 'user' && identity.role === 'admin') {
+  if (allowAdmin && identity.kind === 'user' && identity.role === 'admin') {
     return;
   }
 
@@ -973,10 +974,11 @@ async function assertDeckVersionSourceAccess(
  * @param {import('mongoose').Types.ObjectId} params.knowledgeId - ID của ContentItem kind=knowledge
  * @param {import('mongoose').Types.ObjectId} [params.knowledgeVersionId] - ID của ContentVersion kind=knowledge (nếu có)
  * @param {Record<string, any>} params.parentItem - Document ContentItem cha
+ * @param {boolean} [params.allowAdmin]
  */
-async function assertKnowledgeSourceAccess(
+export async function assertKnowledgeSourceAccess(
   db,
-  { identity, knowledgeId, knowledgeVersionId, parentItem },
+  { identity, knowledgeId, knowledgeVersionId, parentItem, allowAdmin = true },
 ) {
   if (!identity) {
     throw new AppError({
@@ -987,7 +989,7 @@ async function assertKnowledgeSourceAccess(
   }
 
   // 1. Admin: luôn có quyền đọc
-  if (identity.kind === 'user' && identity.role === 'admin') {
+  if (allowAdmin && identity.kind === 'user' && identity.role === 'admin') {
     return;
   }
 

@@ -18,6 +18,7 @@ tags:
   - name: Invitation Requests
   - name: Content Admin
   - name: Learning Content
+  - name: Flashcards
 
 paths:
   /sessions/{id}:
@@ -754,6 +755,115 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /study/cards/query:
+    post:
+      tags: [Flashcards]
+      operationId: queryStudyCards
+      summary: Truy vấn mặt hỏi và tiến độ ôn tập
+      description: >-
+        Chế độ due gồm thẻ mới và thẻ đến hạn tại giờ server. Sắp xếp theo ngày tạo mục kiến thức
+        (topic), ngày lưu (saved) hoặc ngày thêm vào bộ (personalDeck), sau đó theo ID của bản ghi
+        tương ứng, đều giảm dần. Cursor chỉ dùng lại cho cùng danh tính, phạm vi và chế độ.
+        Với học liệu ẩn, trả bản xuất bản mới nhất mà người học có nguồn hợp lệ.
+        Hai thao tác study/cards không cần Idempotency-Key.
+      security: &studySecurity
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scope, mode]
+              properties:
+                scope:
+                  $ref: '#/components/schemas/StudyScope'
+                mode:
+                  enum: [all, due]
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                  default: 20
+                cursor:
+                  type: string
+                  maxLength: 512
+      responses:
+        '200':
+          description: Trang thẻ đã được kiểm tra quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyQueryResponse'
+        '400':
+          description: JSON lỗi hoặc INVALID_CURSOR
+          content: &studyError
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401': &studyUnauthorized
+          $ref: '#/components/responses/Unauthorized'
+        '403': &studyForbidden
+          description: CSRF_INVALID hoặc ACCOUNT_LOCKED
+          content: *studyError
+        '404': &studyNotFound
+          $ref: '#/components/responses/NotFound'
+        '410': &studyGone
+          description: GUEST_EXPIRED hoặc RESOURCE_DELETING
+          content: *studyError
+        '413': &studyTooLarge
+          description: PAYLOAD_TOO_LARGE
+          content: *studyError
+        '415': &studyUnsupported
+          description: UNSUPPORTED_MEDIA_TYPE
+          content: *studyError
+        '422': &studyInvalid
+          $ref: '#/components/responses/ValidationFailed'
+  /study/cards/reveal:
+    post:
+      tags: [Flashcards]
+      operationId: revealStudyCard
+      summary: Mở đáp án và nhận vé đánh giá
+      description: Tính ba lịch dự kiến theo giờ server và cấp vé ký có hạn tối đa 30 phút, không vượt hạn quyền của khách. Không ghi tiến độ hay lượt ôn.
+      security: *studySecurity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scope, cardKey]
+              properties:
+                scope:
+                  $ref: '#/components/schemas/StudyScope'
+                cardKey:
+                  $ref: '#/components/schemas/StudyCardKey'
+      responses:
+        '200':
+          description: Mặt hỏi, mặt đáp, tiến độ, preview và vé đánh giá
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyRevealResponse'
+        '400':
+          description: JSON lỗi
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '410': *studyGone
+        '413': *studyTooLarge
+        '415': *studyUnsupported
+        '422': *studyInvalid
+        '503':
+          description: Cấu hình lịch ôn chưa sẵn sàng
+          content: *studyError
+
 components:
   securitySchemes:
     livekitWebhookSignature:
@@ -806,6 +916,130 @@ components:
         format: uuid
 
   schemas:
+    StudyScope:
+      description: Khách chỉ dùng topic của lượt thử và saved tạm.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, topicVersionId]
+          properties:
+            type: { const: topic }
+            topicVersionId:
+              $ref: '#/components/schemas/ObjectId'
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type: { const: saved }
+        - type: object
+          additionalProperties: false
+          required: [type, deckId]
+          properties:
+            type: { const: personalDeck }
+            deckId:
+              $ref: '#/components/schemas/ObjectId'
+    StudyCardKey:
+      type: string
+      pattern: '^(knowledge|manual):[a-f0-9]{24}$'
+    StudyProgress:
+      type: object
+      additionalProperties: false
+      required: [cardKey, state, reps, lapses, version]
+      properties:
+        cardKey:
+          $ref: '#/components/schemas/StudyCardKey'
+        state:
+          enum: [new, learning, review, relearning]
+        dueAt: &studyTime
+          type: string
+          format: date-time
+        lastReviewAt: *studyTime
+        reps: &studyCount
+          type: integer
+          minimum: 0
+        lapses: *studyCount
+        version: *studyCount
+    StudyQueryResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            nextCursor:
+              type: [string, 'null']
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [cardKey, front, progress]
+                oneOf:
+                  - required: [contentVersionId]
+                  - required: [manualVersion]
+                properties:
+                  cardKey:
+                    $ref: '#/components/schemas/StudyCardKey'
+                  front:
+                    type: string
+                  contentVersionId:
+                    $ref: '#/components/schemas/ObjectId'
+                  manualVersion: *studyCount
+                  progress:
+                    $ref: '#/components/schemas/StudyProgress'
+    StudyRevealResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            [
+              cardKey,
+              front,
+              back,
+              progress,
+              reviewTicket,
+              ticketExpiresAt,
+              preview,
+            ]
+          properties:
+            cardKey:
+              $ref: '#/components/schemas/StudyCardKey'
+            front:
+              type: string
+            back:
+              type: string
+              description: Với kiến thức chuẩn, gồm nghĩa tiếng Việt, cách đọc nếu có và ví dụ Nhật–Việt. Các phần cách nhau bằng dòng trống.
+            progress:
+              $ref: '#/components/schemas/StudyProgress'
+            reviewTicket:
+              type: string
+              description: Vé ký do server cấp. Client truyền nguyên vé khi đánh giá.
+            ticketExpiresAt: *studyTime
+            preview:
+              type: array
+              minItems: 3
+              maxItems: 3
+              items:
+                type: object
+                additionalProperties: false
+                required: [rating, label, dueAt]
+                properties:
+                  rating:
+                    enum: [1, 2, 3]
+                  label:
+                    enum: [Again, Hard, Good]
+                  dueAt: *studyTime
     Session:
       type: object
       required:
