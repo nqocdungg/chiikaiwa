@@ -119,6 +119,23 @@ describe('OpenAPI contract', () => {
     }
   });
 
+  it('documents safety guard error responses (403, 409, 410, 503) on invitation request acceptance', () => {
+    const respondOp =
+      document.paths['/invitation-requests/{requestId}/responses'].post;
+    expect(Object.keys(respondOp.responses)).toEqual(
+      expect.arrayContaining([
+        '200',
+        '401',
+        '403',
+        '404',
+        '409',
+        '410',
+        '422',
+        '503',
+      ]),
+    );
+  });
+
   it('documents DELETE expectedVersion and keeps examples free of env secrets', () => {
     for (const path of [
       '/invitations/{invitationId}',

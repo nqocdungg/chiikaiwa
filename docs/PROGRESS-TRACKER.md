@@ -220,6 +220,22 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Kiểm chứng: `npm run openapi:check` đạt 6/6. `npm run check` đạt 310 ca unit/HTTP/component, 165 ca integration và cả hai bản build. 7 ca HTTP BE-016 đạt khi chạy đảo thứ tự với seed 20261115 trên MongoDB 8.2.7 replica set tạm. DB-T08 giữ một mục với hai nguồn và giữ nguyên tiến độ khi bỏ rồi lưu lại. Ca xuất bản lại xác nhận revision ngoài lượt thử không xuất hiện trong danh sách hoặc phản hồi lưu/retry của khách. Storybook có cảnh báo kích thước chunk.
 - Tiếp theo: QA-008 chạy lại DB-T08 với lá được bốc qua API thật. FE-007 nối danh sách và thao tác lưu/bỏ lưu; BE-021 dùng nguồn trong tổng kết. Schema, index và cấu hình môi trường dùng nền hiện có.
 
+### BE-008 — Guard an toàn dùng chung
+
+- Ngày cập nhật: 2026-11-15
+- Trạng thái: Đã triển khai và hoàn tất `npm run check` trên Node `v24.22.1` (`npm@11.21.1`); chờ LiveKit Cloud thật, CI và review của Yến Nhi.
+- PR: Chưa có; branch `feature/BE-008-shared-safety-guard`, base `develop@962f411`, chưa commit/push.
+- Đã làm:
+  - Triển khai `assertPairCanEnterSession` tại `server/modules/safety/safety-service.js`: kiểm tra `actor_states` (bận/expectedStates), tự ghép (`IDENTITY_CONFLICT`), chặn hai chiều (`PAIR_BLOCKED`), tài khoản khóa (`ACCOUNT_LOCKED`), khách hết hạn/thu hồi (`GUEST_EXPIRED`), và ghi tăng `actor_states.version` theo thứ tự `actorKey` cố định để tham gia tranh chấp ghi.
+  - Triển khai TX-05 `createPairBlock` và `lockUserAccount` tại `server/modules/safety/safety-service.js`: ghi `blocks` hoặc khóa `users` + tăng `authVersion` + thu hồi `auth_sessions`, đồng thời tranh chấp trên `actor_states`, hủy proposal/invite request/search liên quan (không hủy invitation hoặc request không liên quan khi block một cặp), kết thúc phiên đang hoạt động (`endReason: 'blocked'` / `'account_locked'`, `mediaCleanup.state: 'pending'`) và gọi `finishSessionEffects` sau commit.
+  - Nối mặc định `assertPairCanEnterSession` vào `createApp` tại `server/app.js` và truyền `expectedStates` từ `server/modules/invitations/invitation-service.js` (giữ fail-closed 503 khi guard không được truyền).
+  - Bổ sung `docs/api/openapi.yaml` (thêm response `403` `ACCOUNT_LOCKED`/`FORBIDDEN`/`CSRF_INVALID`, `410` `GUEST_EXPIRED` và mô tả `PAIR_BLOCKED` trong `409 Conflict` cho `POST /invitation-requests/{requestId}/responses`) và test contract tại `tests/server/openapi-contract.test.js`.
+  - Bổ sung `tests/integration/safety-guard.integration.test.js` (8 ca): actor busy/self-pair/block/lock/guest expired, HTTP `POST /api/v1/invitation-requests/:id/responses` (`409 PAIR_BLOCKED`, `403 ACCOUNT_LOCKED`, `410 GUEST_EXPIRED`), DB-T04 (race `respondToInviteRequest` và `assertPairCanEnterSession` trực tiếp với `createPairBlock`/`lockUserAccount`), không hủy tài nguyên không liên quan, thu hồi `inviting`/`searching` + token cũ bị từ chối, retry cleanup LiveKit qua adapter mock + kiểm tra lại sau `sign()`, và rollback transaction.
+- File liên quan: `server/modules/safety/safety-service.js`, `server/app.js`, `server/modules/invitations/invitation-router.js`, `server/modules/invitations/invitation-service.js`, `docs/api/openapi.yaml`, `tests/server/openapi-contract.test.js`, `tests/integration/safety-guard.integration.test.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng: `corepack npm run check` **Pass 100%** trên Node `v24.22.1` + `npm@11.21.1`: `format:check`, `lint` (0 warnings), `typecheck` (0 errors), `npm test` (24 files, 311/311 server+client tests), `npm run test:integration` (16 files, 184/184 tests trên MongoDB 8.2.7 replica set tạm, gồm 8/8 ca BE-008 và 8/8 ca BE-009), `npm run build` và `npm run build-storybook` (cảnh báo chunk lớn, không chặn build). Adapter LiveKit dùng mock; chưa kiểm chứng LiveKit Cloud thật hoặc Atlas.
+- Tiếp theo: Mở PR về `develop`, chạy CI trên Node 24 (`npm run check`, `dependency-audit`, `secret-scan`) và nhờ Yến Nhi review. BE-019 sẽ gắn các REST endpoints chặn/khóa tài khoản vào `createPairBlock`/`lockUserAccount` và bổ sung OpenAPI; BE-009/matching sẽ gọi `assertPairCanEnterSession` khi tạo phiên từ proposal.
+- Lưu ý/blocker: Không sửa thiết kế 01–07, không tự cập nhật Sheets hay đánh dấu Done.
+
 ## Sprint 2
 
 Chưa có cập nhật.

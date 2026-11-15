@@ -780,6 +780,13 @@ async function respondInTransaction({
     firstActorKey: hostKey,
     secondActorKey: request.requesterKey,
     now,
+    expectedStates: {
+      [hostKey]: { mode: 'inviting', resourceId: idString(invitation._id) },
+      [request.requesterKey]: {
+        mode: 'requestingInvite',
+        resourceId: requestId,
+      },
+    },
   });
   const practiceSessionId = new ObjectId();
   const resourceId = idString(practiceSessionId);

@@ -20,11 +20,12 @@ import {
   finishWebhookEffects,
 } from './modules/sessions/livekit-webhook-handler.js';
 import { createSessionPresenceConsumer } from './modules/sessions/session-lifecycle-service.js';
+import { assertPairCanEnterSession as defaultAssertPairCanEnterSession } from './modules/safety/safety-service.js';
 import { createOpenApiRouter } from './openapi.js';
 import { checkDatabase } from './persistence/database.js';
 
 /**
- * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler, onVerifiedPresence?: import('./modules/sessions/livekit-webhook-service.js').PresenceConsumer, assertPairCanEnterSession?: (input: Record<string, any>) => Promise<void>}} [options]
+ * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler, onVerifiedPresence?: import('./modules/sessions/livekit-webhook-service.js').PresenceConsumer, assertPairCanEnterSession?: typeof defaultAssertPairCanEnterSession}} [options]
  */
 export function createApp({
   checkHealth = checkDatabase,
@@ -33,7 +34,7 @@ export function createApp({
     onVerifiedPresence,
     afterCommit: finishWebhookEffects,
   }),
-  assertPairCanEnterSession,
+  assertPairCanEnterSession = defaultAssertPairCanEnterSession,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
