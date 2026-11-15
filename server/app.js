@@ -12,6 +12,8 @@ import { createCoordinationRouter } from './modules/coordination/coordination-ro
 import { createAuthRouter } from './modules/identity/auth-router.js';
 import { createProfileRouter } from './modules/identity/profile-router.js';
 import { createInvitationRouter } from './modules/invitations/invitation-router.js';
+import { createSavedItemRouter } from './modules/learning/saved-item-router.js';
+import { createStudyCardRouter } from './modules/learning/study-card-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
 import {
   createLivekitWebhookHandler,
@@ -144,6 +146,8 @@ export function createApp({
   app.use('/api/v1/sessions', createSessionsRouter());
   app.use('/api/v1/admin/content', createAdminContentRouter());
   app.use('/api/v1', createLearnerContentRouter());
+  app.use('/api/v1/me/saved-items', createSavedItemRouter());
+  app.use('/api/v1/study/cards', createStudyCardRouter());
 
   app.use((_request, response) => {
     response.status(404).json({
