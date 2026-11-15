@@ -45,11 +45,13 @@ Chạy kiểm tra mục tiêu khi phát triển, rồi `npm run check` trước 
 Hai job bảo mật chạy độc lập với `check`:
 
 - `Dependency audit`: cài dependency theo lockfile rồi chạy `npm audit --audit-level=high`, chặn advisory high/critical cho cả runtime và development tools. Lỗi truy cập registry cũng làm job thất bại; không tự dùng `audit fix` hoặc bỏ qua lỗi để làm xanh CI.
-- `Secret scan`: Gitleaks quét lịch sử Git đã checkout với `--all` và che giá trị trong log. Binary được pin phiên bản và kiểm SHA-256 trước khi chạy. Secret thật cần được thu hồi/rotate, không chỉ xóa dòng ở commit mới. Không thêm allowlist rộng để bỏ qua phát hiện.
+- `Secret scan`: Gitleaks quét các commit trong `base..head` của pull request hoặc `before..after` của lần push. Khi chạy CI thủ công, tạo nhánh hoặc thiếu commit `before` sau force-push, job quét lịch sử của nhánh được chọn. Mỗi lần push có lượt chạy riêng để giữ đủ các khoảng commit cần quét.
 
-`.gitleaksignore` chỉ bỏ qua fingerprint đã xác minh: hai khóa JWT tổng hợp trong unit test và UUID `Idempotency-Key` trong ví dụ API. Ngoại lệ gắn commit/file/rule/dòng, không bỏ qua toàn bộ thư mục test hoặc tài liệu; phát hiện mới vẫn phải review riêng.
+[Repository secret audit](../../.github/workflows/secret-audit.yml) chạy thủ công từ tab Actions khi workflow đã có trên nhánh mặc định. Workflow này quét với `--all` để kiểm tra lịch sử của các nhánh và tag đã tải. Cả hai lượt quét đều che giá trị trong log và dùng cùng [action cài Gitleaks](../../.github/actions/scan-secrets/action.yml) với phiên bản và SHA-256 đã ghim.
 
-Actions được pin bằng commit SHA; khi cập nhật cần xác minh SHA từ repository chính thức. Khi nâng Gitleaks, cập nhật cả phiên bản và checksum của archive Linux x64. Dependabot tiếp tục theo dõi Actions; phiên bản Gitleaks được rà soát riêng. CI hiện chưa kiểm tra quy ước tên branch, commit hoặc tiêu đề PR; reviewer đối chiếu [Git workflow](git-workflow.md).
+`.gitleaksignore` ghi từng fingerprint đã xác minh theo commit/file/rule/dòng. Các phát hiện mới cần được review riêng. Khi phát hiện secret thật, thu hồi hoặc xoay vòng secret đó.
+
+Actions bên ngoài được pin bằng commit SHA. Khi cập nhật, xác minh SHA từ repository chính thức. Khi nâng Gitleaks, cập nhật cả phiên bản và checksum của archive Linux x64. Dependabot theo dõi Actions, còn phiên bản Gitleaks được rà soát riêng. Reviewer đối chiếu quy ước tên branch, commit và tiêu đề PR theo [Git workflow](git-workflow.md).
 
 CI chỉ cần quyền đọc source, không cần secret, Atlas hoặc dịch vụ thật. Integration tests tự tải binary MongoDB và tạo replica set tạm trên runner; lỗi tải binary cần được phân biệt với lỗi test. Không bỏ integration tests hoặc cấp thêm quyền để làm PR của bot pass.
 
