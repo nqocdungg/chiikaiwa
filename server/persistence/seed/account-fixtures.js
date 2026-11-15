@@ -14,22 +14,17 @@ export const SEED_ACCOUNT_IDS = {
 };
 
 /**
- * Hash scrypt chuẩn mực đã tính toán trước cho mật khẩu 'ValidPassword123' (06 §13.1).
- * Tuyệt đối không lưu plaintext password trong kho mã nguồn.
- */
-export const DETERMINISTIC_PASSWORD_HASH =
-  'scrypt$16384$8$1$d1cbb54b51639827c06cc0e516024b32$31a1db9153a43d33f33da4ac193bc1cc2bd7a7f33778efd88ab51c27c62dc118b149399c7a2786f74f741f55b2fde2b249201a37be643a1594811976ba9df0b5';
-
-/**
  * Danh sách tài khoản thử và demo chuẩn (02 §11.1: 4 tài khoản thử + 1 admin + 1 locked).
  * Đáp ứng đủ dữ liệu ghép phân biệt cấp độ N5, N4, N1, mục tiêu, sở thích.
+ * Mọi tài khoản để passwordHash: null; kịch bản seedTestAccountFixtures sẽ băm động
+ * từ biến môi trường hoặc sinh ngẫu nhiên trong runtime (06 §13.1).
  */
 export const SEED_USER_FIXTURES = [
   {
     _id: new ObjectId(SEED_ACCOUNT_IDS.learnerA),
     email: 'learner.a@example.com',
     emailKey: 'learner.a@example.com',
-    passwordHash: DETERMINISTIC_PASSWORD_HASH,
+    passwordHash: null,
     role: /** @type {const} */ ('learner'),
     status: /** @type {const} */ ('active'),
     displayName: 'Learner A',
@@ -49,7 +44,7 @@ export const SEED_USER_FIXTURES = [
     _id: new ObjectId(SEED_ACCOUNT_IDS.learnerB),
     email: 'learner.b@example.com',
     emailKey: 'learner.b@example.com',
-    passwordHash: DETERMINISTIC_PASSWORD_HASH,
+    passwordHash: null,
     role: /** @type {const} */ ('learner'),
     status: /** @type {const} */ ('active'),
     displayName: 'Learner B',
@@ -69,7 +64,7 @@ export const SEED_USER_FIXTURES = [
     _id: new ObjectId(SEED_ACCOUNT_IDS.learnerC),
     email: 'learner.c@example.com',
     emailKey: 'learner.c@example.com',
-    passwordHash: DETERMINISTIC_PASSWORD_HASH,
+    passwordHash: null,
     role: /** @type {const} */ ('learner'),
     status: /** @type {const} */ ('active'),
     displayName: 'Learner C',
@@ -106,7 +101,7 @@ export const SEED_USER_FIXTURES = [
     _id: new ObjectId(SEED_ACCOUNT_IDS.locked),
     email: 'locked@example.com',
     emailKey: 'locked@example.com',
-    passwordHash: DETERMINISTIC_PASSWORD_HASH,
+    passwordHash: null,
     role: /** @type {const} */ ('learner'),
     status: /** @type {const} */ ('locked'),
     statusReason: 'compliance_hold',

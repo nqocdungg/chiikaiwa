@@ -212,33 +212,42 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 ### DATA-002 — Script seed idempotent và fixtures kiểm thử
 
 - Ngày cập nhật: 2026-11-15
-- Trạng thái: Đã giải quyết triệt để toàn bộ 7 điểm nhận xét review; sẵn sàng merge vào `develop`.
-- PR: Branch `feature/DATA-002-idempotent-seed-script`.
-- Đã làm (sửa theo review):
-  - **Revision guard**: Cập nhật `seedContentDataset` bảo toàn tính bất biến và toàn vẹn nghiệp vụ. Tuyệt đối không ghi đè `latestRevision`, `publishedVersionId`, `draftPayload` khi DB đã có revision mới hơn (`existingItem.latestRevision > revision`); tuyệt đối không ghi đè `status: 'published'` khi Admin đã ẩn học liệu (`status === 'hidden'`).
-  - **Admin password**: Bỏ mật khẩu mặc định của Admin trong `account-fixtures.js` (`passwordHash: null`). Bắt buộc cung cấp qua biến môi trường `SEED_ADMIN_PASSWORD` (ném lỗi nếu thiếu).
-  - **Production guard**: Chuyển đổi `isProtectedDatabase` sang whitelist dev/demo/test (fail-closed); tích hợp `assertDatabaseNotProtected` kiểm tra guard bảo vệ ngay trong module seed (`seedAll`, `seedContentDataset`, `seedTestAccountFixtures`).
-  - **Partial failure recovery**: Thiết kế hàm `upsertContentItemAndVersion` tự động phục hồi `content_items` bị thiếu khi chạy lại seed trong trường hợp lần chạy trước bị lỗi giữa chừng sau khi insert version.
-  - **Fixtures**: Sửa tài khoản `learnerC` sử dụng `goal: 'studyAndWork'` và `interests: ['technology', 'books']` hoàn toàn hợp lệ theo `CATALOGS.goals` và `CATALOGS.interests`.
-  - **Statistics**: Đổi baseline `startedSessions` trong `lifetime` statistics từ 1 → 0 theo đúng Database Design DB-T18 và TX-06.
-  - **Test suite**: Bổ sung unit tests (16 tests pass) và 2 integration tests mới kiểm chứng:
-    1. Re-seed sau khi Admin publish revision mới & ẩn học liệu: bảo toàn revision mới và trạng thái hidden.
-    2. Re-seed sau sự cố partial failure: khôi phục thành công `content_items` bị thiếu mà không nhân đôi version.
+- Trạng thái: Đã hoàn thiện, chờ mở PR
+- PR: Chưa có (branch `feature/DATA-002-idempotent-seed-script`, base `develop`)
+- Đã làm:
+  - **Idempotent seed script cho content & account fixtures (DB-T18)**: Triển khai toàn diện `seedAll`, `seedContentDataset`, `seedTestAccountFixtures` đảm bảo nạp lần đầu khởi tạo đầy đủ, nạp lại không sinh bản ghi trùng, không ghi đè mật khẩu user và bảo toàn lịch sử revision (06 §13.1, PB-31).
+  - **Bảo toàn bản nháp của Admin & Revision Guard**: Cập nhật `upsertContentItemAndVersion` để bảo toàn tuyệt đối `draftPayload` và `extraItemFields` (level, title của deck) khi Admin đang biên tập dở (06 §7.1). Toàn bộ dữ liệu nháp và thông tin khởi tạo chỉ gán qua `$setOnInsert`; nhánh update chỉ đồng bộ `status`, `latestRevision`, `publishedVersionId`. Nếu không có thay đổi con trỏ/trạng thái thì hoàn toàn không gọi `updateOne` (no-op, không cập nhật `updatedAt`).
+  - **Tự phục hồi liên kết content_items thiếu khi version đã tồn tại (Partial-failure healing)**: Khi version đã tồn tại nhưng bản ghi cha `content_items` bị thiếu hoặc mất con trỏ, tự động khôi phục item với hành động `recovered` hoặc `pointer_synced`. Đồng thời trong `seedTestAccountFixtures`, tự động bù đắp `actor_states` độc lập nếu tài khoản đã tồn tại từ trước nhưng bị gián đoạn giữa chừng.
+  - **Bảo vệ tính bất biến của revision & Race condition 11000**: Chủ động phát hiện xung đột `contentId + revision` khi đã tồn tại với `versionId` khác trong `content_versions`, ném thông báo nghiệp vụ rõ ràng tuân thủ 06 §13.1.5. Xử lý an toàn lỗi duplicate key (code 11000) tại `insertOne` của version và trong CAS retry loop của `content_items` khi chạy seed đồng thời.
+  - **Fail-closed database protection**: Kết hợp whitelist regex segment dev/demo/test cùng blacklist `FORBIDDEN_DATABASE_SEGMENT_PATTERN = /(^|_)(prod|production|live)(_|$)/u` để fail-closed tuyệt đối, chặn mọi hành vi seed ngoài ý muốn lên môi trường production trừ khi có cờ `forceProduction: true`.
+  - **Validation fail-fast liên dataset**: Kiểm tra tồn tại và validate schema toàn diện của toàn bộ dataset (`validateSeedDataset`) ở đầu `seedAll` trước khi thực hiện bất kỳ lệnh ghi nào vào cơ sở dữ liệu. Khi có dataset sai schema, `seedAll` trả về `success: false` (không throw) kèm danh sách lỗi có cấu trúc để CLI hiển thị rõ ràng.
+  - **Ràng buộc mật khẩu tối thiểu 8 ký tự & Fail-fast**: Áp dụng hàm chuẩn hóa `normalizeSeedPassword` kiểm tra chuỗi và độ dài tối thiểu 8 ký tự cho cả `SEED_ADMIN_PASSWORD` và `SEED_USER_PASSWORD`, fail-fast ngay từ đầu trước khi ghi.
+  - **CAS concurrency retry loop & Chuẩn hóa version: 0**: Triển khai Compare-and-Swap (CAS) tối đa 3 lần thử (`MAX_ITEM_SYNC_ATTEMPTS = 3`) với điều kiện lọc `{ _id, latestRevision, status, version }` kèm `$inc: { version: 1 }`. Xử lý chính xác trường hợp item cũ chưa có trường `version` bằng bộ lọc `{ $exists: false }`. Chuẩn hóa `version: 0` khi khởi tạo `content_items` khớp với convention Optimistic Concurrency Control toàn hệ thống.
+  - **Bảo mật mật khẩu, loại bỏ plaintext & Cảnh báo đúng ngữ cảnh**: Xóa bỏ hoàn toàn hằng số `DETERMINISTIC_PASSWORD_HASH` và comment chứa plaintext mật khẩu. Admin bắt buộc cung cấp qua `SEED_ADMIN_PASSWORD`; User fixtures sử dụng `SEED_USER_PASSWORD` (nếu có) hoặc sinh mật khẩu ngẫu nhiên an toàn qua `randomBytes(32).toString('hex')`. Cảnh báo mật khẩu ngẫu nhiên chỉ in đúng 1 lần sau vòng lặp; cảnh báo thiếu Admin chỉ bật khi chạy `--content-only` hoặc gọi `seedContentDataset` trực tiếp mà DB chưa có Admin. Thông báo các tài khoản đã tồn tại được gom thành 1 dòng duy nhất sau vòng lặp.
+  - **Chi tiết kết quả theo record & Bảng notable records**: Phân loại chính xác các hành động `inserted`, `recovered`, `pointer_synced`, `preserved`, `unchanged`. Bổ sung trường `versionInserted` để thống kê chính xác số version mới được chèn kể cả khi item được bảo toàn (preserved). Gom lỗi chi tiết theo từng record và hiển thị bảng tổng hợp notable records trong `scripts/seed.js` cả khi thành công lẫn khi gặp lỗi phân đoạn giữa chừng.
+  - **Test suite hoàn thiện & Siết chặt assert tham chiếu**:
+    - **38 ca unit tests** trong `tests/server/content-seed-idempotency.test.js` kiểm chứng toàn diện mọi nhánh bảo vệ, fail-fast schema, CAS retry, race condition 11000, cảnh báo ngữ cảnh, ràng buộc mật khẩu và partial-failure recovery.
+    - **7 ca integration tests** trong `tests/integration/seed-idempotency.integration.test.js` trên MongoDB replica set: kịch bản DB-T18 nạp lặp lại (bao gồm assert `item.version === 0` ngay sau lần nạp 1), negative test quét toàn bộ tham chiếu gãy giữa Deck -> Scenario -> Question -> Knowledge bằng helper `findBrokenReferences`, kiểm tra đăng nhập bằng mật khẩu động và bảo toàn dữ liệu nháp/ẩn.
 - File liên quan:
   - `server/persistence/seed/seed-content.js`
   - `server/persistence/seed/account-fixtures.js`
   - `scripts/seed.js`
+  - `README.md`
+  - `.env.example`
   - `tests/server/content-seed-idempotency.test.js`
   - `tests/integration/seed-idempotency.integration.test.js`
   - `docs/PROGRESS-TRACKER.md`
 - Kiểm chứng:
+  - `npm run format:check`: Pass (All matched files use Prettier code style).
   - `npm run lint`: Pass (0 errors, 0 warnings).
-  - `npm run format:check`: Pass.
-  - `npm run typecheck`: Pass (0 errors).
-  - `npm test`: 25 files passed, 327 tests passed.
-  - `npm run test:integration`: 15 files passed, 174 tests passed.
-  - `npm run build`: Pass (client 322ms, server syntax check pass).
-- Tiếp theo: Trình người dùng review và commit lên nhánh `feature/DATA-002-idempotent-seed-script`, merge `develop` vào nhánh con và cập nhật PR.
+  - `npm run typecheck`: Pass (0 errors trên client, server và root jsconfig).
+  - `npm test`: **349/349 unit tests passed** (bao gồm 38/38 unit tests của `tests/server/content-seed-idempotency.test.js`).
+  - `npm run test:integration`: **176/176 integration tests passed** trên MongoDB replica set (bao gồm 7/7 integration tests của `tests/integration/seed-idempotency.integration.test.js`).
+  - `npm run openapi:check`: Pass 7/7 tests.
+  - `npm run build`: Pass (client vite production build & server app/index syntax check).
+  - `npm run build-storybook`: Pass (Storybook static build completed).
+  - `npm run check`: **Passed toàn diện cả 7/7 bước**.
+- Tiếp theo: Trình người dùng review và mở PR về `develop` để reviewer Minh Xuân rà soát.
 
 ## Sprint 2
 

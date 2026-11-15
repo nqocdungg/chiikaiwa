@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import mongoose from 'mongoose';
@@ -20,6 +21,9 @@ let replicaSet;
 /** @type {import('mongoose').mongo.Db} */
 let db;
 
+const testAdminPassword = `Admin_${randomBytes(16).toString('hex')}Aa1!`;
+const testUserPassword = `User_${randomBytes(16).toString('hex')}Aa1!`;
+
 describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
   beforeAll(async () => {
     replicaSet = await MongoMemoryReplSet.create({
@@ -28,7 +32,8 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
     });
     vi.stubEnv('MONGODB_URI', replicaSet.getUri());
     vi.stubEnv('MONGODB_DB_NAME', 'chiikaiwa_test_seed_idempotency');
-    vi.stubEnv('SEED_ADMIN_PASSWORD', 'ValidPassword123');
+    vi.stubEnv('SEED_ADMIN_PASSWORD', testAdminPassword);
+    vi.stubEnv('SEED_USER_PASSWORD', testUserPassword);
     db = await connectDatabase();
     await applyDesignIndexes(db);
   }, 60000);
@@ -70,9 +75,17 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
     expect(countUsers1).toBe(SEED_USER_FIXTURES.length);
     expect(countActorStates1).toBe(SEED_USER_FIXTURES.length);
 
+    // Giá trị khởi tạo version khớp convention OCC của luồng tạo item thật
+    // (xem createDraftContent và updateDraftContentItemCas); sai giá trị này làm publish CAS bị 409.
+    const initialItems = await itemsColl.find({}).toArray();
+    expect(initialItems.length).toBe(countItems1);
+    for (const item of initialItems) {
+      expect(item.version).toBe(0);
+    }
+
     // Lấy một mẫu snapshot revision để kiểm tra tính bất biến sau lần 2
     const sampleVersion = await versionsColl.findOne();
-    expect(sampleVersion).toBeDefined();
+    expect(sampleVersion).not.toBeNull();
     const sampleVersionId = sampleVersion?._id;
     const samplePayloadBefore = JSON.stringify(sampleVersion?.payload);
 
@@ -85,6 +98,7 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
     expect(run2.success).toBe(true);
     // Tiêu chí DB-T18.1: Lần 2 không insert bản ghi học liệu mới nào
     expect(run2.summary.totalInserted).toBe(0);
+    expect(run2.summary.totalSynced).toBe(0);
     expect(run2.summary.totalSkipped).toBe(run1.summary.totalInserted);
 
     // Tiêu chí DB-T18.1: Fixtures lần 2 không insert mới, skip toàn bộ
@@ -114,106 +128,142 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
     );
   });
 
-  it('kiểm chứng toàn vẹn tham chiếu (Referential Integrity) giữa các tầng học liệu sau khi seed', async () => {
-    const versionsColl = db.collection('content_versions');
-
-    // Lấy tất cả decks
+  /**
+   * Quét toàn bộ decks và scenarios để tìm tất cả các tham chiếu bị gãy (T7a).
+   * @param {import('mongoose').mongo.Collection} versionsColl
+   * @returns {Promise<string[]>}
+   */
+  async function findBrokenReferences(versionsColl) {
+    const broken = [];
     const deckVersions = await versionsColl.find({ kind: 'deck' }).toArray();
-    expect(deckVersions.length).toBeGreaterThan(0);
-
     for (const deck of deckVersions) {
-      // 1. Kiểm tra scenarioVersionIds
-      for (const sVerId of deck.payload.scenarioVersionIds) {
+      for (const sVerId of deck.payload?.scenarioVersionIds || []) {
         const scenarioDoc = await versionsColl.findOne({
           _id: sVerId,
           kind: 'scenario',
         });
-        expect(
-          scenarioDoc,
-          `Deck ${deck._id} trỏ tới scenario version không tồn tại: ${sVerId}`,
-        ).toBeDefined();
-
-        // 2. Kiểm tra scenario trỏ tới questionVersionIds
-        for (const qVerId of scenarioDoc?.payload.questionVersionIds || []) {
+        if (!scenarioDoc) {
+          broken.push(
+            `Deck ${deck._id} trỏ tới scenario version không tồn tại: ${sVerId}`,
+          );
+          continue;
+        }
+        for (const qVerId of scenarioDoc.payload?.questionVersionIds || []) {
           const questionDoc = await versionsColl.findOne({
             _id: qVerId,
             kind: 'question',
           });
-          expect(
-            questionDoc,
-            `Scenario ${scenarioDoc?._id} trỏ tới question version không tồn tại: ${qVerId}`,
-          ).toBeDefined();
+          if (!questionDoc) {
+            broken.push(
+              `Scenario ${scenarioDoc._id} trỏ tới question version không tồn tại: ${qVerId}`,
+            );
+          }
         }
-
-        // 3. Kiểm tra scenario trỏ tới knowledgeVersionIds
-        for (const kVerId of scenarioDoc?.payload.knowledgeVersionIds || []) {
+        for (const kVerId of scenarioDoc.payload?.knowledgeVersionIds || []) {
           const knowledgeDoc = await versionsColl.findOne({
             _id: kVerId,
             kind: 'knowledge',
           });
-          expect(
-            knowledgeDoc,
-            `Scenario ${scenarioDoc?._id} trỏ tới knowledge version không tồn tại: ${kVerId}`,
-          ).toBeDefined();
+          if (!knowledgeDoc) {
+            broken.push(
+              `Scenario ${scenarioDoc._id} trỏ tới knowledge version không tồn tại: ${kVerId}`,
+            );
+          }
         }
       }
-
-      // 4. Kiểm tra deck direct questionVersionIds
-      for (const qVerId of deck.payload.questionVersionIds || []) {
+      for (const qVerId of deck.payload?.questionVersionIds || []) {
         const questionDoc = await versionsColl.findOne({
           _id: qVerId,
           kind: 'question',
         });
-        expect(
-          questionDoc,
-          `Deck ${deck._id} trỏ tới direct question version không tồn tại: ${qVerId}`,
-        ).toBeDefined();
+        if (!questionDoc) {
+          broken.push(
+            `Deck ${deck._id} trỏ tới direct question version không tồn tại: ${qVerId}`,
+          );
+        }
       }
-
-      // 5. Kiểm tra deck direct knowledgeVersionIds
-      for (const kVerId of deck.payload.knowledgeVersionIds || []) {
+      for (const kVerId of deck.payload?.knowledgeVersionIds || []) {
         const knowledgeDoc = await versionsColl.findOne({
           _id: kVerId,
           kind: 'knowledge',
         });
-        expect(
-          knowledgeDoc,
-          `Deck ${deck._id} trỏ tới direct knowledge version không tồn tại: ${kVerId}`,
-        ).toBeDefined();
+        if (!knowledgeDoc) {
+          broken.push(
+            `Deck ${deck._id} trỏ tới direct knowledge version không tồn tại: ${kVerId}`,
+          );
+        }
       }
+    }
+    return broken;
+  }
+
+  it('kiểm chứng toàn vẹn tham chiếu (Referential Integrity) giữa các tầng học liệu sau khi seed', async () => {
+    const versionsColl = db.collection('content_versions');
+    const broken = await findBrokenReferences(versionsColl);
+    expect(broken).toEqual([]);
+  });
+
+  it('Negative test: kiểm tra toàn vẹn tham chiếu bắt được lỗi khi có reference gãy (F3 / Item 1 / T7a)', async () => {
+    const versionsColl = db.collection('content_versions');
+    const aDeck = await versionsColl.findOne({ kind: 'deck' });
+    expect(aDeck).not.toBeNull();
+    const firstScenarioId = aDeck?.payload.scenarioVersionIds?.[0];
+    expect(firstScenarioId).toBeDefined();
+
+    const scenarioDoc = await versionsColl.findOne({ _id: firstScenarioId });
+    expect(scenarioDoc).not.toBeNull();
+    const firstQId = scenarioDoc?.payload.questionVersionIds?.[0];
+    expect(firstQId).toBeDefined();
+
+    // Tạm xóa question version này để mô phỏng tham chiếu gãy
+    const deletedQ = await versionsColl.findOneAndDelete({ _id: firstQId });
+    expect(deletedQ).not.toBeNull();
+
+    try {
+      const broken = await findBrokenReferences(versionsColl);
+      // Kỳ vọng phát hiện được ít nhất 1 tham chiếu gãy trỏ tới firstQId
+      expect(broken.length).toBeGreaterThanOrEqual(1);
+      expect(broken.some((msg) => msg.includes(String(firstQId)))).toBe(true);
+    } finally {
+      // Khôi phục lại document sau khi kiểm thử negative xong
+      if (deletedQ) {
+        await versionsColl.insertOne(deletedQ);
+      }
+      const restoredBroken = await findBrokenReferences(versionsColl);
+      expect(restoredBroken).toEqual([]);
     }
   });
 
-  it('xác thực tài khoản kiểm thử seed có thể đăng nhập bằng ValidPassword123 và role chính xác', async () => {
+  it('xác thực tài khoản kiểm thử seed có thể đăng nhập bằng mật khẩu tương ứng và role chính xác', async () => {
     const usersColl = db.collection('users');
 
     // Learner A
     const learnerA = await usersColl.findOne({
       emailKey: 'learner.a@example.com',
     });
-    expect(learnerA).toBeDefined();
+    expect(learnerA).not.toBeNull();
     expect(learnerA?.status).toBe('active');
     expect(learnerA?.role).toBe('learner');
     const validLearnerA = await verifyPassword(
-      'ValidPassword123',
+      testUserPassword,
       learnerA?.passwordHash,
     );
     expect(validLearnerA).toBe(true);
 
     // Admin Root
     const admin = await usersColl.findOne({ emailKey: 'admin@example.com' });
-    expect(admin).toBeDefined();
+    expect(admin).not.toBeNull();
     expect(admin?.role).toBe('admin');
     expect(admin?._id.toHexString()).toBe(SEED_ACCOUNT_IDS.admin);
     const validAdmin = await verifyPassword(
-      'ValidPassword123',
+      testAdminPassword,
       admin?.passwordHash,
     );
     expect(validAdmin).toBe(true);
 
     // Locked Account
     const locked = await usersColl.findOne({ emailKey: 'locked@example.com' });
-    expect(locked).toBeDefined();
+    expect(locked).not.toBeNull();
     expect(locked?.status).toBe('locked');
     expect(locked?.statusReason).toBe('compliance_hold');
   });
@@ -224,7 +274,7 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
 
     // 1. Chọn 1 knowledge item để Admin thực hiện ẨN (status: 'hidden')
     const targetKnowledge = await itemsColl.findOne({ kind: 'knowledge' });
-    expect(targetKnowledge).toBeDefined();
+    expect(targetKnowledge).not.toBeNull();
     await itemsColl.updateOne(
       { _id: targetKnowledge?._id },
       { $set: { status: 'hidden' } },
@@ -232,7 +282,7 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
 
     // 2. Chọn 1 deck item để Admin thực hiện XUẤT BẢN REVISION 2
     const targetDeck = await itemsColl.findOne({ kind: 'deck' });
-    expect(targetDeck).toBeDefined();
+    expect(targetDeck).not.toBeNull();
 
     const version2Id = new ObjectId();
     const now = new Date();
@@ -274,10 +324,12 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
     const hiddenDocAfter = await itemsColl.findOne({
       _id: targetKnowledge?._id,
     });
+    expect(hiddenDocAfter).not.toBeNull();
     expect(hiddenDocAfter?.status).toBe('hidden');
 
     // b) Học liệu có revision mới: latestRevision VẪN PHẢI LÀ 2, publishedVersionId trỏ tới version2Id
     const deckDocAfter = await itemsColl.findOne({ _id: targetDeck?._id });
+    expect(deckDocAfter).not.toBeNull();
     expect(deckDocAfter?.latestRevision).toBe(2);
     expect(deckDocAfter?.publishedVersionId.toHexString()).toBe(
       version2Id.toHexString(),
@@ -293,13 +345,13 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
 
     // 1. Lấy 1 bản ghi scenario đã có trong DB
     const originalScenario = await itemsColl.findOne({ kind: 'scenario' });
-    expect(originalScenario).toBeDefined();
+    expect(originalScenario).not.toBeNull();
     const scenarioId = originalScenario?._id;
     const versionId = originalScenario?.publishedVersionId;
 
     // Đảm bảo version doc đang tồn tại trong content_versions
     const versionDocBefore = await versionsColl.findOne({ _id: versionId });
-    expect(versionDocBefore).toBeDefined();
+    expect(versionDocBefore).not.toBeNull();
 
     // 2. Mô phỏng sự cố partial failure: version đã có nhưng content_items bị mất/chưa được tạo
     await itemsColl.deleteOne({ _id: scenarioId });
@@ -318,7 +370,7 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
     // 4. Kiểm tra khôi phục thành công:
     // a) content_items đã được tái tạo và có đầy đủ trường nghiệp vụ
     const recoveredScenario = await itemsColl.findOne({ _id: scenarioId });
-    expect(recoveredScenario).toBeDefined();
+    expect(recoveredScenario).not.toBeNull();
     expect(recoveredScenario?.kind).toBe('scenario');
     expect(recoveredScenario?.status).toBe('published');
     expect(recoveredScenario?.latestRevision).toBe(1);
@@ -329,5 +381,64 @@ describe('DATA-002 / DB-T18: Idempotent Seed Integration Test', () => {
     // b) content_versions không bị chèn trùng hay tăng số lượng
     const countVersionsAfter = await versionsColl.countDocuments();
     expect(countVersionsAfter).toBe(countVersionsBefore);
+  });
+
+  it('re-seed sau khi Admin sửa nháp draftPayload: bảo toàn nguyên vẹn draftPayload của Admin (06 §7.1)', async () => {
+    const itemsColl = db.collection('content_items');
+
+    // 1. Admin sửa nháp draftPayload cho 1 knowledge item
+    const targetKnowledge = await itemsColl.findOne({ kind: 'knowledge' });
+    expect(targetKnowledge).not.toBeNull();
+    const customKnowledgeDraft = {
+      expression: 'Nháp kiến thức do Admin đang sửa dở',
+      meaning: 'Chưa xuất bản',
+      reading: 'にゃっぷ',
+    };
+    await itemsColl.updateOne(
+      { _id: targetKnowledge?._id },
+      { $set: { draftPayload: customKnowledgeDraft } },
+    );
+
+    // 2. Admin sửa nháp cho 1 deck item có latestRevision: 1 (F3: tránh deck đã bị nâng lên revision 2 ở test trước)
+    const targetDeck = await itemsColl.findOne({
+      kind: 'deck',
+      latestRevision: 1,
+    });
+    expect(targetDeck).not.toBeNull();
+    const customDeckDraft = {
+      title: 'Nháp tiêu đề deck mới do Admin biên tập',
+    };
+    const editedTitle = 'Tiêu đề deck đang hiển thị (Admin đã đổi)';
+    const editedLevel = 'N2';
+    await itemsColl.updateOne(
+      { _id: targetDeck?._id },
+      {
+        $set: {
+          draftPayload: customDeckDraft,
+          title: editedTitle,
+          level: editedLevel,
+        },
+      },
+    );
+
+    // 3. Thực hiện re-seed
+    const reSeedResult = await seedAll(db, {
+      datasets: ['sample', 'n1'],
+      includeFixtures: false,
+    });
+    expect(reSeedResult.success).toBe(true);
+
+    // 4. Kiểm chứng draftPayload và metadata không bị ghi đè
+    const knowledgeAfter = await itemsColl.findOne({
+      _id: targetKnowledge?._id,
+    });
+    expect(knowledgeAfter).not.toBeNull();
+    expect(knowledgeAfter?.draftPayload).toEqual(customKnowledgeDraft);
+
+    const deckAfter = await itemsColl.findOne({ _id: targetDeck?._id });
+    expect(deckAfter).not.toBeNull();
+    expect(deckAfter?.draftPayload).toEqual(customDeckDraft);
+    expect(deckAfter?.title).toBe(editedTitle);
+    expect(deckAfter?.level).toBe(editedLevel);
   });
 });

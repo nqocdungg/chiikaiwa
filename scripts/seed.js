@@ -35,6 +35,13 @@ function parseArgs(args) {
     }
   }
 
+  if (options.fixturesOnly && options.contentOnly) {
+    console.error(
+      "[seed] Lỗi: Không thể dùng đồng thời '--fixtures-only' và '--content-only'.",
+    );
+    process.exit(1);
+  }
+
   return options;
 }
 
@@ -49,6 +56,10 @@ Tùy chọn:
   --content-only           Chỉ nạp học liệu, bỏ qua tài khoản kiểm thử
   --force-production-seed  Bắt buộc nạp trên database production (NGUY HIỂM)
   --help, -h               Hiển thị hướng dẫn này
+
+Biến môi trường (06 §13.1):
+  SEED_ADMIN_PASSWORD      Mật khẩu bắt buộc cho tài khoản Admin khi nạp fixtures
+  SEED_USER_PASSWORD       Mật khẩu tùy chọn cho các tài khoản kiểm thử (learnerA, learnerB, learnerC, locked)
 `);
 }
 
@@ -113,19 +124,78 @@ try {
       });
 
       if (!result.success) {
-        console.error('[seed] Nạp dữ liệu thất bại do dataset không hợp lệ:');
+        console.error('[seed] Nạp dữ liệu thất bại:');
         for (const ds of result.datasets) {
           if (ds.errors && ds.errors.length > 0) {
             console.error(`- Dataset [${ds.datasetName}]:`);
             for (const err of ds.errors) {
-              console.error(`  * ${err}`);
+              const msg =
+                typeof err === 'string'
+                  ? err
+                  : `${err.kind ? `[${err.kind}] ` : ''}${err.contentId ? `ID: ${err.contentId} - ` : ''}${err.message}`;
+              console.error(`  * ${msg}`);
             }
           }
         }
+
+        if (Array.isArray(result.records) && result.records.length > 0) {
+          console.warn(
+            `\n[seed] Đã ghi ${result.records.length} bản ghi trước khi dừng (chạy lại seed an toàn vì idempotent):`,
+          );
+          console.table(
+            result.records.map((r) => ({
+              kind: r.kind,
+              contentId: r.contentId,
+              revision: r.revision,
+              action: r.action,
+            })),
+          );
+        }
+
         process.exitCode = 1;
       } else {
         for (const ds of result.datasets) {
           printStatsTable(ds.datasetName, ds.stats);
+        }
+
+        if (Array.isArray(result.records) && result.records.length > 0) {
+          /** @type {Record<string, number>} */
+          const actionCounts = result.records.reduce((acc, r) => {
+            acc[r.action] = (acc[r.action] || 0) + 1;
+            return acc;
+          }, /** @type {Record<string, number>} */ ({}));
+          console.info(
+            '\n--- Thống kê chi tiết theo từng bản ghi (Records) ---',
+          );
+          console.table({
+            'Tạo mới (inserted)': { số_lượng: actionCounts.inserted || 0 },
+            'Phục hồi (recovered)': { số_lượng: actionCounts.recovered || 0 },
+            'Đồng bộ con trỏ (pointer_synced)': {
+              số_lượng: actionCounts.pointer_synced || 0,
+            },
+            'Bảo toàn dữ liệu (preserved)': {
+              số_lượng: actionCounts.preserved || 0,
+            },
+            'Không thay đổi (unchanged)': {
+              số_lượng: actionCounts.unchanged || 0,
+            },
+          });
+
+          const notableRecords = result.records
+            .filter((r) => r.action !== 'inserted' && r.action !== 'unchanged')
+            .map((r) => ({
+              kind: r.kind,
+              contentId: r.contentId,
+              revision: r.revision,
+              action: r.action,
+            }));
+
+          if (notableRecords.length > 0) {
+            console.info(
+              '\n--- Danh sách học liệu được đồng bộ hoặc bảo toàn (recovered / pointer_synced / preserved) ---',
+            );
+            console.table(notableRecords);
+          }
         }
 
         if (result.fixtures) {
@@ -136,7 +206,7 @@ try {
         }
 
         console.info(
-          `\n[seed] Hoàn tất thành công: ${result.summary.totalInserted} bản ghi học liệu mới, ${result.summary.totalSkipped} bản ghi đã có từ trước (không sửa đổi revision bất biến).`,
+          `\n[seed] Hoàn tất thành công: ${result.summary.totalInserted} bản ghi học liệu mới, ${result.summary.totalSynced} bản ghi được đồng bộ/khôi phục, ${result.summary.totalSkipped} bản ghi được giữ nguyên/bỏ qua (bảo toàn revision bất biến).`,
         );
       }
     }
