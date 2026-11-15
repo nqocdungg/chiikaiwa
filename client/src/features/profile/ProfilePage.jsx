@@ -12,6 +12,7 @@ import {
   MAX_PROFILE_INTERESTS,
   buildProfilePatchPayload,
   createDraftFromUser,
+  mergeDraftChangesOntoUser,
   validateCurrentPasswordInput,
   validateDisplayNameInput,
   validateNewPasswordInput,
@@ -53,8 +54,15 @@ const SESSION_EXPIRED_RELOGIN_NOTICE =
  * @param {string} props.role
  * @param {(patch: Partial<SelfUser>) => void} props.updateUser
  * @param {(notice: string) => void} props.onSessionRevoked
+ * @param {() => Promise<void>} props.onRefreshSession
  */
-function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
+function ProfileWorkspace({
+  initialUser,
+  role,
+  updateUser,
+  onSessionRevoked,
+  onRefreshSession,
+}) {
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -93,6 +101,10 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
       null
     ),
   );
+  const [identityConflictMessage, setIdentityConflictMessage] = useState(
+    /** @type {string | null} */ (null),
+  );
+  const [isReloadingProfile, setIsReloadingProfile] = useState(false);
   const [isSyncingConflict, setIsSyncingConflict] = useState(false);
 
   // Idempotency-Key tracker for retrying the exact same profile update intent after a retryable error
@@ -292,7 +304,12 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
     setProfileSubmitting(true);
 
     try {
-      const res = await api.patch('/me/profile', payload, { idempotencyKey });
+      const res = await api.patch('/me/profile', payload, {
+        idempotencyKey,
+        headers: {
+          'X-Expected-Actor': baseUser.id,
+        },
+      });
       if (!isMountedRef.current || startEpoch !== getIdentityEpoch()) {
         return;
       }
@@ -303,6 +320,7 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
       setDraft(createDraftFromUser(updatedSelf));
       setIsDirty(false);
       setConflictState(null);
+      setIdentityConflictMessage(null);
       setProfileFieldErrors({});
       setProfileError(null);
       setProfileSuccess('Đã lưu hồ sơ cá nhân thành công.');
@@ -321,6 +339,15 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
 
         if (err.isAuthRequired()) {
           onSessionRevoked(SESSION_EXPIRED_RELOGIN_NOTICE);
+          return;
+        }
+
+        if (err.code === 'IDENTITY_CONFLICT') {
+          setConflictState(null);
+          setIdentityConflictMessage(
+            err.message ||
+              'Tài khoản đăng nhập đã thay đổi. Vui lòng tải lại hồ sơ trước khi lưu.',
+          );
           return;
         }
 
@@ -402,7 +429,20 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
       const data = /** @type {{ kind?: string, user?: SelfUser }} */ (res.data);
       if (data?.kind === 'user' && data.user) {
         const latestUser = data.user;
+        if (latestUser.id !== baseUser.id) {
+          setConflictState(null);
+          setIdentityConflictMessage(
+            'Tài khoản đăng nhập đã thay đổi. Vui lòng tải lại hồ sơ trước khi lưu.',
+          );
+          return;
+        }
+
+        const nextDraft = keepCurrentDraft
+          ? mergeDraftChangesOntoUser(baseUser, draft, latestUser)
+          : createDraftFromUser(latestUser);
+
         setBaseUser(latestUser);
+        setDraft(nextDraft);
         updateUser(latestUser);
         retryIntentRef.current = { payloadHash: '', idempotencyKey: null };
         setConflictState(null);
@@ -413,7 +453,6 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
             `Đã đồng bộ phiên bản mới nhất (v${latestUser.version}). Nội dung bạn đang nhập được giữ nguyên, hãy kiểm tra và bấm "Lưu hồ sơ".`,
           );
         } else {
-          setDraft(createDraftFromUser(latestUser));
           setIsDirty(false);
           setProfileFieldErrors({});
           setProfileSuccess(
@@ -440,6 +479,23 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
     } finally {
       if (isMountedRef.current && startEpoch === getIdentityEpoch()) {
         setIsSyncingConflict(false);
+      }
+    }
+  };
+
+  /**
+   * Reloads the active session/profile when the signed-in account changed in another tab.
+   */
+  const handleReloadProfile = async () => {
+    if (isReloadingProfile) {
+      return;
+    }
+    setIsReloadingProfile(true);
+    try {
+      await onRefreshSession();
+    } finally {
+      if (isMountedRef.current) {
+        setIsReloadingProfile(false);
       }
     }
   };
@@ -670,6 +726,27 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
             </div>
           ) : null}
 
+          {identityConflictMessage ? (
+            <div className="ck-alert ck-alert--error mb-4" role="alert">
+              <div>
+                <strong className="block">
+                  Tài khoản đăng nhập đã thay đổi
+                </strong>
+                <p className="mt-1">{identityConflictMessage}</p>
+                <div className="ck-actions mt-3">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleReloadProfile}
+                    loading={isReloadingProfile}
+                  >
+                    {isReloadingProfile ? 'Đang tải lại...' : 'Tải lại hồ sơ'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {conflictState ? (
             <div className="ck-alert ck-alert--warning mb-4" role="alert">
               <div>
@@ -708,7 +785,11 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
           <form className="ck-form" onSubmit={handleProfileSubmit} noValidate>
             <fieldset
               className="ck-form border-0 p-0 m-0 min-w-0"
-              disabled={profileSubmitting || isSyncingConflict}
+              disabled={
+                profileSubmitting ||
+                isSyncingConflict ||
+                Boolean(identityConflictMessage)
+              }
             >
               {/* Display Name */}
               <Input
@@ -717,7 +798,6 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                 type="text"
                 label="Tên hiển thị"
                 required
-                maxLength={120}
                 value={draft.displayName}
                 onChange={(e) =>
                   updateDraftField('displayName', e.target.value, 'displayName')
@@ -788,6 +868,9 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                     }
                     disabled={catalogsLoading && levelOptions.length === 0}
                     aria-invalid={Boolean(levelError)}
+                    aria-describedby={
+                      levelError ? 'profile-level-error' : undefined
+                    }
                   >
                     <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
                     {draft.level &&
@@ -817,6 +900,9 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                     }
                     disabled={catalogsLoading && goalOptions.length === 0}
                     aria-invalid={Boolean(goalError)}
+                    aria-describedby={
+                      goalError ? 'profile-goal-error' : undefined
+                    }
                   >
                     <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
                     {draft.goal &&
@@ -852,6 +938,11 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                     }
                     disabled={catalogsLoading && languageOptions.length === 0}
                     aria-invalid={Boolean(nativeLangError)}
+                    aria-describedby={
+                      nativeLangError
+                        ? 'profile-native-language-error'
+                        : undefined
+                    }
                   >
                     <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
                     {draft.nativeLanguageCode &&
@@ -889,6 +980,9 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                     }
                     disabled={catalogsLoading && countryOptions.length === 0}
                     aria-invalid={Boolean(countryError)}
+                    aria-describedby={
+                      countryError ? 'profile-country-error' : undefined
+                    }
                   >
                     <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
                     {draft.countryCode &&
@@ -928,6 +1022,9 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                     }
                     disabled={catalogsLoading && ageGroupOptions.length === 0}
                     aria-invalid={Boolean(ageGroupError)}
+                    aria-describedby={
+                      ageGroupError ? 'profile-age-group-error' : undefined
+                    }
                   >
                     <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
                     {draft.ageGroup &&
@@ -963,6 +1060,9 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
                     }
                     disabled={catalogsLoading && genderOptions.length === 0}
                     aria-invalid={Boolean(genderError)}
+                    aria-describedby={
+                      genderError ? 'profile-gender-error' : undefined
+                    }
                   >
                     <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
                     {draft.gender &&
@@ -1147,7 +1247,15 @@ function ProfileWorkspace({ initialUser, role, updateUser, onSessionRevoked }) {
 }
 
 export function ProfilePage() {
-  const { user, kind, role, status, updateUser, invalidateSession } = useAuth();
+  const {
+    user,
+    kind,
+    role,
+    status,
+    updateUser,
+    invalidateSession,
+    refreshSession,
+  } = useAuth();
   const [revokedSessionNotice, setRevokedSessionNotice] = useState(
     /** @type {string | null} */ (null),
   );
@@ -1271,6 +1379,7 @@ export function ProfilePage() {
       role={role}
       updateUser={updateUser}
       onSessionRevoked={handleSessionRevoked}
+      onRefreshSession={refreshSession}
     />
   );
 }

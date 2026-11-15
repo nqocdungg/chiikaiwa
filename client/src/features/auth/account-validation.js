@@ -216,3 +216,54 @@ export function buildProfilePatchPayload(baseUser, draft) {
 
   return payload;
 }
+
+/**
+ * Merges only the fields that the user actually modified (relative to `prevBaseUser`)
+ * onto the latest server profile `latestUser`, preserving any server-side updates
+ * to fields the user did not touch.
+ *
+ * @param {SelfUser} prevBaseUser
+ * @param {ProfileDraft} currentDraft
+ * @param {SelfUser} latestUser
+ * @returns {ProfileDraft}
+ */
+export function mergeDraftChangesOntoUser(
+  prevBaseUser,
+  currentDraft,
+  latestUser,
+) {
+  const prevDraft = createDraftFromUser(prevBaseUser);
+  const latestDraft = createDraftFromUser(latestUser);
+
+  /** @type {ProfileDraft} */
+  const merged = {
+    ...latestDraft,
+    interests: [...latestDraft.interests],
+  };
+
+  if (currentDraft.displayName !== prevDraft.displayName) {
+    merged.displayName = currentDraft.displayName;
+  }
+
+  if (currentDraft.avatarKey !== prevDraft.avatarKey) {
+    merged.avatarKey = currentDraft.avatarKey;
+  }
+
+  for (const key of OPTIONAL_ENUM_KEYS) {
+    if (currentDraft[key] !== prevDraft[key]) {
+      merged[key] = currentDraft[key];
+    }
+  }
+
+  const interestsChanged =
+    currentDraft.interests.length !== prevDraft.interests.length ||
+    currentDraft.interests.some(
+      (code, idx) => code !== prevDraft.interests[idx],
+    );
+
+  if (interestsChanged) {
+    merged.interests = [...currentDraft.interests];
+  }
+
+  return merged;
+}

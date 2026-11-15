@@ -338,6 +338,11 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         await screen.findByText('Trình độ không nằm trong danh mục cho phép.'),
       ).toBeVisible();
       expect(
+        screen.getByLabelText('Trình độ tiếng Nhật'),
+      ).toHaveAccessibleDescription(
+        'Trình độ không nằm trong danh mục cho phép.',
+      );
+      expect(
         screen.queryByText('Đã lưu hồ sơ cá nhân thành công.'),
       ).not.toBeInTheDocument();
     });
@@ -556,6 +561,271 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       expect(
         await screen.findByText('Đã lưu hồ sơ cá nhân thành công.'),
       ).toBeVisible();
+    });
+
+    it('binds PATCH /me/profile to the opened account via X-Expected-Actor and requires reloading profile on 409 IDENTITY_CONFLICT', async () => {
+      const accountA = createMockUser({
+        id: '507f1f77bcf86cd799439011',
+        displayName: 'Tài khoản A',
+        version: 1,
+      });
+      const accountB = createMockUser({
+        id: '507f1f77bcf86cd799439022',
+        email: 'accountb@chiikaiwa.dev',
+        displayName: 'Tài khoản B',
+        version: 1,
+      });
+
+      let meCallCount = 0;
+      vi.spyOn(api, 'get').mockImplementation(async (path) => {
+        if (path === '/auth/me') {
+          meCallCount += 1;
+          return {
+            data: {
+              kind: 'user',
+              user: meCallCount === 1 ? accountA : accountB,
+            },
+            meta: {},
+            epoch: getIdentityEpoch(),
+          };
+        }
+        return {
+          data: MOCK_CATALOGS,
+          meta: {},
+          epoch: getIdentityEpoch(),
+        };
+      });
+
+      const patchSpy = vi.spyOn(api, 'patch').mockRejectedValueOnce(
+        new ApiError({
+          status: 409,
+          code: 'IDENTITY_CONFLICT',
+          message:
+            'Tài khoản đăng nhập đã thay đổi. Vui lòng tải lại hồ sơ trước khi lưu.',
+        }),
+      );
+
+      render(
+        <MemoryRouter initialEntries={['/profile']}>
+          <App />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Tên hiển thị *')).toHaveValue(
+          'Tài khoản A',
+        );
+      });
+
+      fireEvent.change(screen.getByLabelText('Tên hiển thị *'), {
+        target: { value: 'Nháp của A' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+
+      await waitFor(() => {
+        expect(patchSpy).toHaveBeenCalledTimes(1);
+      });
+      expect(patchSpy.mock.calls[0][2]?.headers).toEqual({
+        'X-Expected-Actor': accountA.id,
+      });
+
+      expect(
+        await screen.findByText('Tài khoản đăng nhập đã thay đổi'),
+      ).toBeVisible();
+      expect(
+        screen.queryByText('Đã lưu hồ sơ cá nhân thành công.'),
+      ).not.toBeInTheDocument();
+
+      // Reloading profile switches cleanly to account B and discards A's draft
+      fireEvent.click(screen.getByRole('button', { name: 'Tải lại hồ sơ' }));
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Tên hiển thị *')).toHaveValue(
+          'Tài khoản B',
+        );
+      });
+    });
+
+    it('merges only user-edited fields onto the latest server profile on conflict sync without deleting untouched fields like countryCode', async () => {
+      const userV1 = createMockUser({
+        version: 1,
+        displayName: 'Tên Cũ',
+        profile: {
+          level: 'N4',
+          goal: 'travel',
+          nativeLanguageCode: 'vi',
+          interests: ['music', 'books'],
+        },
+      });
+      const userV2WithJp = createMockUser({
+        version: 2,
+        displayName: 'Tên Cũ',
+        profile: {
+          level: 'N4',
+          goal: 'travel',
+          nativeLanguageCode: 'vi',
+          countryCode: 'JP',
+          interests: ['music', 'books'],
+        },
+      });
+      const userV3Saved = createMockUser({
+        version: 3,
+        displayName: 'Tên Mới Tab 1',
+        profile: {
+          level: 'N4',
+          goal: 'travel',
+          nativeLanguageCode: 'vi',
+          countryCode: 'JP',
+          interests: ['music', 'books'],
+        },
+      });
+
+      let meCallCount = 0;
+      vi.spyOn(api, 'get').mockImplementation(async (path) => {
+        if (path === '/auth/me') {
+          meCallCount += 1;
+          return {
+            data: {
+              kind: 'user',
+              user: meCallCount === 1 ? userV1 : userV2WithJp,
+            },
+            meta: {},
+            epoch: getIdentityEpoch(),
+          };
+        }
+        return {
+          data: MOCK_CATALOGS,
+          meta: {},
+          epoch: getIdentityEpoch(),
+        };
+      });
+
+      const patchSpy = vi
+        .spyOn(api, 'patch')
+        .mockRejectedValueOnce(
+          new ApiError({
+            status: 409,
+            code: 'VERSION_CONFLICT',
+            message: 'Dữ liệu đã thay đổi. Vui lòng tải lại.',
+            details: { currentVersion: 2 },
+          }),
+        )
+        .mockResolvedValueOnce({
+          data: userV3Saved,
+          meta: {},
+          epoch: getIdentityEpoch(),
+        });
+
+      render(
+        <MemoryRouter initialEntries={['/profile']}>
+          <App />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Tên hiển thị *')).toHaveValue('Tên Cũ');
+      });
+
+      // Tab 1 only edits displayName; countryCode is untouched
+      fireEvent.change(screen.getByLabelText('Tên hiển thị *'), {
+        target: { value: 'Tên Mới Tab 1' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      expect(
+        await screen.findByText('Xung đột phiên bản dữ liệu'),
+      ).toBeVisible();
+
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Đồng bộ phiên bản mới và giữ nội dung đang nhập',
+        }),
+      );
+
+      expect(
+        await screen.findByText(/Đã đồng bộ phiên bản mới nhất \(v2\)/u),
+      ).toBeVisible();
+      expect(screen.getByLabelText('Tên hiển thị *')).toHaveValue(
+        'Tên Mới Tab 1',
+      );
+      expect(screen.getByLabelText('Quốc gia đang sinh sống')).toHaveValue(
+        'JP',
+      );
+
+      // Re-submit after sync: must send new expectedVersion (2) and displayName, omitting countryCode
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+
+      await waitFor(() => {
+        expect(patchSpy).toHaveBeenCalledTimes(2);
+      });
+      const secondPayload = patchSpy.mock.calls[1][1];
+      expect(secondPayload).toEqual({
+        expectedVersion: 2,
+        displayName: 'Tên Mới Tab 1',
+      });
+    });
+
+    it('counts displayName by Unicode code points (allows 100 emojis without UTF-16 truncation and rejects 101 code points)', async () => {
+      const initialUser = createMockUser({ version: 1 });
+      const hundredEmojis = '😀'.repeat(100);
+      const oneHundredOneEmojis = '😀'.repeat(101);
+
+      vi.spyOn(api, 'get').mockImplementation(async (path) => {
+        if (path === '/auth/me') {
+          return {
+            data: { kind: 'user', user: initialUser },
+            meta: {},
+            epoch: getIdentityEpoch(),
+          };
+        }
+        return {
+          data: MOCK_CATALOGS,
+          meta: {},
+          epoch: getIdentityEpoch(),
+        };
+      });
+
+      const patchSpy = vi.spyOn(api, 'patch').mockResolvedValueOnce({
+        data: createMockUser({ version: 2, displayName: hundredEmojis }),
+        meta: {},
+        epoch: getIdentityEpoch(),
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/profile']}>
+          <App />
+        </MemoryRouter>,
+      );
+
+      const displayNameInput = await screen.findByLabelText('Tên hiển thị *');
+      expect(displayNameInput).not.toHaveAttribute('maxlength');
+
+      // 101 code points -> validation error on displayName field, no PATCH sent
+      fireEvent.change(displayNameInput, {
+        target: { value: oneHundredOneEmojis },
+      });
+      expect(displayNameInput).toHaveValue(oneHundredOneEmojis);
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+
+      expect(displayNameInput).toHaveAccessibleDescription(
+        'Tên hiển thị sau khi cắt khoảng trắng phải từ 1 đến 100 ký tự.',
+      );
+      expect(patchSpy).not.toHaveBeenCalled();
+
+      // 100 code points (200 UTF-16 units) -> preserved in full and sent to server
+      fireEvent.change(displayNameInput, {
+        target: { value: hundredEmojis },
+      });
+      expect(displayNameInput).toHaveValue(hundredEmojis);
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+
+      await waitFor(() => {
+        expect(patchSpy).toHaveBeenCalledTimes(1);
+      });
+      expect(patchSpy.mock.calls[0][1]).toMatchObject({
+        expectedVersion: 1,
+        displayName: hundredEmojis,
+      });
     });
   });
 
