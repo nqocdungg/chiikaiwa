@@ -28,7 +28,7 @@ const IDEMPOTENCY_EXEMPT_PATHS = [
   /^\/auth\/password-reset-requests$/u,
   /^\/auth\/password-resets$/u,
   /^\/auth\/register$/u,
-  /^\/study\/cards\/reveal$/u,
+  /^\/study\/cards\/(query|reveal)$/u,
   /\/heartbeat$/u,
 ];
 

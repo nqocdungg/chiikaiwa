@@ -22,6 +22,8 @@ const expectedPaths = [
   '/topic-versions/{id}',
   '/topic-versions/{id}/knowledge',
   '/knowledge/{id}',
+  '/study/cards/query',
+  '/study/cards/reveal',
 ];
 
 const writeOperations = [
@@ -36,6 +38,27 @@ const writeOperations = [
 
 describe('OpenAPI contract', () => {
   const document = /** @type {Record<string, any>} */ (readOpenApiDocument());
+
+  it('documents study-card rights and keeps answers out of the query projection', () => {
+    for (const action of ['query', 'reveal']) {
+      const operation = document.paths[`/study/cards/${action}`].post;
+      expect(operation.security).toEqual([
+        { sessionCookie: [], csrfToken: [] },
+        { guestCookie: [], csrfToken: [] },
+      ]);
+      expect(operation.parameters ?? []).not.toContainEqual({
+        $ref: '#/components/parameters/IdempotencyKey',
+      });
+    }
+    const schemas = document.components.schemas;
+    expect(
+      schemas.StudyQueryResponse.properties.data.properties.items.items
+        .properties,
+    ).not.toHaveProperty('back');
+    expect(schemas.StudyRevealResponse.properties.data.required).toContain(
+      'reviewTicket',
+    );
+  });
 
   it('documents LiveKit signature auth, raw content type and response statuses without browser auth', () => {
     const webhook = document.paths['/webhooks/livekit'].post;
