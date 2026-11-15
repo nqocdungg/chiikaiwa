@@ -9,6 +9,9 @@ const { ObjectId } = mongoose.Types;
 
 /**
  * Kiểm tra xem tên cơ sở dữ liệu có phải là môi trường production cần bảo vệ hay không (06 §13.1).
+ * Áp dụng whitelist chặt chẽ (fail-closed): Chỉ cho phép các database có hậu tố/tiền tố dev, demo, test.
+ * Mọi database không thuộc danh sách này đều bị coi là môi trường cần bảo vệ.
+ *
  * @param {string} dbName
  * @returns {boolean}
  */
@@ -16,23 +19,43 @@ export function isProtectedDatabase(dbName) {
   if (!dbName || typeof dbName !== 'string') return true;
   const lower = dbName.toLowerCase().trim();
 
-  // Cho phép các database phát triển, thử nghiệm, demo
-  if (
-    lower.includes('_dev') ||
-    lower.includes('_demo') ||
-    lower.includes('test') ||
+  // Whitelist: Chỉ cho phép các database có định danh dev, demo, test rõ ràng (fail-closed)
+  const isDev =
     lower === 'chiikaiwa_dev' ||
-    lower === 'chiikaiwa_demo'
-  ) {
+    lower.endsWith('_dev') ||
+    lower.startsWith('dev_') ||
+    lower.includes('_dev_');
+  const isDemo =
+    lower === 'chiikaiwa_demo' ||
+    lower.endsWith('_demo') ||
+    lower.startsWith('demo_') ||
+    lower.includes('_demo_');
+  const isTest =
+    lower.includes('test') ||
+    lower.endsWith('_test') ||
+    lower.startsWith('test_');
+
+  if (isDev || isDemo || isTest) {
     return false;
   }
 
-  // Chặn nếu có từ khóa production / prod hoặc các môi trường thật
-  if (lower.includes('prod') || lower.includes('production')) {
-    return true;
-  }
+  // Mọi database không thuộc whitelist đều bị coi là protected (fail-closed)
+  return true;
+}
 
-  return false;
+/**
+ * Kiểm tra guard bảo vệ database ngay trong module seed (fail-closed, 06 §13.1).
+ * @param {import('mongoose').mongo.Db} db
+ * @param {object} [options]
+ * @param {boolean} [options.forceProduction]
+ */
+export function assertDatabaseNotProtected(db, options = {}) {
+  const dbName = db?.databaseName;
+  if (isProtectedDatabase(dbName) && !options.forceProduction) {
+    throw new Error(
+      `[seed] LỖI BẢO MẬT: Cơ sở dữ liệu '${dbName}' không thuộc whitelist dev/demo/test (fail-closed). Thao tác seed bị chặn (06 §13.1). Chỉ định forceProduction=true nếu thực sự cần ghi đè.`,
+    );
+  }
 }
 
 /**
@@ -56,6 +79,119 @@ function toObjectIdArray(ids) {
 }
 
 /**
+ * Nạp hoặc cập nhật an toàn một mục học liệu và version tương ứng (DATA-002, 06 §13.1).
+ * Đảm bảo:
+ * 1. Tính bất biến: Không ghi đè content_versions đã có.
+ * 2. Phục hồi lỗi phân đoạn (partial failure): Nếu version đã có nhưng content_items bị thiếu, khôi phục lại content_items.
+ * 3. Bảo toàn nghiệp vụ: Không ghi đè latestRevision, publishedVersionId, status khi DB đã có revision mới hơn hoặc Admin đã ẩn học liệu.
+ *
+ * @param {object} params
+ * @param {import('mongoose').mongo.Collection} params.itemsColl
+ * @param {import('mongoose').mongo.Collection} params.versionsColl
+ * @param {any} params.item
+ * @param {'knowledge' | 'question' | 'scenario' | 'deck'} params.kind
+ * @param {Record<string, any>} params.payload
+ * @param {import('mongoose').Types.ObjectId} params.adminId
+ * @param {Date} params.now
+ * @param {Record<string, any>} [params.extraItemFields]
+ * @returns {Promise<{ inserted: boolean, skipped: boolean }>}
+ */
+async function upsertContentItemAndVersion({
+  itemsColl,
+  versionsColl,
+  item,
+  kind,
+  payload,
+  adminId,
+  now,
+  extraItemFields = {},
+}) {
+  const contentId = toObjectId(item.contentId);
+  const versionId = toObjectId(item.versionId);
+  const revision = typeof item.revision === 'number' ? item.revision : 1;
+
+  // 1. Kiểm tra version trong content_versions
+  const existingVersion = await versionsColl.findOne(
+    { _id: versionId },
+    { projection: { _id: 1 } },
+  );
+
+  let versionInserted = false;
+  if (!existingVersion) {
+    await versionsColl.insertOne({
+      _id: versionId,
+      contentId,
+      kind,
+      revision,
+      payload,
+      publishedAt: now,
+      publishedBy: adminId,
+    });
+    versionInserted = true;
+  }
+
+  // 2. Kiểm tra và đồng bộ content_items (xử lý cả partial failure recovery và quy tắc revision/hide)
+  const existingItem = await itemsColl.findOne({ _id: contentId });
+
+  if (!existingItem) {
+    // Trường hợp content_items chưa tồn tại (chạy lần đầu hoặc khôi phục sau partial failure)
+    await itemsColl.updateOne(
+      { _id: contentId },
+      {
+        $set: {
+          kind,
+          status: 'published',
+          latestRevision: revision,
+          publishedVersionId: versionId,
+          draftPayload: payload,
+          updatedBy: adminId,
+          updatedAt: now,
+          ...extraItemFields,
+        },
+        $setOnInsert: {
+          version: revision,
+          createdBy: adminId,
+          createdAt: now,
+        },
+      },
+      { upsert: true },
+    );
+  } else {
+    // Trường hợp content_items đã tồn tại:
+    // Tuân thủ quy tắc: Không ghi đè latestRevision, publishedVersionId, status khi DB đã có revision mới hơn hoặc Admin đã ẩn học liệu.
+    const hasNewerRevision =
+      typeof existingItem.latestRevision === 'number' &&
+      existingItem.latestRevision > revision;
+    const isHidden = existingItem.status === 'hidden';
+
+    /** @type {Record<string, any>} */
+    const updateSet = {
+      updatedAt: now,
+    };
+
+    if (!isHidden) {
+      updateSet.status = 'published';
+    }
+
+    if (!hasNewerRevision) {
+      updateSet.latestRevision = revision;
+      updateSet.publishedVersionId = versionId;
+      updateSet.draftPayload = payload;
+      if (extraItemFields && Object.keys(extraItemFields).length > 0) {
+        Object.assign(updateSet, extraItemFields);
+      }
+    }
+
+    await itemsColl.updateOne({ _id: contentId }, { $set: updateSet });
+  }
+
+  return {
+    inserted: versionInserted,
+    skipped: !versionInserted,
+  };
+}
+
+/**
  * Nạp một bộ dữ liệu học liệu vào cơ sở dữ liệu một cách idempotent (DATA-002, 06 §13.1).
  * Tuân thủ nghiêm ngặt:
  * 1. Pre-validation toàn diện trước khi ghi.
@@ -69,6 +205,7 @@ function toObjectIdArray(ids) {
  * @param {string} [options.datasetName]
  * @param {import('mongoose').Types.ObjectId} [options.adminId]
  * @param {Date} [options.now]
+ * @param {boolean} [options.forceProduction]
  * @returns {Promise<{
  *   success: boolean,
  *   datasetName: string,
@@ -82,6 +219,8 @@ function toObjectIdArray(ids) {
  * }>}
  */
 export async function seedContentDataset(db, dataset, options = {}) {
+  assertDatabaseNotProtected(db, options);
+
   const datasetName = options.datasetName || 'unnamed';
   const stats = {
     knowledges: { total: 0, inserted: 0, skipped: 0 },
@@ -122,293 +261,118 @@ export async function seedContentDataset(db, dataset, options = {}) {
     : [];
   stats.knowledges.total = knowledges.length;
   for (const item of knowledges) {
-    const contentId = toObjectId(item.contentId);
-    const versionId = toObjectId(item.versionId);
-    const revision = typeof item.revision === 'number' ? item.revision : 1;
+    const payload = {
+      type: item.type,
+      expression: item.expression,
+      reading: item.reading,
+      meaning: item.meaning,
+      examples: item.examples || [],
+    };
 
-    const existingVersion = await versionsColl.findOne(
-      { _id: versionId },
-      { projection: { _id: 1 } },
-    );
-
-    if (existingVersion) {
-      // Đã có revision này -> Giữ nguyên tính bất biến, chỉ đồng bộ content_items nếu cần
-      await itemsColl.updateOne(
-        { _id: contentId },
-        {
-          $set: {
-            status: 'published',
-            publishedVersionId: versionId,
-            latestRevision: revision,
-            updatedAt: now,
-          },
-        },
-      );
-      stats.knowledges.skipped++;
-    } else {
-      const payload = {
-        type: item.type,
-        expression: item.expression,
-        reading: item.reading,
-        meaning: item.meaning,
-        examples: item.examples || [],
-      };
-
-      await versionsColl.insertOne({
-        _id: versionId,
-        contentId,
-        kind: 'knowledge',
-        revision,
-        payload,
-        publishedAt: now,
-        publishedBy: adminId,
-      });
-
-      await itemsColl.updateOne(
-        { _id: contentId },
-        {
-          $set: {
-            kind: 'knowledge',
-            status: 'published',
-            latestRevision: revision,
-            publishedVersionId: versionId,
-            draftPayload: payload,
-            updatedBy: adminId,
-            updatedAt: now,
-          },
-          $setOnInsert: {
-            version: revision,
-            createdBy: adminId,
-            createdAt: now,
-          },
-        },
-        { upsert: true },
-      );
-      stats.knowledges.inserted++;
-    }
+    const res = await upsertContentItemAndVersion({
+      itemsColl,
+      versionsColl,
+      item,
+      kind: 'knowledge',
+      payload,
+      adminId,
+      now,
+    });
+    if (res.inserted) stats.knowledges.inserted++;
+    else stats.knowledges.skipped++;
   }
 
   // 3.2. Nạp questions
   const questions = Array.isArray(dataset.questions) ? dataset.questions : [];
   stats.questions.total = questions.length;
   for (const item of questions) {
-    const contentId = toObjectId(item.contentId);
-    const versionId = toObjectId(item.versionId);
-    const revision = typeof item.revision === 'number' ? item.revision : 1;
-
-    const existingVersion = await versionsColl.findOne(
-      { _id: versionId },
-      { projection: { _id: 1 } },
-    );
-
-    if (existingVersion) {
-      await itemsColl.updateOne(
-        { _id: contentId },
-        {
-          $set: {
-            status: 'published',
-            publishedVersionId: versionId,
-            latestRevision: revision,
-            updatedAt: now,
-          },
-        },
-      );
-      stats.questions.skipped++;
-    } else {
-      /** @type {Record<string, any>} */
-      const payload = {
-        type: item.type,
-        prompt: item.prompt,
-        explanation: item.explanation,
-        knowledgeVersionIds: toObjectIdArray(item.knowledgeVersionIds),
-      };
-      if (item.options !== undefined) payload.options = item.options;
-      if (item.correctOptionId !== undefined) {
-        payload.correctOptionId = item.correctOptionId;
-      }
-      if (item.acceptedAnswers !== undefined) {
-        payload.acceptedAnswers = item.acceptedAnswers;
-      }
-
-      await versionsColl.insertOne({
-        _id: versionId,
-        contentId,
-        kind: 'question',
-        revision,
-        payload,
-        publishedAt: now,
-        publishedBy: adminId,
-      });
-
-      await itemsColl.updateOne(
-        { _id: contentId },
-        {
-          $set: {
-            kind: 'question',
-            status: 'published',
-            latestRevision: revision,
-            publishedVersionId: versionId,
-            draftPayload: payload,
-            updatedBy: adminId,
-            updatedAt: now,
-          },
-          $setOnInsert: {
-            version: revision,
-            createdBy: adminId,
-            createdAt: now,
-          },
-        },
-        { upsert: true },
-      );
-      stats.questions.inserted++;
+    /** @type {Record<string, any>} */
+    const payload = {
+      type: item.type,
+      prompt: item.prompt,
+      explanation: item.explanation,
+      knowledgeVersionIds: toObjectIdArray(item.knowledgeVersionIds),
+    };
+    if (item.options !== undefined) payload.options = item.options;
+    if (item.correctOptionId !== undefined) {
+      payload.correctOptionId = item.correctOptionId;
     }
+    if (item.acceptedAnswers !== undefined) {
+      payload.acceptedAnswers = item.acceptedAnswers;
+    }
+
+    const res = await upsertContentItemAndVersion({
+      itemsColl,
+      versionsColl,
+      item,
+      kind: 'question',
+      payload,
+      adminId,
+      now,
+    });
+    if (res.inserted) stats.questions.inserted++;
+    else stats.questions.skipped++;
   }
 
   // 3.3. Nạp scenarios
   const scenarios = Array.isArray(dataset.scenarios) ? dataset.scenarios : [];
   stats.scenarios.total = scenarios.length;
   for (const item of scenarios) {
-    const contentId = toObjectId(item.contentId);
-    const versionId = toObjectId(item.versionId);
-    const revision = typeof item.revision === 'number' ? item.revision : 1;
+    const payload = {
+      title: item.title,
+      context: item.context,
+      objective: item.objective,
+      roleA: item.roleA,
+      roleB: item.roleB,
+      hints: item.hints || [],
+      knowledgeVersionIds: toObjectIdArray(item.knowledgeVersionIds),
+      questionVersionIds: toObjectIdArray(item.questionVersionIds),
+    };
 
-    const existingVersion = await versionsColl.findOne(
-      { _id: versionId },
-      { projection: { _id: 1 } },
-    );
-
-    if (existingVersion) {
-      await itemsColl.updateOne(
-        { _id: contentId },
-        {
-          $set: {
-            status: 'published',
-            publishedVersionId: versionId,
-            latestRevision: revision,
-            updatedAt: now,
-          },
-        },
-      );
-      stats.scenarios.skipped++;
-    } else {
-      const payload = {
-        title: item.title,
-        context: item.context,
-        objective: item.objective,
-        roleA: item.roleA,
-        roleB: item.roleB,
-        hints: item.hints || [],
-        knowledgeVersionIds: toObjectIdArray(item.knowledgeVersionIds),
-        questionVersionIds: toObjectIdArray(item.questionVersionIds),
-      };
-
-      await versionsColl.insertOne({
-        _id: versionId,
-        contentId,
-        kind: 'scenario',
-        revision,
-        payload,
-        publishedAt: now,
-        publishedBy: adminId,
-      });
-
-      await itemsColl.updateOne(
-        { _id: contentId },
-        {
-          $set: {
-            kind: 'scenario',
-            status: 'published',
-            latestRevision: revision,
-            publishedVersionId: versionId,
-            draftPayload: payload,
-            updatedBy: adminId,
-            updatedAt: now,
-          },
-          $setOnInsert: {
-            version: revision,
-            createdBy: adminId,
-            createdAt: now,
-          },
-        },
-        { upsert: true },
-      );
-      stats.scenarios.inserted++;
-    }
+    const res = await upsertContentItemAndVersion({
+      itemsColl,
+      versionsColl,
+      item,
+      kind: 'scenario',
+      payload,
+      adminId,
+      now,
+    });
+    if (res.inserted) stats.scenarios.inserted++;
+    else stats.scenarios.skipped++;
   }
 
   // 3.4. Nạp decks
   const decks = Array.isArray(dataset.decks) ? dataset.decks : [];
   stats.decks.total = decks.length;
   for (const item of decks) {
-    const contentId = toObjectId(item.contentId);
-    const versionId = toObjectId(item.versionId);
-    const revision = typeof item.revision === 'number' ? item.revision : 1;
+    const payload = {
+      title: item.title,
+      topicKey: item.topicKey,
+      level: item.level,
+      description: item.description,
+      scenarioVersionIds: toObjectIdArray(item.scenarioVersionIds),
+      knowledgeVersionIds: toObjectIdArray(item.knowledgeVersionIds),
+      questionVersionIds: toObjectIdArray(item.questionVersionIds),
+    };
 
-    const existingVersion = await versionsColl.findOne(
-      { _id: versionId },
-      { projection: { _id: 1 } },
-    );
+    const extraItemFields = {
+      level: item.level,
+      title: item.title,
+    };
 
-    if (existingVersion) {
-      await itemsColl.updateOne(
-        { _id: contentId },
-        {
-          $set: {
-            status: 'published',
-            publishedVersionId: versionId,
-            latestRevision: revision,
-            level: item.level,
-            title: item.title,
-            updatedAt: now,
-          },
-        },
-      );
-      stats.decks.skipped++;
-    } else {
-      const payload = {
-        title: item.title,
-        topicKey: item.topicKey,
-        level: item.level,
-        description: item.description,
-        scenarioVersionIds: toObjectIdArray(item.scenarioVersionIds),
-        knowledgeVersionIds: toObjectIdArray(item.knowledgeVersionIds),
-        questionVersionIds: toObjectIdArray(item.questionVersionIds),
-      };
-
-      await versionsColl.insertOne({
-        _id: versionId,
-        contentId,
-        kind: 'deck',
-        revision,
-        payload,
-        publishedAt: now,
-        publishedBy: adminId,
-      });
-
-      await itemsColl.updateOne(
-        { _id: contentId },
-        {
-          $set: {
-            kind: 'deck',
-            status: 'published',
-            latestRevision: revision,
-            publishedVersionId: versionId,
-            level: item.level,
-            title: item.title,
-            draftPayload: payload,
-            updatedBy: adminId,
-            updatedAt: now,
-          },
-          $setOnInsert: {
-            version: revision,
-            createdBy: adminId,
-            createdAt: now,
-          },
-        },
-        { upsert: true },
-      );
-      stats.decks.inserted++;
-    }
+    const res = await upsertContentItemAndVersion({
+      itemsColl,
+      versionsColl,
+      item,
+      kind: 'deck',
+      payload,
+      adminId,
+      now,
+      extraItemFields,
+    });
+    if (res.inserted) stats.decks.inserted++;
+    else stats.decks.skipped++;
   }
 
   return {
@@ -428,9 +392,12 @@ export async function seedContentDataset(db, dataset, options = {}) {
  * @param {Date} [options.now]
  * @param {string} [options.adminPassword]
  * @param {string} [options.userPassword]
+ * @param {boolean} [options.forceProduction]
  * @returns {Promise<{ inserted: number, skipped: number, total: number }>}
  */
 export async function seedTestAccountFixtures(db, options = {}) {
+  assertDatabaseNotProtected(db, options);
+
   const usersColl = db.collection('users');
   const actorStatesColl = db.collection('actor_states');
   const statsColl = db.collection('statistics');
@@ -454,10 +421,19 @@ export async function seedTestAccountFixtures(db, options = {}) {
       const customUserPassword =
         options.userPassword || process.env.SEED_USER_PASSWORD;
 
-      if (user.role === 'admin' && customAdminPassword) {
-        passwordHash = await hashPassword(customAdminPassword);
-      } else if (user.role !== 'admin' && customUserPassword) {
-        passwordHash = await hashPassword(customUserPassword);
+      if (user.role === 'admin') {
+        if (
+          !customAdminPassword ||
+          typeof customAdminPassword !== 'string' ||
+          !customAdminPassword.trim()
+        ) {
+          throw new Error(
+            '[seed] Bắt buộc cung cấp biến môi trường SEED_ADMIN_PASSWORD để khởi tạo tài khoản Admin (06 §13.1). Tuyệt đối không dùng mật khẩu mặc định.',
+          );
+        }
+        passwordHash = await hashPassword(customAdminPassword.trim());
+      } else if (customUserPassword) {
+        passwordHash = await hashPassword(customUserPassword.trim());
       }
 
       await usersColl.insertOne({
@@ -491,7 +467,7 @@ export async function seedTestAccountFixtures(db, options = {}) {
     {
       $setOnInsert: {
         registeredAccounts: SEED_USER_FIXTURES.length,
-        startedSessions: 1,
+        startedSessions: 0,
         reviewCount: 0,
         submittedQuizCount: 0,
         updatedAt: now,
@@ -523,6 +499,9 @@ export const AVAILABLE_DATASETS = {
  * @param {object} [options]
  * @param {boolean} [options.includeFixtures=true]
  * @param {string[]} [options.datasets] - Danh sách tên dataset cần nạp (['sample', 'n1'])
+ * @param {boolean} [options.forceProduction]
+ * @param {string} [options.adminPassword]
+ * @param {string} [options.userPassword]
  * @returns {Promise<{
  *   success: boolean,
  *   datasets: Array<{ datasetName: string, stats: any, errors: string[] }>,
@@ -531,6 +510,8 @@ export const AVAILABLE_DATASETS = {
  * }>}
  */
 export async function seedAll(db, options = {}) {
+  assertDatabaseNotProtected(db, options);
+
   const datasetKeys = options.datasets || Object.keys(AVAILABLE_DATASETS);
   const includeFixtures = options.includeFixtures !== false;
 
@@ -548,6 +529,7 @@ export async function seedAll(db, options = {}) {
     const res = await seedContentDataset(db, dataset, {
       datasetName: key,
       now: new Date(),
+      forceProduction: options.forceProduction,
     });
 
     if (!res.success) {
@@ -575,7 +557,11 @@ export async function seedAll(db, options = {}) {
 
   let fixturesResult;
   if (includeFixtures) {
-    fixturesResult = await seedTestAccountFixtures(db);
+    fixturesResult = await seedTestAccountFixtures(db, {
+      adminPassword: options.adminPassword,
+      userPassword: options.userPassword,
+      forceProduction: options.forceProduction,
+    });
   }
 
   return {

@@ -209,6 +209,37 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Triển khai: Chạy [migration đăng ký FSRS-6](../server/persistence/migrations/20261115000100-register-fsrs-six-config.js) trên database đích trước khi gọi reveal. Migration giữ nguyên cấu hình theo hash. Vé dùng khóa server hiện có với miền chữ ký riêng.
 - Tiếp theo: BE-025 dùng `verifyReviewTicket`, kiểm tra lại quyền/scope hiện hành, revision và version trước khi ghi review. Nghiệm thu luồng cấp khách và chọn bộ với BE-015/BE-022, quản lý bộ cá nhân với BE-035. Kiểm thử HTTP hiện dùng bản ghi MongoDB được chuẩn bị sẵn cho các luồng đó.
 
+### DATA-002 — Script seed idempotent và fixtures kiểm thử
+
+- Ngày cập nhật: 2026-11-15
+- Trạng thái: Đã giải quyết triệt để toàn bộ 7 điểm nhận xét review; sẵn sàng merge vào `develop`.
+- PR: Branch `feature/DATA-002-idempotent-seed-script`.
+- Đã làm (sửa theo review):
+  - **Revision guard**: Cập nhật `seedContentDataset` bảo toàn tính bất biến và toàn vẹn nghiệp vụ. Tuyệt đối không ghi đè `latestRevision`, `publishedVersionId`, `draftPayload` khi DB đã có revision mới hơn (`existingItem.latestRevision > revision`); tuyệt đối không ghi đè `status: 'published'` khi Admin đã ẩn học liệu (`status === 'hidden'`).
+  - **Admin password**: Bỏ mật khẩu mặc định của Admin trong `account-fixtures.js` (`passwordHash: null`). Bắt buộc cung cấp qua biến môi trường `SEED_ADMIN_PASSWORD` (ném lỗi nếu thiếu).
+  - **Production guard**: Chuyển đổi `isProtectedDatabase` sang whitelist dev/demo/test (fail-closed); tích hợp `assertDatabaseNotProtected` kiểm tra guard bảo vệ ngay trong module seed (`seedAll`, `seedContentDataset`, `seedTestAccountFixtures`).
+  - **Partial failure recovery**: Thiết kế hàm `upsertContentItemAndVersion` tự động phục hồi `content_items` bị thiếu khi chạy lại seed trong trường hợp lần chạy trước bị lỗi giữa chừng sau khi insert version.
+  - **Fixtures**: Sửa tài khoản `learnerC` sử dụng `goal: 'studyAndWork'` và `interests: ['technology', 'books']` hoàn toàn hợp lệ theo `CATALOGS.goals` và `CATALOGS.interests`.
+  - **Statistics**: Đổi baseline `startedSessions` trong `lifetime` statistics từ 1 → 0 theo đúng Database Design DB-T18 và TX-06.
+  - **Test suite**: Bổ sung unit tests (16 tests pass) và 2 integration tests mới kiểm chứng:
+    1. Re-seed sau khi Admin publish revision mới & ẩn học liệu: bảo toàn revision mới và trạng thái hidden.
+    2. Re-seed sau sự cố partial failure: khôi phục thành công `content_items` bị thiếu mà không nhân đôi version.
+- File liên quan:
+  - `server/persistence/seed/seed-content.js`
+  - `server/persistence/seed/account-fixtures.js`
+  - `scripts/seed.js`
+  - `tests/server/content-seed-idempotency.test.js`
+  - `tests/integration/seed-idempotency.integration.test.js`
+  - `docs/PROGRESS-TRACKER.md`
+- Kiểm chứng:
+  - `npm run lint`: Pass (0 errors, 0 warnings).
+  - `npm run format:check`: Pass.
+  - `npm run typecheck`: Pass (0 errors).
+  - `npm test`: 25 files passed, 327 tests passed.
+  - `npm run test:integration`: 15 files passed, 174 tests passed.
+  - `npm run build`: Pass (client 322ms, server syntax check pass).
+- Tiếp theo: Trình người dùng review và commit lên nhánh `feature/DATA-002-idempotent-seed-script`, merge `develop` vào nhánh con và cập nhật PR.
+
 ## Sprint 2
 
 Chưa có cập nhật.

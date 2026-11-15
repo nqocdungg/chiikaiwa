@@ -81,7 +81,7 @@ try {
 
   if (isProtectedDatabase(dbName) && !options.forceProduction) {
     console.error(
-      `[seed] LỖI BẢO MẬT: Cơ sở dữ liệu '${dbName}' là môi trường được bảo vệ (production). Seed bị chặn theo quy định 06 §13.1. Nếu bạn chắc chắn, hãy chỉ định thêm '--force-production-seed'.`,
+      `[seed] LỖI BẢO MẬT: Cơ sở dữ liệu '${dbName}' không thuộc whitelist dev/demo/test (fail-closed). Seed bị chặn theo quy định 06 §13.1. Nếu bạn chắc chắn, hãy chỉ định thêm '--force-production-seed'.`,
     );
     process.exitCode = 1;
   } else {
@@ -90,7 +90,10 @@ try {
     );
 
     if (options.fixturesOnly) {
-      const res = await seedTestAccountFixtures(db);
+      const res = await seedTestAccountFixtures(db, {
+        forceProduction: options.forceProduction,
+        adminPassword: process.env.SEED_ADMIN_PASSWORD,
+      });
       console.info(
         `[seed] Đã nạp fixtures: ${res.inserted} tạo mới, ${res.skipped} bỏ qua (tổng số: ${res.total}).`,
       );
@@ -105,6 +108,8 @@ try {
       const result = await seedAll(db, {
         datasets: datasetKeys,
         includeFixtures: !options.contentOnly,
+        forceProduction: options.forceProduction,
+        adminPassword: process.env.SEED_ADMIN_PASSWORD,
       });
 
       if (!result.success) {
