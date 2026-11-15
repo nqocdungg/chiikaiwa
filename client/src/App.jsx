@@ -1,12 +1,15 @@
 /// <reference types="vite/client" />
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Link, Route, Routes, useLocation } from 'react-router';
 import { AuthProvider } from './features/auth/AuthContext.jsx';
 import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage.jsx';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage.jsx';
 import { useAuth } from './features/auth/use-auth.js';
 import { ProfilePage } from './features/profile/ProfilePage.jsx';
+import { Landing } from './features/landing/Landing.jsx';
+import { Home } from './features/home/Home.jsx';
+import { activeLocationRef } from './features/home/navigation-tracker.js';
 import {
   InvitationRoute,
   ProtectedRoute,
@@ -30,7 +33,7 @@ const ComponentPreview = import.meta.env.DEV
  */
 function RouteShell({ screenId, title, description, children }) {
   return (
-    <section data-screen-id={screenId}>
+    <section data-screen-id={screenId} className="mx-auto max-w-4xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-ink">{title}</h1>
       {description ? <p className="mt-2 text-muted">{description}</p> : null}
       {children}
@@ -55,7 +58,11 @@ function LoginRouteShell() {
  * @param {{ skipInitialAuthCheck?: boolean }} [props]
  */
 export function App({ skipInitialAuthCheck = false } = {}) {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  useEffect(() => {
+    activeLocationRef.current = location;
+  }, [location]);
+  const { pathname } = location;
 
   if (ComponentPreview && pathname === '/__dev/components') {
     return (
@@ -67,29 +74,21 @@ export function App({ skipInitialAuthCheck = false } = {}) {
     );
   }
 
-  const isFullBleedAuthRoute =
-    pathname === '/forgot-password' || pathname === '/reset-password';
+  const isFullBleedRoute =
+    pathname === '/' ||
+    pathname === '/home' ||
+    pathname === '/forgot-password' ||
+    pathname === '/reset-password';
 
   return (
     <AuthProvider skipInitialCheck={skipInitialAuthCheck}>
       <div className="ck-app">
         <main
-          className={
-            isFullBleedAuthRoute ? 'w-full' : 'ck-page-container py-10'
-          }
+          className={isFullBleedRoute ? 'w-full' : 'ck-page-container py-10'}
         >
           <Routes>
             {/* SC-01: Public Landing */}
-            <Route
-              path="/"
-              element={
-                <RouteShell
-                  screenId="SC-01"
-                  title="Chiikaiwa"
-                  description="Website luyện hội thoại tiếng Nhật 1-1 theo vai và thẻ tình huống."
-                />
-              }
-            />
+            <Route path="/" element={<Landing />} />
 
             {/* SC-02: Public Only Auth routes */}
             <Route element={<PublicOnlyRoute />}>
@@ -104,10 +103,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
 
             {/* SC-03 - SC-05, SC-13, SC-16, SC-18: User-only routes (U) */}
             <Route element={<ProtectedRoute allowedRoles={['U']} />}>
-              <Route
-                path="/home"
-                element={<RouteShell screenId="SC-03" title="Trang chính" />}
-              />
+              <Route path="/home" element={<Home />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route
                 path="/match"
