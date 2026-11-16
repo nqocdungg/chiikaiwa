@@ -1092,6 +1092,8 @@ paths:
       summary: Tạo lượt làm quiz
       description: Tạo lượt quiz gồm tối đa 5 câu hỏi không trùng từ ngân hàng câu hỏi của bộ chủ đề.
       security: *studySecurity
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -1101,6 +1103,11 @@ paths:
       responses:
         '201':
           description: Lượt quiz đã được tạo thành công
+          headers:
+            Location:
+              description: URI của lượt quiz vừa tạo
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -1112,7 +1119,7 @@ paths:
         '403': *studyForbidden
         '404': *studyNotFound
         '409':
-          description: Ngân hàng không có câu hỏi khả dụng (QUIZ_UNAVAILABLE)
+          description: Ngân hàng không có câu hỏi khả dụng (QUIZ_UNAVAILABLE) hoặc Idempotency-Key đã dùng với nội dung khác (IDEMPOTENCY_CONFLICT)
           content: *studyError
         '410': *studyGone
         '413': *studyTooLarge
@@ -1158,12 +1165,7 @@ paths:
       security: *studySecurity
       parameters:
         - $ref: '#/components/parameters/QuizId'
-        - name: Idempotency-Key
-          in: header
-          required: false
-          schema:
-            type: string
-            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -1214,7 +1216,7 @@ paths:
           schema:
             type: integer
             minimum: 1
-            maximum: 100
+            maximum: 50
             default: 20
         - name: cursor
           in: query
@@ -2145,7 +2147,7 @@ components:
     QuizPublic:
       type: object
       additionalProperties: false
-      required: [id, deckVersionId, status, total, questions, createdAt]
+      required: [id, deckVersionId, status, total, version, questions]
       properties:
         id:
           $ref: '#/components/schemas/ObjectId'
@@ -2160,13 +2162,13 @@ components:
           type: integer
           minimum: 1
           maximum: 5
+        version:
+          type: integer
+          minimum: 0
         questions:
           type: array
           items:
             $ref: '#/components/schemas/QuizQuestionPublic'
-        createdAt:
-          type: string
-          format: date-time
 
     QuizPublicResponse:
       type: object
@@ -2178,45 +2180,14 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
-    QuizQuestionResult:
+    QuizResultItem:
       type: object
       additionalProperties: false
       required:
-        [
-          questionVersionId,
-          type,
-          prompt,
-          isCorrect,
-          points,
-          explanation,
-          knowledgeVersionIds,
-        ]
+        [questionVersionId, isCorrect, points, explanation, knowledgeVersionIds]
       properties:
         questionVersionId:
           $ref: '#/components/schemas/ObjectId'
-        type:
-          type: string
-          enum: [multipleChoice, shortAnswer]
-        prompt:
-          type: string
-        options:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            required: [id, text]
-            properties:
-              id:
-                type: string
-              text:
-                type: string
-        userAnswer:
-          type: [object, 'null']
-          properties:
-            optionId:
-              type: string
-            text:
-              type: string
         isCorrect:
           type: boolean
         points:
@@ -2238,7 +2209,19 @@ components:
     QuizResult:
       type: object
       additionalProperties: false
-      required: [id, deckVersionId, status, total, score, questions, createdAt]
+      required:
+        [
+          id,
+          deckVersionId,
+          status,
+          total,
+          version,
+          questions,
+          answers,
+          score,
+          submittedAt,
+          results,
+        ]
       properties:
         id:
           $ref: '#/components/schemas/ObjectId'
@@ -2253,6 +2236,17 @@ components:
           type: integer
           minimum: 1
           maximum: 5
+        version:
+          type: integer
+          minimum: 1
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizQuestionPublic'
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmitQuizAnswerItem'
         score:
           type: integer
           minimum: 0
@@ -2260,13 +2254,10 @@ components:
         submittedAt:
           type: string
           format: date-time
-        questions:
+        results:
           type: array
           items:
-            $ref: '#/components/schemas/QuizQuestionResult'
-        createdAt:
-          type: string
-          format: date-time
+            $ref: '#/components/schemas/QuizResultItem'
 
     QuizResultResponse:
       type: object

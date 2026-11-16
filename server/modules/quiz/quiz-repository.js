@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { AppError } from '../../middleware/http-error.js';
 import { QuizAttempt } from './quiz-model.js';
 
 const { ObjectId } = mongoose.Types;
@@ -104,43 +105,69 @@ export async function incrementSubmittedQuizCount(db, { session } = {}) {
   );
 }
 
+export const MAX_QUIZ_LIST_LIMIT = 50;
+
 /**
- * Mã hóa con trỏ phân trang cho quiz attempt.
+ * Mã hóa con trỏ phân trang cho quiz attempt kèm ngữ cảnh truy vấn (07 §1, Must fix 4).
  *
  * @param {{ createdAt: Date, _id: import('mongoose').Types.ObjectId | string }} doc
+ * @param {string} context
  * @returns {string}
  */
-export function encodeQuizCursor(doc) {
+export function encodeQuizCursor(doc, context) {
+  if (typeof context !== 'string' || !context) {
+    throw new Error('context is required for encodeQuizCursor');
+  }
   const createdAtIso =
     doc.createdAt instanceof Date
       ? doc.createdAt.toISOString()
       : new Date(doc.createdAt).toISOString();
   const idStr =
     doc._id instanceof ObjectId ? doc._id.toHexString() : String(doc._id);
-  const payload = JSON.stringify({ c: createdAtIso, i: idStr });
+  const payload = JSON.stringify({
+    v: 1,
+    ctx: context,
+    c: createdAtIso,
+    i: idStr,
+  });
   return Buffer.from(payload, 'utf8').toString('base64url');
 }
 
 /**
- * Giải mã con trỏ phân trang cho quiz attempt.
+ * Giải mã con trỏ phân trang cho quiz attempt và so khớp ngữ cảnh (07 §1, Must fix 4).
+ * Bắt buộc expectedContext và kiểm tra chuỗi base64url/ISO timestamp nghiêm ngặt.
  *
  * @param {string | undefined | null} cursor
+ * @param {string} expectedContext
  * @returns {{ createdAt: Date, id: import('mongoose').Types.ObjectId } | null}
  */
-export function decodeQuizCursor(cursor) {
+export function decodeQuizCursor(cursor, expectedContext) {
   if (!cursor || typeof cursor !== 'string') return null;
+  if (typeof expectedContext !== 'string' || !expectedContext) {
+    throw new Error('expectedContext is required for decodeQuizCursor');
+  }
   try {
-    const raw = Buffer.from(cursor, 'base64url').toString('utf8');
+    const buf = Buffer.from(cursor, 'base64url');
+    if (buf.toString('base64url') !== cursor) return null;
+    const raw = buf.toString('utf8');
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return null;
     }
-    if (!parsed.c || !parsed.i) return null;
+    if (parsed.ctx !== expectedContext) {
+      return null;
+    }
+    if (typeof parsed.c !== 'string' || typeof parsed.i !== 'string') {
+      return null;
+    }
     const createdAt = new Date(parsed.c);
     if (
       Number.isNaN(createdAt.getTime()) ||
-      !/^[a-f0-9]{24}$/iu.test(parsed.i)
+      createdAt.toISOString() !== parsed.c
     ) {
+      return null;
+    }
+    if (!/^[a-f0-9]{24}$/u.test(parsed.i)) {
       return null;
     }
     return { createdAt, id: new ObjectId(parsed.i) };
@@ -164,7 +191,15 @@ export async function listQuizAttempts({
   limit = 20,
   cursor,
 }) {
-  const pageSize = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  const pageSize = Math.min(
+    Math.max(Number(limit) || 20, 1),
+    MAX_QUIZ_LIST_LIMIT,
+  );
+  const context = JSON.stringify([
+    ownerKey,
+    sourceSessionId ? String(sourceSessionId).toLowerCase() : null,
+    'createdAt:desc,_id:desc',
+  ]);
   const query = /** @type {Record<string, any>} */ ({ ownerKey });
 
   if (sourceSessionId) {
@@ -172,9 +207,13 @@ export async function listQuizAttempts({
   }
 
   if (cursor) {
-    const decoded = decodeQuizCursor(cursor);
+    const decoded = decodeQuizCursor(cursor, context);
     if (!decoded) {
-      throw new Error('INVALID_CURSOR');
+      throw new AppError({
+        status: 400,
+        code: 'INVALID_CURSOR',
+        message: 'Con trỏ không hợp lệ hoặc không khớp danh sách.',
+      });
     }
     query.$or = [
       { createdAt: { $lt: decoded.createdAt } },
@@ -191,7 +230,7 @@ export async function listQuizAttempts({
   const pageItems = hasMore ? items.slice(0, pageSize) : items;
   const nextCursor =
     hasMore && pageItems.length > 0
-      ? encodeQuizCursor(pageItems[pageItems.length - 1])
+      ? encodeQuizCursor(pageItems[pageItems.length - 1], context)
       : null;
 
   return {

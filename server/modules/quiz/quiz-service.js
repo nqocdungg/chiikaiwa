@@ -12,6 +12,8 @@ import {
   findContentVersionsByIds,
 } from '../content/content-repository.js';
 import { assertDeckVersionSourceAccess } from '../content/content-service.js';
+import { runIdempotentOperation } from '../coordination/coordination-service.js';
+import { guestAccess } from '../learning/guest-write-guard.js';
 import {
   createQuizAttempt,
   findQuizAttemptById,
@@ -23,28 +25,6 @@ import {
 } from './quiz-repository.js';
 
 /** @typedef {Awaited<ReturnType<typeof import('../identity/identity-service.js').resolveIdentityFromCookies>>} Identity */
-
-/**
- * Kiểm tra hạn dùng của khách (B6).
- *
- * @param {Identity} identity
- */
-export function assertGuestActive(identity) {
-  if (identity.kind !== 'guest') return;
-  const guestExpiresAt = identity.guestSession?.expiresAt;
-  if (
-    !identity.guestSession ||
-    identity.guestSession.revokedAt ||
-    identity.guestSession.status === 'expired' ||
-    (guestExpiresAt instanceof Date && Date.now() >= guestExpiresAt.getTime())
-  ) {
-    throw new AppError({
-      status: 410,
-      code: 'GUEST_EXPIRED',
-      message: 'Quyền truy cập tạm của khách đã hết hạn.',
-    });
-  }
-}
 
 /**
  * Kiểm tra câu hỏi có hợp lệ và đủ điều kiện để chấm điểm hay không (B4).
@@ -94,11 +74,17 @@ export function isGradableQuestion(q) {
  */
 export function hashAnswers(answers = []) {
   const normalized = (answers || [])
-    .map((a) => ({
-      questionVersionId: String(a.questionVersionId).toLowerCase(),
-      optionId: a.optionId ? String(a.optionId) : '',
-      text: typeof a.text === 'string' ? a.text.trim() : '',
-    }))
+    .map((a) => {
+      const hasOptionId = a.optionId !== undefined && a.optionId !== null;
+      const hasText = a.text !== undefined && a.text !== null;
+      return {
+        questionVersionId: String(a.questionVersionId).toLowerCase(),
+        hasOptionId,
+        optionId: hasOptionId ? String(a.optionId) : null,
+        hasText,
+        text: hasText && typeof a.text === 'string' ? a.text.trim() : null,
+      };
+    })
     .sort((a, b) => a.questionVersionId.localeCompare(b.questionVersionId));
   return createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
 }
@@ -178,11 +164,13 @@ export function gradeQuizAnswers(snapshotQuestions, submittedAnswers = []) {
       points,
     });
 
-    recordedAnswers.push({
-      questionVersionId: q.questionVersionId,
-      ...(recordedOptionId !== undefined && { optionId: recordedOptionId }),
-      ...(recordedText !== undefined && { text: recordedText }),
-    });
+    if (ans) {
+      recordedAnswers.push({
+        questionVersionId: q.questionVersionId,
+        ...(recordedOptionId !== undefined && { optionId: recordedOptionId }),
+        ...(recordedText !== undefined && { text: recordedText }),
+      });
+    }
   }
 
   return {
@@ -212,6 +200,7 @@ export function toQuizPublicDto(attempt) {
     }),
     status: attempt.status,
     total: attempt.total,
+    version: attempt.version ?? 0,
     questions: attempt.questions.map((/** @type {any} */ q) => ({
       questionVersionId: q.questionVersionId.toHexString
         ? q.questionVersionId.toHexString()
@@ -226,24 +215,15 @@ export function toQuizPublicDto(attempt) {
           })),
         }),
     })),
-    createdAt:
-      attempt.createdAt instanceof Date
-        ? attempt.createdAt.toISOString()
-        : new Date(attempt.createdAt).toISOString(),
   };
 }
 
 /**
- * Projection sau khi đã nộp (QuizResult): đầy đủ điểm, kết quả và giải thích.
+ * Projection sau khi đã nộp (QuizResult): đầy đủ điểm, kết quả và giải thích (07 §3).
  *
  * @param {Record<string, any>} attempt
  */
 export function toQuizResultDto(attempt) {
-  const answersMap = new Map();
-  for (const a of attempt.answers || []) {
-    answersMap.set(String(a.questionVersionId), a);
-  }
-
   const resultsMap = new Map();
   for (const r of attempt.results || []) {
     resultsMap.set(String(r.questionVersionId), r);
@@ -263,47 +243,52 @@ export function toQuizResultDto(attempt) {
     }),
     status: attempt.status,
     total: attempt.total,
-    score: attempt.score,
+    version: attempt.version ?? 0,
+    questions: attempt.questions.map((/** @type {any} */ q) => ({
+      questionVersionId: q.questionVersionId.toHexString
+        ? q.questionVersionId.toHexString()
+        : String(q.questionVersionId),
+      type: q.type,
+      prompt: q.prompt,
+      ...(Array.isArray(q.options) &&
+        q.options.length > 0 && {
+          options: q.options.map((/** @type {any} */ opt) => ({
+            id: opt.id,
+            text: opt.text,
+          })),
+        }),
+    })),
+    answers: (attempt.answers || []).map((/** @type {any} */ a) => ({
+      questionVersionId: a.questionVersionId.toHexString
+        ? a.questionVersionId.toHexString()
+        : String(a.questionVersionId),
+      ...(a.optionId !== undefined && { optionId: a.optionId }),
+      ...(a.text !== undefined && { text: a.text }),
+    })),
+    score: attempt.score ?? 0,
     submittedAt:
       attempt.submittedAt instanceof Date
         ? attempt.submittedAt.toISOString()
         : attempt.submittedAt
           ? new Date(attempt.submittedAt).toISOString()
           : undefined,
-    questions: attempt.questions.map((/** @type {any} */ q) => {
+    results: attempt.questions.map((/** @type {any} */ q) => {
       const qKey = String(q.questionVersionId);
-      const userAns = answersMap.get(qKey);
       const res = resultsMap.get(qKey);
-
       return {
         questionVersionId: q.questionVersionId.toHexString
           ? q.questionVersionId.toHexString()
           : String(q.questionVersionId),
-        type: q.type,
-        prompt: q.prompt,
-        ...(Array.isArray(q.options) &&
-          q.options.length > 0 && {
-            options: q.options.map((/** @type {any} */ opt) => ({
-              id: opt.id,
-              text: opt.text,
-            })),
-          }),
-        userAnswer:
-          userAns &&
-          (userAns.optionId !== undefined || userAns.text !== undefined)
-            ? {
-                ...(userAns.optionId !== undefined && {
-                  optionId: userAns.optionId,
-                }),
-                ...(userAns.text !== undefined && { text: userAns.text }),
-              }
-            : null,
         isCorrect: res ? Boolean(res.isCorrect) : false,
         points: res ? res.points : 0,
-        ...(q.correctOptionId && { correctOptionId: q.correctOptionId }),
-        ...(Array.isArray(q.acceptedAnswers) && {
-          acceptedAnswers: q.acceptedAnswers,
-        }),
+        ...(q.type === 'multipleChoice' &&
+          q.correctOptionId && {
+            correctOptionId: q.correctOptionId,
+          }),
+        ...(q.type === 'shortAnswer' &&
+          Array.isArray(q.acceptedAnswers) && {
+            acceptedAnswers: q.acceptedAnswers,
+          }),
         explanation: q.explanation,
         knowledgeVersionIds: (q.knowledgeVersionIds || []).map(
           (/** @type {any} */ k) =>
@@ -311,10 +296,6 @@ export function toQuizResultDto(attempt) {
         ),
       };
     }),
-    createdAt:
-      attempt.createdAt instanceof Date
-        ? attempt.createdAt.toISOString()
-        : new Date(attempt.createdAt).toISOString(),
   };
 }
 
@@ -335,172 +316,246 @@ function shuffleArray(array) {
 }
 
 /**
- * Tạo một lượt quiz mới từ deckVersionId (FR-QIZ-01, BR-21).
+ * Tạo một lượt quiz mới từ deckVersionId (FR-QIZ-01, BR-21, 07 §2.2, Must fix 1).
  *
  * @param {Object} params
  * @param {Identity} params.identity
  * @param {string} params.deckVersionId
  * @param {string} [params.sourceSessionId]
+ * @param {string} params.idempotencyKey
+ * @returns {Promise<any>}
  */
-export async function createQuiz({ identity, deckVersionId, sourceSessionId }) {
-  assertGuestActive(identity);
+export async function createQuiz({
+  identity,
+  deckVersionId,
+  sourceSessionId,
+  idempotencyKey,
+}) {
   const db = await connectDatabase();
   const ownerKey = identity.actorKey;
-
   const deckOid = toObjectId(deckVersionId);
-  const deckVersion = await findContentVersionById(db, deckOid);
-  if (!deckVersion || deckVersion.kind !== 'deck') {
-    throw new AppError({
-      status: 404,
-      code: 'RESOURCE_NOT_FOUND',
-      message: `Không tìm thấy phiên bản bộ chủ đề '${deckVersionId}'.`,
-    });
-  }
 
-  const parentItem = await db.collection('content_items').findOne({
-    _id: deckVersion.contentId,
-    kind: 'deck',
-  });
-  if (!parentItem) {
-    throw new AppError({
-      status: 404,
-      code: 'RESOURCE_NOT_FOUND',
-      message: `Không tìm thấy chủ đề cha của phiên bản '${deckVersionId}'.`,
-    });
-  }
+  /** @type {Awaited<ReturnType<typeof guestAccess>>} */
+  let guestGuard = null;
 
-  // Kiểm tra quyền truy cập deck của người học / khách (B6, B7, C2)
-  try {
-    await assertDeckVersionSourceAccess(db, {
-      identity,
-      deckVersionId: deckOid,
-      parentItem,
-      allowAdmin: false,
-    });
-  } catch (err) {
-    if (err instanceof AppError && err.code === 'FORBIDDEN') {
-      throw new AppError({
-        status: 404,
-        code: 'RESOURCE_NOT_FOUND',
-        message: 'Tài nguyên không tồn tại hoặc ngoài phạm vi truy cập.',
+  return runIdempotentOperation({
+    actorKey: ownerKey,
+    method: 'POST',
+    path: '/api/v1/quizzes',
+    operationId: idempotencyKey,
+    payload: {
+      deckVersionId: String(deckVersionId).toLowerCase(),
+      sourceSessionId: sourceSessionId
+        ? String(sourceSessionId).toLowerCase()
+        : null,
+    },
+    authorize: async ({ session, replay }) => {
+      guestGuard = await guestAccess(db, identity, session, !replay);
+    },
+    execute: async ({ session }) => {
+      if (guestGuard && String(guestGuard.deckVersionId) !== String(deckOid)) {
+        throw new AppError({
+          status: 404,
+          code: 'RESOURCE_NOT_FOUND',
+          message: 'Bộ chủ đề không thuộc phạm vi lượt thử của khách.',
+        });
+      }
+
+      const deckVersion = await findContentVersionById(db, deckOid, {
+        session,
       });
-    }
-    throw err;
-  }
+      if (!deckVersion || deckVersion.kind !== 'deck') {
+        throw new AppError({
+          status: 404,
+          code: 'RESOURCE_NOT_FOUND',
+          message: `Không tìm thấy phiên bản bộ chủ đề '${deckVersionId}'.`,
+        });
+      }
 
-  // Kiểm tra phiên nguồn nếu có (C3)
-  let sourceSessionOid;
-  if (sourceSessionId) {
-    sourceSessionOid = toObjectId(sourceSessionId);
-    const sessionDoc = await db.collection('practice_sessions').findOne({
-      _id: sourceSessionOid,
-      'members.actorKey': ownerKey,
-    });
-    if (!sessionDoc) {
-      throw new AppError({
-        status: 404,
-        code: 'RESOURCE_NOT_FOUND',
-        message: `Không tìm thấy phiên thực hành '${sourceSessionId}'.`,
-      });
-    }
-    if (
-      sessionDoc.deckVersionId &&
-      String(sessionDoc.deckVersionId) !== String(deckOid)
-    ) {
-      throw createValidationError([
+      const parentItem = await db.collection('content_items').findOne(
         {
-          path: 'sourceSessionId',
-          code: 'INVALID_FIELD',
-          message: 'Bộ chủ đề không khớp với phiên thực hành.',
+          _id: deckVersion.contentId,
+          kind: 'deck',
         },
-      ]);
-    }
-  }
+        { session },
+      );
+      if (!parentItem) {
+        throw new AppError({
+          status: 404,
+          code: 'RESOURCE_NOT_FOUND',
+          message: `Không tìm thấy chủ đề cha của phiên bản '${deckVersionId}'.`,
+        });
+      }
 
-  const questionVersionIds = deckVersion.payload?.questionVersionIds || [];
-  if (questionVersionIds.length === 0) {
-    throw new AppError({
-      status: 409,
-      code: 'QUIZ_UNAVAILABLE',
-      message: 'Chưa có câu hỏi quiz cho bộ chủ đề này.',
-    });
-  }
+      try {
+        await assertDeckVersionSourceAccess(db, {
+          identity,
+          deckVersionId: deckOid,
+          parentItem,
+          session,
+          allowAdmin: false,
+        });
+      } catch (err) {
+        if (err instanceof AppError && err.code === 'FORBIDDEN') {
+          throw new AppError({
+            status: 404,
+            code: 'RESOURCE_NOT_FOUND',
+            message: 'Tài nguyên không tồn tại hoặc ngoài phạm vi truy cập.',
+          });
+        }
+        throw err;
+      }
 
-  // Lấy các câu hỏi từ content_versions và lọc câu gradable + khử trùng contentId theo thứ tự manifest (C1)
-  const questionDocs = await findContentVersionsByIds(db, questionVersionIds);
-  const order = new Map(
-    questionVersionIds.map((/** @type {any} */ id, /** @type {number} */ i) => [
-      String(id),
-      i,
-    ]),
-  );
-  const orderedDocs = [...questionDocs].sort(
-    (a, b) =>
-      (order.get(String(a._id)) ?? Number.MAX_SAFE_INTEGER) -
-      (order.get(String(b._id)) ?? Number.MAX_SAFE_INTEGER),
-  );
+      let sourceSessionOid;
+      if (sourceSessionId) {
+        sourceSessionOid = toObjectId(sourceSessionId);
+        const sessionDoc = await db.collection('practice_sessions').findOne(
+          {
+            _id: sourceSessionOid,
+            'members.actorKey': ownerKey,
+          },
+          { session },
+        );
+        if (!sessionDoc) {
+          throw new AppError({
+            status: 404,
+            code: 'RESOURCE_NOT_FOUND',
+            message: `Không tìm thấy phiên thực hành '${sourceSessionId}'.`,
+          });
+        }
+        if (
+          !sessionDoc.deckVersionId ||
+          String(sessionDoc.deckVersionId) !== String(deckOid)
+        ) {
+          throw createValidationError([
+            {
+              path: 'sourceSessionId',
+              code: 'INVALID_FIELD',
+              message: 'Bộ chủ đề không khớp với phiên thực hành.',
+            },
+          ]);
+        }
+        if (sessionDoc.status !== 'ended') {
+          throw createValidationError([
+            {
+              path: 'sourceSessionId',
+              code: 'INVALID_FIELD',
+              message: 'Phiên thực hành phải ở trạng thái đã kết thúc.',
+            },
+          ]);
+        }
+      }
 
-  const seenContentIds = new Set();
-  const validQuestions = orderedDocs
-    .filter((doc) => doc.kind === 'question' && isGradableQuestion(doc))
-    .filter((doc) => {
-      const k = String(doc.contentId);
-      if (seenContentIds.has(k)) return false;
-      seenContentIds.add(k);
-      return true;
-    });
+      const questionVersionIds = deckVersion.payload?.questionVersionIds || [];
+      if (questionVersionIds.length === 0) {
+        throw new AppError({
+          status: 409,
+          code: 'QUIZ_UNAVAILABLE',
+          message: 'Chưa có câu hỏi quiz cho bộ chủ đề này.',
+        });
+      }
 
-  if (validQuestions.length === 0) {
-    throw new AppError({
-      status: 409,
-      code: 'QUIZ_UNAVAILABLE',
-      message: 'Chưa có câu hỏi quiz khả dụng cho bộ chủ đề này.',
-    });
-  }
+      const questionDocs = await findContentVersionsByIds(
+        db,
+        questionVersionIds,
+        { session },
+      );
+      const order = new Map(
+        questionVersionIds.map(
+          (/** @type {any} */ id, /** @type {number} */ i) => [String(id), i],
+        ),
+      );
+      const orderedDocs = [...questionDocs].sort(
+        (a, b) =>
+          (order.get(String(a._id)) ?? Number.MAX_SAFE_INTEGER) -
+          (order.get(String(b._id)) ?? Number.MAX_SAFE_INTEGER),
+      );
 
-  // Lấy tối đa 5 câu không trùng
-  const selectedQuestions =
-    validQuestions.length <= 5
-      ? validQuestions
-      : shuffleArray(validQuestions).slice(0, 5);
+      const seenContentIds = new Set();
+      const validQuestions = orderedDocs
+        .filter((doc) => doc.kind === 'question' && isGradableQuestion(doc))
+        .filter((doc) => {
+          const k = String(doc.contentId);
+          if (seenContentIds.has(k)) return false;
+          seenContentIds.add(k);
+          return true;
+        });
 
-  const snapshotQuestions = selectedQuestions.map((q) => {
-    const payload = q.payload || {};
-    return {
-      questionVersionId: q._id,
-      type: payload.type,
-      prompt: payload.prompt,
-      options: Array.isArray(payload.options) ? payload.options : [],
-      correctOptionId: payload.correctOptionId,
-      acceptedAnswers: Array.isArray(payload.acceptedAnswers)
-        ? payload.acceptedAnswers
-        : [],
-      explanation: payload.explanation || '',
-      knowledgeVersionIds: Array.isArray(payload.knowledgeVersionIds)
-        ? payload.knowledgeVersionIds
-        : [],
-    };
+      if (validQuestions.length === 0) {
+        throw new AppError({
+          status: 409,
+          code: 'QUIZ_UNAVAILABLE',
+          message: 'Chưa có câu hỏi quiz khả dụng cho bộ chủ đề này.',
+        });
+      }
+
+      const selectedQuestions =
+        validQuestions.length <= 5
+          ? validQuestions
+          : shuffleArray(validQuestions).slice(0, 5);
+
+      const snapshotQuestions = selectedQuestions.map((q) => {
+        const payload = q.payload || {};
+        return {
+          questionVersionId: q._id,
+          type: payload.type,
+          prompt: payload.prompt,
+          options: Array.isArray(payload.options) ? payload.options : [],
+          correctOptionId: payload.correctOptionId,
+          acceptedAnswers: Array.isArray(payload.acceptedAnswers)
+            ? payload.acceptedAnswers
+            : [],
+          explanation: payload.explanation || '',
+          knowledgeVersionIds: Array.isArray(payload.knowledgeVersionIds)
+            ? payload.knowledgeVersionIds
+            : [],
+        };
+      });
+
+      const purgeAt = guestGuard?.purgeAt;
+
+      const attemptDoc = {
+        ownerKey,
+        deckVersionId: deckOid,
+        ...(sourceSessionOid && { sourceSessionId: sourceSessionOid }),
+        status: 'inProgress',
+        questions: snapshotQuestions,
+        total: snapshotQuestions.length,
+        version: 0,
+        ...(purgeAt && { purgeAt }),
+      };
+
+      const created = await createQuizAttempt(attemptDoc, { session });
+      return {
+        resultRef: String(created._id),
+        value: toQuizPublicDto(created),
+      };
+    },
+    replay: async ({ session, receipt }) => {
+      if (!receipt.resultRef) {
+        throw new AppError({
+          status: 404,
+          code: 'RESOURCE_NOT_FOUND',
+          message: 'Không tìm thấy lượt quiz đã tạo.',
+        });
+      }
+      const attempt = await findQuizAttemptByIdAndOwner(
+        receipt.resultRef,
+        identity.actorKey,
+        { session },
+      );
+      if (!attempt) {
+        throw new AppError({
+          status: 404,
+          code: 'RESOURCE_NOT_FOUND',
+          message: 'Không tìm thấy lượt quiz đã tạo.',
+        });
+      }
+      return attempt.status === 'submitted'
+        ? toQuizResultDto(attempt)
+        : toQuizPublicDto(attempt);
+    },
   });
-
-  const purgeAt =
-    identity.kind === 'guest' &&
-    identity.guestSession?.expiresAt instanceof Date
-      ? identity.guestSession.expiresAt
-      : undefined;
-
-  const attemptDoc = {
-    ownerKey,
-    deckVersionId: deckOid,
-    ...(sourceSessionOid && { sourceSessionId: sourceSessionOid }),
-    status: 'inProgress',
-    questions: snapshotQuestions,
-    total: snapshotQuestions.length,
-    version: 0,
-    ...(purgeAt && { purgeAt }),
-  };
-
-  const created = await createQuizAttempt(attemptDoc);
-  return toQuizPublicDto(created);
 }
 
 /**
@@ -511,7 +566,8 @@ export async function createQuiz({ identity, deckVersionId, sourceSessionId }) {
  * @param {string} params.id
  */
 export async function getQuiz({ identity, id }) {
-  assertGuestActive(identity);
+  const db = await connectDatabase();
+  await guestAccess(db, identity, null, false);
   const attempt = await findQuizAttemptByIdAndOwner(id, identity.actorKey);
   if (!attempt) {
     throw new AppError({
@@ -528,14 +584,14 @@ export async function getQuiz({ identity, id }) {
 }
 
 /**
- * Nộp bài chấm điểm quiz (FR-QIZ-03, BR-22, TX-10).
+ * Nộp bài chấm điểm quiz (FR-QIZ-03, BR-22, TX-10, Must fix 3).
  *
  * @param {Object} params
  * @param {Identity} params.identity
  * @param {string} params.id
  * @param {number} params.expectedVersion
  * @param {Array<{ questionVersionId: string, optionId?: string, text?: string }>} params.answers
- * @param {string} [params.idempotencyKey]
+ * @param {string} params.idempotencyKey
  */
 export async function submitQuiz({
   identity,
@@ -544,122 +600,143 @@ export async function submitQuiz({
   answers = [],
   idempotencyKey,
 }) {
-  assertGuestActive(identity);
   const db = await connectDatabase();
-  const attempt = await findQuizAttemptByIdAndOwner(id, identity.actorKey);
-
-  if (!attempt) {
-    throw new AppError({
-      status: 404,
-      code: 'RESOURCE_NOT_FOUND',
-      message: `Không tìm thấy lượt quiz '${id}'.`,
-    });
-  }
-
   const payloadHash = hashAnswers(answers);
 
-  // Xử lý nộp lại / Idempotency (07 §9.2, B3)
-  if (attempt.status === 'submitted') {
-    return resolveAlreadySubmitted(attempt, payloadHash, idempotencyKey);
-  }
-
-  // Kiểm tra Optimistic Concurrency Control
-  if (attempt.version !== expectedVersion) {
-    throw new AppError({
-      status: 409,
-      code: 'VERSION_CONFLICT',
-      message: 'Phiên bản không khớp (VERSION_CONFLICT).',
-    });
-  }
-
-  // Validate danh sách câu trả lời theo snapshot (B2)
-  const validationErrors = [];
-  const snapshotQuestionsMap = new Map();
-  for (const q of attempt.questions) {
-    snapshotQuestionsMap.set(String(q.questionVersionId), q);
-  }
-
-  const seenQuestions = new Set();
-  for (let i = 0; i < answers.length; i++) {
-    const ans = answers[i];
-    const qId = String(ans.questionVersionId);
-    if (!snapshotQuestionsMap.has(qId)) {
-      validationErrors.push({
-        path: `answers[${i}].questionVersionId`,
-        code: 'UNKNOWN_FIELD',
-        message: `Câu hỏi '${qId}' không thuộc lượt quiz này.`,
-      });
-      continue;
-    }
-    if (seenQuestions.has(qId)) {
-      validationErrors.push({
-        path: `answers[${i}].questionVersionId`,
-        code: 'INVALID_FIELD',
-        message: `Câu hỏi '${qId}' bị nộp đáp án trùng lặp.`,
-      });
-      continue;
-    }
-    seenQuestions.add(qId);
-
-    const q = snapshotQuestionsMap.get(qId);
-    const hasOption = ans.optionId !== undefined;
-    const hasText = ans.text !== undefined;
-
-    if (q.type === 'multipleChoice') {
-      if (hasText) {
-        validationErrors.push({
-          path: `answers[${i}].text`,
-          code: 'INVALID_FIELD',
-          message: `Câu '${qId}' là trắc nghiệm, không nhận text.`,
-        });
-      }
-      if (
-        hasOption &&
-        !(q.options || []).some(
-          (/** @type {any} */ opt) => opt.id === ans.optionId,
-        )
-      ) {
-        validationErrors.push({
-          path: `answers[${i}].optionId`,
-          code: 'INVALID_FIELD',
-          message: `Lựa chọn '${ans.optionId}' không hợp lệ cho câu hỏi '${qId}'.`,
-        });
-      }
-    } else if (q.type === 'shortAnswer') {
-      if (hasOption) {
-        validationErrors.push({
-          path: `answers[${i}].optionId`,
-          code: 'INVALID_FIELD',
-          message: `Câu '${qId}' là điền ngắn, không nhận optionId.`,
-        });
-      }
-    }
-  }
-
-  if (validationErrors.length > 0) {
-    throw createValidationError(validationErrors);
-  }
-
-  // Chấm điểm server-side
-  const {
-    score,
-    results,
-    answers: gradedAnswers,
-  } = gradeQuizAnswers(attempt.questions, answers);
-
-  const now = new Date();
-  const updateData = {
-    status: 'submitted',
-    answers: gradedAnswers,
-    results,
-    score,
-    submittedAt: now,
-    submitOperationId: idempotencyKey || null,
-    submitPayloadHash: payloadHash,
-  };
-
-  // Thực thi transaction nguyên tử (TX-10, B3)
   const submittedAttempt = await withTransaction(async (session) => {
+    // 1. Đọc attempt trong transaction trước
+    const attempt = await findQuizAttemptByIdAndOwner(id, identity.actorKey, {
+      session,
+    });
+    if (!attempt) {
+      throw new AppError({
+        status: 404,
+        code: 'RESOURCE_NOT_FOUND',
+        message: `Không tìm thấy lượt quiz '${id}'.`,
+      });
+    }
+
+    // 2. Xử lý nộp lại / Idempotency replay (07 §9.2, B3, 06 §11.3)
+    if (attempt.status === 'submitted') {
+      // Replay không ghi học tập: chỉ đọc guestAccess (write = false), không tăng version nhưng vẫn chặn 410 nếu hết hạn
+      await guestAccess(db, identity, session, false);
+      if (attempt.submitPayloadHash === payloadHash) {
+        return attempt;
+      }
+      if (idempotencyKey && attempt.submitOperationId === idempotencyKey) {
+        throw new AppError({
+          status: 409,
+          code: 'IDEMPOTENCY_CONFLICT',
+          message: 'Idempotency-Key đã dùng với nội dung khác.',
+        });
+      }
+      throw new AppError({
+        status: 409,
+        code: 'QUIZ_ALREADY_SUBMITTED',
+        message: 'Lượt quiz đã được nộp trước đó với câu trả lời khác.',
+      });
+    }
+
+    // 3. Với lượt chưa nộp: Kiểm tra quyền khách và CAS tăng guest_sessions.version trong transaction (06 §11.2)
+    await guestAccess(db, identity, session, true);
+
+    // 4. Kiểm tra Optimistic Concurrency Control với details.currentVersion
+    if (attempt.version !== expectedVersion) {
+      throw new AppError({
+        status: 409,
+        code: 'VERSION_CONFLICT',
+        message: 'Phiên bản không khớp (VERSION_CONFLICT).',
+        details: { currentVersion: attempt.version },
+      });
+    }
+
+    // 5. Validate danh sách câu trả lời theo snapshot (B2)
+    const validationErrors = [];
+    const snapshotQuestionsMap = new Map();
+    for (const q of attempt.questions) {
+      snapshotQuestionsMap.set(String(q.questionVersionId), q);
+    }
+
+    const seenQuestions = new Set();
+    for (let i = 0; i < answers.length; i++) {
+      const ans = answers[i];
+      const qId = String(ans.questionVersionId);
+      if (!snapshotQuestionsMap.has(qId)) {
+        validationErrors.push({
+          path: `answers[${i}].questionVersionId`,
+          code: 'UNKNOWN_FIELD',
+          message: `Câu hỏi '${qId}' không thuộc lượt quiz này.`,
+        });
+        continue;
+      }
+      if (seenQuestions.has(qId)) {
+        validationErrors.push({
+          path: `answers[${i}].questionVersionId`,
+          code: 'INVALID_FIELD',
+          message: `Câu hỏi '${qId}' bị nộp đáp án trùng lặp.`,
+        });
+        continue;
+      }
+      seenQuestions.add(qId);
+
+      const q = snapshotQuestionsMap.get(qId);
+      const hasOption = ans.optionId !== undefined;
+      const hasText = ans.text !== undefined;
+
+      if (q.type === 'multipleChoice') {
+        if (hasText) {
+          validationErrors.push({
+            path: `answers[${i}].text`,
+            code: 'INVALID_FIELD',
+            message: `Câu '${qId}' là trắc nghiệm, không nhận text.`,
+          });
+        }
+        if (
+          hasOption &&
+          !(q.options || []).some(
+            (/** @type {any} */ opt) => opt.id === ans.optionId,
+          )
+        ) {
+          validationErrors.push({
+            path: `answers[${i}].optionId`,
+            code: 'INVALID_FIELD',
+            message: `Lựa chọn '${ans.optionId}' không hợp lệ cho câu hỏi '${qId}'.`,
+          });
+        }
+      } else if (q.type === 'shortAnswer') {
+        if (hasOption) {
+          validationErrors.push({
+            path: `answers[${i}].optionId`,
+            code: 'INVALID_FIELD',
+            message: `Câu '${qId}' là điền ngắn, không nhận optionId.`,
+          });
+        }
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      throw createValidationError(validationErrors);
+    }
+
+    // 6. Chấm điểm server-side
+    const {
+      score,
+      results,
+      answers: gradedAnswers,
+    } = gradeQuizAnswers(attempt.questions, answers);
+
+    const now = new Date();
+    const updateData = {
+      status: 'submitted',
+      answers: gradedAnswers,
+      results,
+      score,
+      submittedAt: now,
+      submitOperationId: idempotencyKey,
+      submitPayloadHash: payloadHash,
+    };
+
+    // 7. Thực thi submit CAS trong transaction
     const updated = await submitQuizAttemptCas({
       id: attempt._id,
       ownerKey: identity.actorKey,
@@ -669,7 +746,6 @@ export async function submitQuiz({
     });
 
     if (!updated) {
-      // Trường hợp có tranh chấp đồng thời
       const current = await findQuizAttemptById(id, { session });
       if (current?.status === 'submitted') {
         if (current.submitPayloadHash === payloadHash) {
@@ -692,10 +768,11 @@ export async function submitQuiz({
         status: 409,
         code: 'VERSION_CONFLICT',
         message: 'Xung đột phiên bản khi nộp quiz.',
+        details: { currentVersion: current?.version ?? expectedVersion },
       });
     }
 
-    // Tăng thống kê trọn đời trong cùng transaction
+    // 8. Tăng thống kê trọn đời trong cùng transaction (TX-10)
     await incrementSubmittedQuizCount(db, { session });
 
     return updated;
@@ -719,52 +796,42 @@ export async function listQuizzes({
   limit,
   cursor,
 }) {
-  assertGuestActive(identity);
-  try {
-    const { items, nextCursor } = await listQuizAttempts({
-      ownerKey: identity.actorKey,
-      sourceSessionId,
-      limit,
-      cursor,
-    });
+  const db = await connectDatabase();
+  await guestAccess(db, identity, null, false);
+  const { items, nextCursor } = await listQuizAttempts({
+    ownerKey: identity.actorKey,
+    sourceSessionId,
+    limit,
+    cursor,
+  });
 
-    const summaryItems = items.map((doc) => ({
-      id: doc._id.toHexString ? doc._id.toHexString() : String(doc._id),
-      deckVersionId: doc.deckVersionId.toHexString
-        ? doc.deckVersionId.toHexString()
-        : String(doc.deckVersionId),
-      ...(doc.sourceSessionId && {
-        sourceSessionId: doc.sourceSessionId.toHexString
-          ? doc.sourceSessionId.toHexString()
-          : String(doc.sourceSessionId),
-      }),
-      status: doc.status,
-      total: doc.total,
-      ...(doc.status === 'submitted' && { score: doc.score }),
-      createdAt:
-        doc.createdAt instanceof Date
-          ? doc.createdAt.toISOString()
-          : new Date(doc.createdAt).toISOString(),
-      ...(doc.submittedAt && {
-        submittedAt:
-          doc.submittedAt instanceof Date
-            ? doc.submittedAt.toISOString()
-            : new Date(doc.submittedAt).toISOString(),
-      }),
-    }));
+  const summaryItems = items.map((doc) => ({
+    id: doc._id.toHexString ? doc._id.toHexString() : String(doc._id),
+    deckVersionId: doc.deckVersionId.toHexString
+      ? doc.deckVersionId.toHexString()
+      : String(doc.deckVersionId),
+    ...(doc.sourceSessionId && {
+      sourceSessionId: doc.sourceSessionId.toHexString
+        ? doc.sourceSessionId.toHexString()
+        : String(doc.sourceSessionId),
+    }),
+    status: doc.status,
+    total: doc.total,
+    ...(doc.status === 'submitted' && { score: doc.score }),
+    createdAt:
+      doc.createdAt instanceof Date
+        ? doc.createdAt.toISOString()
+        : new Date(doc.createdAt).toISOString(),
+    ...(doc.submittedAt && {
+      submittedAt:
+        doc.submittedAt instanceof Date
+          ? doc.submittedAt.toISOString()
+          : new Date(doc.submittedAt).toISOString(),
+    }),
+  }));
 
-    return {
-      items: summaryItems,
-      nextCursor,
-    };
-  } catch (err) {
-    if (err instanceof Error && err.message === 'INVALID_CURSOR') {
-      throw new AppError({
-        status: 400,
-        code: 'INVALID_CURSOR',
-        message: 'Con trỏ phân trang không hợp lệ.',
-      });
-    }
-    throw err;
-  }
+  return {
+    items: summaryItems,
+    nextCursor,
+  };
 }

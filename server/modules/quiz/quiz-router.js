@@ -201,7 +201,7 @@ function validateSubmissionInput(body) {
             code: 'INVALID_FIELD',
             message: 'text phải là chuỗi ký tự.',
           });
-        } else if (item.text.length > 500) {
+        } else if ([...item.text].length > 500) {
           errors.push({
             path: `answers[${i}].text`,
             code: 'INVALID_FIELD',
@@ -236,13 +236,20 @@ export function createQuizRouter() {
   router.post('/quizzes', auth, async (request, response) => {
     const identity = response.locals.identity;
     await enforceWriteRateLimit({ actorOrIpKey: identity.actorKey });
+    const idempotencyKey = validateIdempotencyKey(
+      request.get('Idempotency-Key'),
+    );
     const input = validateCreateQuizInput(request.body);
     const data = await createQuiz({
       identity,
       deckVersionId: input.deckVersionId,
       sourceSessionId: input.sourceSessionId,
+      idempotencyKey,
     });
-    response.status(201).json({ data, meta: response.locals.meta });
+    response
+      .status(201)
+      .set('Location', `/api/v1/quizzes/${data.id}`)
+      .json({ data, meta: response.locals.meta });
   });
 
   // GET /api/v1/quizzes/:id
@@ -258,12 +265,9 @@ export function createQuizRouter() {
     const identity = response.locals.identity;
     await enforceWriteRateLimit({ actorOrIpKey: identity.actorKey });
     const id = validateObjectId(request.params.id, 'id');
-
-    let idempotencyKey;
-    const rawKey = request.get('Idempotency-Key');
-    if (rawKey) {
-      idempotencyKey = validateIdempotencyKey(rawKey);
-    }
+    const idempotencyKey = validateIdempotencyKey(
+      request.get('Idempotency-Key'),
+    );
 
     const { expectedVersion, answers } = validateSubmissionInput(request.body);
     const data = await submitQuiz({
@@ -281,6 +285,19 @@ export function createQuizRouter() {
     const identity = response.locals.identity;
     const query = request.query;
 
+    const allowedQueryKeys = new Set(['sourceSessionId', 'limit', 'cursor']);
+    for (const key of Object.keys(query)) {
+      if (!allowedQueryKeys.has(key)) {
+        throw createValidationError([
+          {
+            path: key,
+            code: 'UNKNOWN_FIELD',
+            message: `Tham số truy vấn '${key}' không được hỗ trợ.`,
+          },
+        ]);
+      }
+    }
+
     let sourceSessionId;
     if (query.sourceSessionId !== undefined) {
       sourceSessionId = validateObjectId(
@@ -291,13 +308,23 @@ export function createQuizRouter() {
 
     let limit;
     if (query.limit !== undefined) {
-      const parsed = Number(query.limit);
-      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+      const rawLimit = String(query.limit);
+      if (!/^[1-9]\d*$/.test(rawLimit)) {
         throw createValidationError([
           {
             path: 'limit',
             code: 'INVALID_FIELD',
-            message: 'limit phải là số nguyên từ 1 đến 100.',
+            message: 'limit phải là số nguyên từ 1 đến 50.',
+          },
+        ]);
+      }
+      const parsed = Number(rawLimit);
+      if (parsed > 50) {
+        throw createValidationError([
+          {
+            path: 'limit',
+            code: 'INVALID_FIELD',
+            message: 'limit phải là số nguyên từ 1 đến 50.',
           },
         ]);
       }

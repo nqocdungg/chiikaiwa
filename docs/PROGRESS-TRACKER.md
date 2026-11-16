@@ -288,54 +288,69 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 ### BE-018 — API tạo lượt, chấm và truy vấn kết quả quiz
 
 - Ngày cập nhật: 2026-11-16
-- Trạng thái: Đã hoàn thiện toàn diện (B1–B11 và C1–C6), self-test đạt 100%; sẵn sàng mở PR về `develop` để Ngọc Dung review.
+- Trạng thái: Đã hoàn thiện toàn diện (B1–B11, C1–C6, Comments 1–5 của Reviewer Ngọc Dung), self-test đạt 100%; sẵn sàng mở PR về `develop` để reviewer rà soát và merge.
 - PR: Chưa có. Nhánh `feature/BE-018-quiz-attempts-and-results` từ `develop@d04579c`.
 - Đã làm:
   - **Tạo lượt quiz và snapshot câu hỏi (`POST /api/v1/quizzes`, `GET /api/v1/quizzes/:id`)**:
-    - Lấy tối đa 5 câu hỏi không trùng lặp từ manifest của `deckVersionId` (nếu ngân hàng rỗng trả 409 `QUIZ_UNAVAILABLE`).
+    - Bắt buộc `Idempotency-Key` (Must fix 1, 07 §2.2): thiếu hoặc sai format trả 422 `VALIDATION_FAILED`. Toàn bộ thao tác tạo lượt được bọc qua `runIdempotentOperation` (`coordination-service.js`), ghi receipt nguyên tử vào collection `operation_receipts`, tự động xử lý replay khi trùng key (cùng key khác payload trả 409 `IDEMPOTENCY_CONFLICT`, 2 request đồng thời trả cùng 201 và 1 receipt, replay sau khi đã nộp bài trả `QuizResult`).
+    - Trả header `Location: /api/v1/quizzes/{id}` cho mã 201 (Must fix 1).
+    - Trả DTO `QuizPublic` chuẩn (Must fix 2, 07 §3): bổ sung `version: 0`, loại bỏ `createdAt` khỏi response data.
+    - Lấy tối đa 5 câu hỏi không trùng lặp từ manifest của `deckVersionId` (nếu ngân hàng rỗng hoặc phiên có deck rỗng trả 409 `QUIZ_UNAVAILABLE`).
     - Lọc nghiêm ngặt câu hỏi có thể chấm được (`isGradableQuestion` - B4): loại bỏ câu thiếu prompt/explanation, MC có ít hơn 2 options, options trùng ID, `correctOptionId` không thuộc options hoặc text rỗng; SA có `acceptedAnswers` rỗng hoặc chứa chuỗi rỗng/chưa trim.
     - Sắp xếp tất định theo thứ tự manifest (`orderedDocs` - C1) trước khi lọc và khử trùng theo `contentId`, đảm bảo luôn ưu tiên phiên bản đứng trước trong manifest khi có nhiều version của cùng một câu hỏi.
     - Đóng băng toàn bộ snapshot câu hỏi/đáp án/giải thích/kiến thức liên quan trong collection `quiz_attempts` ở server, ngăn chặn việc sửa ngân hàng làm đổi đề thi.
     - Không nhận owner từ body (dùng identity đăng nhập của Learner hoặc Guest).
     - Kiểm tra quyền truy cập deck cha qua `assertDeckVersionSourceAccess` (B7, C2, C6): deck đang ẩn (`status === 'hidden'`) mà người học không có phiên hay nguồn hợp lệ thì trả 404 `RESOURCE_NOT_FOUND` (chỉ chuyển đổi lỗi `FORBIDDEN` thành 404 để giấu sự tồn tại, giữ nguyên các lỗi 403 khác như `ACCOUNT_LOCKED` - C2). Khi người học có `sourceSessionId` hợp lệ tham gia thì vẫn được tạo lượt quiz bình thường (C6).
     - Kiểm tra phiên thực hành liên kết (`sourceSessionId`): nếu phiên không khớp `deckVersionId` thì từ chối bằng 422 `VALIDATION_FAILED` (C3).
-    - Kiểm tra quyền khách (`assertGuestActive` - B6): khách hết hạn trả 410 `GUEST_EXPIRED`, khách chỉ được tạo quiz trên deck của lượt thử (sai deck trả 404 `RESOURCE_NOT_FOUND`), gán TTL `purgeAt` theo hạn của khách.
+    - Kiểm tra quyền khách và CAS version trong transaction (Must fix 3, B6, 06 §11.2): tách `guestAccess` sang shared module `server/modules/learning/guest-write-guard.js`. Kiểm tra trạng thái `active`/`summary`, tính hạn chính xác `min(endedAt + 15m, expiresAt)`. Khách hết hạn trả 410 `GUEST_EXPIRED`, khách chỉ được tạo quiz trên deck của lượt thử (sai deck trả 404 `RESOURCE_NOT_FOUND`), gán TTL `purgeAt` chuẩn xác theo hạn khách, CAS tăng `guest_sessions.version` trong transaction để phát hiện bị thu hồi đồng thời.
     - Trả projection `QuizPublic` cho các attempt `inProgress`, giấu kín toàn bộ đáp án đúng, danh sách lựa chọn đúng và giải thích trước khi nộp.
   - **Chấm điểm server-side và ghi kết quả nguyên tử (`POST /api/v1/quizzes/:id/submission`)**:
+    - Bắt buộc `Idempotency-Key` (Must fix 1, 07 §2.2): thiếu key trả 422 `VALIDATION_FAILED`.
     - Validate nghiêm ngặt `expectedVersion` (B1): kiểm tra `typeof === 'number'`, số nguyên an toàn không âm; từ chối ép kiểu với `null`, `""`, `"0"`, `true`, `-1`, `1.5` bằng 422 `VALIDATION_FAILED`.
-    - Validate giới hạn đầu vào (B8): `answers` tối đa 5 phần tử, `text` tối đa 500 ký tự, `optionId` tối đa 64 ký tự (trả 422 nếu vượt quá).
+    - Optimistic Concurrency Control (OCC): khi lệch `expectedVersion` trả 409 `VERSION_CONFLICT` kèm `details: { currentVersion }` để client đồng bộ lại.
+    - Validate giới hạn đầu vào (B8): `answers` tối đa 5 phần tử, `text` tối đa 500 ký tự (đo chính xác theo Unicode code points qua `[...item.text].length`), `optionId` tối đa 64 ký tự (trả 422 nếu vượt quá).
     - Validate đáp án đối chiếu với snapshot của attempt (B2): từ chối câu hỏi lạ, câu hỏi trùng lặp hoặc sai loại đáp án (MC gửi kèm `text`, SA gửi kèm `optionId`, MC `optionId` lạ) bằng 422 `VALIDATION_FAILED` với danh sách `error.details.fields`. Cho phép bỏ trống câu trả lời (không gửi `optionId` lẫn `text` hoặc bỏ qua khỏi mảng) và tính 0 điểm.
-    - Chấm điểm phía server: câu bỏ trống tính 0 điểm; câu `shortAnswer` chỉ trim khoảng trắng đầu/cuối rồi so khớp chính xác (case-sensitive) với danh sách `acceptedAnswers` đã đóng băng.
-    - Áp dụng CAS với `expectedVersion` chống ghi đè đồng thời. Transaction nguyên tử cập nhật kết quả quiz và tăng counter `statistics.submittedQuizCount` (TX-10, 06 §8.5).
-    - Idempotency & replay (`resolveAlreadySubmitted` - B3): Nộp lặp lại với cùng payload (chuẩn hóa theo sort và trim) trả kết quả đã lưu mà không chấm lại hay tăng counter; nộp cùng `Idempotency-Key` nhưng khác payload trả 409 `IDEMPOTENCY_CONFLICT`; nộp khác payload không cùng key trả 409 `QUIZ_ALREADY_SUBMITTED`. Xử lý an toàn race condition trong transaction khi thua CAS.
+    - Chấm điểm phía server (BR-22): câu bỏ trống tính 0 điểm; câu `shortAnswer` chỉ trim khoảng trắng đầu/cuối rồi so khớp chính xác (case-sensitive) với danh sách `acceptedAnswers` đã đóng băng.
+    - Áp dụng CAS với `expectedVersion` chống ghi đè đồng thời. Transaction nguyên tử kiểm tra `guestAccess` (tăng `guest_sessions.version`), cập nhật kết quả quiz và tăng counter `statistics.submittedQuizCount` (TX-10, 06 §8.5).
+    - Idempotency & replay (`resolveAlreadySubmitted` - B3): Nộp lặp lại với cùng payload trả kết quả đã lưu mà không chấm lại hay tăng counter; nộp cùng `Idempotency-Key` nhưng khác payload trả 409 `IDEMPOTENCY_CONFLICT`; nộp khác payload không cùng key trả 409 `QUIZ_ALREADY_SUBMITTED`. `hashAnswers` phân biệt rõ giữa trường vắng (`undefined`) và trường rỗng/khoảng trắng (`''`).
+    - Trả DTO `QuizResult` chuẩn (Must fix 2, 07 §3): `questions` giữ nguyên cấu trúc sạch giống `QuizPublic`; `answers` chứa danh sách đáp án người học đã nộp; `results` chứa kết quả chấm (`isCorrect`, `points`, `explanation`, `knowledgeVersionIds`; `correctOptionId` chỉ trả cho MC, `acceptedAnswers` chỉ trả cho SA); trả `version` (bỏ `createdAt`). Khớp hoàn toàn giữa response submission và `GET /quizzes/:id`.
     - Đảm bảo quiz độc lập: không thay đổi tiến độ FSRS (`card_progress`) hay danh sách mục đã lưu (`saved_items`).
   - **Lịch sử và truy vấn kết quả (`GET /api/v1/me/quizzes`, `GET /api/v1/quizzes/:id`)**:
-    - `GET /quizzes/:id` truy vấn theo `_id` và `ownerKey` (B5): tài nguyên của người khác trả 404 `RESOURCE_NOT_FOUND` (loại bỏ hoàn toàn mã 403 để không rò rỉ sự tồn tại của ID). Trả projection theo trạng thái: `QuizPublic` khi `inProgress`, `QuizResult` đầy đủ kết quả, điểm số, đáp án đúng/sai, giải thích và `knowledgeVersionIds` khi `submitted`.
-    - `GET /me/quizzes` hỗ trợ phân trang cursor keyset `(createdAt, _id)`, hỗ trợ lọc theo `sourceSessionId` và danh sách lượt làm bài của owner. Phân tách rõ ràng mã lỗi (D1): cursor giải mã thất bại trả 400 `INVALID_CURSOR`; `sourceSessionId` hoặc `id` sai format trả 400 `MALFORMED_REQUEST`; `limit` ngoài khoảng 1..100 hoặc `cursor` quá dài trả 422 `VALIDATION_FAILED`.
+    - `GET /quizzes/:id` truy vấn theo `_id` và `ownerKey` (B5): tài nguyên của người khác trả 404 `RESOURCE_NOT_FOUND` (loại bỏ hoàn toàn mã 403 để không rò rỉ sự tồn tại của ID). ID sai định dạng ObjectId trả 400 `MALFORMED_REQUEST`. Trả projection theo trạng thái: `QuizPublic` khi `inProgress`, `QuizResult` khi `submitted`.
+    - `GET /me/quizzes` hỗ trợ phân trang cursor keyset kèm context bảo vệ (Must fix 4): nhúng context `[ownerKey, sourceSessionId ?? null, 'createdAt:desc,_id:desc']` vào cursor. Giải mã lệch context hoặc chuỗi rác ném 400 `INVALID_CURSOR`.
+    - Giới hạn limit tối đa 50 (Should fix 5, 07 §1): `MAX_QUIZ_LIST_LIMIT = 50`. `limit > 50` hoặc `limit < 1` trả 422 `VALIDATION_FAILED` (`INVALID_FIELD`). Chặn query parameters lạ ngoài contract bằng 422 `VALIDATION_FAILED` (`UNRECOGNIZED_FIELD`). `sourceSessionId` sai format trả 400 `MALFORMED_REQUEST`.
     - Schema subdocument `options` trong snapshot thiết lập `_id: false` (B11) ngăn sinh `_id` rác.
-    - Cập nhật OpenAPI specification `docs/api/openapi.yaml` (B9, C4, D1): bổ sung tag `Quizzes`, chuẩn hóa security (GET không cần CSRF, POST có CSRF), bổ sung 410 `GUEST_EXPIRED`, 409 `IDEMPOTENCY_CONFLICT`, 403 `FORBIDDEN` (tài khoản khóa), 422 `VALIDATION_FAILED`, 413, 429, `maxItems: 5`, `maxLength` cho optionId/text; chuẩn hóa mô tả mã lỗi 400 cho `GET /quizzes/{id}` (`MALFORMED_REQUEST`) và `GET /me/quizzes` (`INVALID_CURSOR` / `MALFORMED_REQUEST`).
+    - Cập nhật OpenAPI specification `docs/api/openapi.yaml` (Must fix 1, 2, Should fix 5, C4, D1): bổ sung `Idempotency-Key` bắt buộc cho 2 route POST, header `Location` cho 201, `limit` tối đa 50, chuẩn hóa schema `QuizPublic` (thêm `version`, bỏ `createdAt`), `QuizResult` (thêm `version`, `answers`, `results`, bỏ `createdAt`), `QuizResultItem`.
     - Đối chiếu index và TTL (C5): collection `quiz_attempts` đã được định nghĩa đầy đủ 3 index trong migration `20261103000100-add-design-indexes.js` (`owner_createdAt_id`, `owner_sourceSession`, `purgeAt_ttl`).
-    - Ghi chú thẩm tra (D2, D3, D4): Bằng chứng sắp xếp tất định C1 nằm ở ca thứ 2 (`[qValidV2, qValidV1]`); C2 (`ACCOUNT_LOCKED` giữ nguyên 403) được thẩm tra qua đọc code; lưu ý race condition khi nộp song song khác payload có transaction retry.
+    - Thẩm tra và ghi chú: Bằng chứng sắp xếp tất định C1 nằm ở ca thứ 2 (`[qValidV2, qValidV1]`); C2 (`ACCOUNT_LOCKED` giữ nguyên 403) được thẩm tra qua đọc code.
+  - Sửa sau review (Ngọc Dung & reviewer comments):
+    - Đọc dữ liệu trong transaction snapshot (06 §11.1): truyền `{ session }` vào `findContentVersionById`, `findContentVersionsByIds` và `assertDeckVersionSourceAccess`.
+    - Không tăng version 2 lần ở `createQuiz`: lưu kết quả `guestAccess` từ `authorize` qua biến closure `guestGuard` và tái sử dụng trong `execute`.
+    - Replay nộp bài không ghi: đọc `attempt` trước, nếu đã `submitted` thì gọi `guestAccess(..., write = false)` (vẫn chặn 410 nếu hết hạn nhưng không tăng version).
+    - Thống nhất kiểm tra khách cho các route đọc `getQuiz` và `listQuizzes` qua `guestAccess(..., write = false)`.
+    - Loại bỏ trạng thái chết `'summary'` khỏi điều kiện kiểm tra phiên nguồn (`sessionDoc.status !== 'ended'`).
+    - Bổ sung kiểm thử: thu hồi quyền khách giữa chừng lúc tạo lượt (410, 0 attempt, 0 receipt); thu hồi khách giữa chừng lúc submit (410, attempt inProgress, giữ nguyên version và submittedQuizCount); kiểm tra DB chỉ có 1 attempt và 1 receipt khi tạo quiz đồng thời; từ chối 422 khi `sourceSessionId` active; từ chối 410 khi replay sau khi khách hết hạn.
 - File liên quan:
   - `server/modules/quiz/quiz-model.js`
   - `server/modules/quiz/quiz-repository.js`
   - `server/modules/quiz/quiz-service.js`
   - `server/modules/quiz/quiz-router.js`
-  - `server/app.js`
+  - `server/modules/learning/guest-write-guard.js`
+  - `server/modules/learning/saved-item-service.js`
   - `docs/api/openapi.yaml`
   - `tests/server/quiz-service.test.js`
   - `tests/integration/quiz-api.integration.test.js`
   - `tests/server/openapi-contract.test.js`
   - `docs/PROGRESS-TRACKER.md`
 - Kiểm chứng:
-  - `npm run format:check`: Pass (All matched files use Prettier code style).
-  - `npm run lint`: Pass (0 errors, 0 warnings).
-  - `npm run typecheck`: Pass (0 errors trên client, server và root jsconfig).
-  - `npm test`: **390/390 tests pass** (bao gồm 20/20 quiz-service unit tests bao phủ `isGradableQuestion`, `resolveAlreadySubmitted`, `gradeQuizAnswers` với MC có text, cursor encoding/decoding).
-  - `npm run openapi:check`: **9/9 tests pass** (kiểm chứng tag `Quizzes`, security GET không CSRF, POST có CSRF, schemas, response codes 403, 422).
-  - `tests/integration/quiz-api.integration.test.js`: **31/31 tests pass** trên MongoDB replica set (kiểm chứng AT-10, DB-T13, TX-10, B1–B11, C1, C3, C6, và 4 ca HTTP kiểm tra mã lỗi 400 MALFORMED_REQUEST, 400 INVALID_CURSOR, 422 VALIDATION_FAILED theo D1).
-  - `npm run test:integration`: **215/215 integration tests pass** trên toàn bộ 17 suites của hệ thống.
-  - `npm run build`: Pass (client vite production build & server app/index syntax check).
+  - `npm run format:check`: Pass 100% (All matched files use Prettier code style).
+  - `npm run lint`: Pass 100% (0 errors, 0 warnings).
+  - `npm run typecheck`: Pass 100% (0 errors trên client, server và root jsconfig).
+  - `npm test`: **422/422 tests pass** trên 30 test suites (bao gồm 20/20 quiz-service unit tests).
+  - `npm run openapi:check`: **9/9 tests pass** (kiểm chứng tag `Quizzes`, security, schemas `QuizPublic`, `QuizResult`, `QuizResultItem`, headers).
+  - `tests/integration/quiz-api.integration.test.js`: **44/44 tests pass** trên MongoDB replica set (bao gồm các ca thu hồi khách giữa chừng Must fix 3, DB count đồng thời, sourceSessionId active, guest expired replay).
+  - `npm run test:integration`: **228/228 integration tests pass** trên toàn bộ 17 suites của hệ thống.
+  - `npm run build`: Pass 100% (client vite production build & server app/index syntax check).
 - Tiếp theo: Trình người dùng cho phép commit và push branch `feature/BE-018-quiz-attempts-and-results`, mở PR về `develop` để reviewer Ngọc Dung rà soát.
 
 ## Sprint 2

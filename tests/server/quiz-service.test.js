@@ -203,6 +203,7 @@ describe('Quiz Service Unit Tests', () => {
       expect(publicDto.id).toBe(attemptDoc._id.toHexString());
       expect(publicDto.status).toBe('inProgress');
       expect(publicDto.total).toBe(3);
+      expect(publicDto.version).toBe(0);
       expect(publicDto.questions).toHaveLength(3);
 
       for (const q of publicDto.questions) {
@@ -216,6 +217,7 @@ describe('Quiz Service Unit Tests', () => {
       const submittedDoc = {
         ...attemptDoc,
         status: 'submitted',
+        version: 1,
         score: 2,
         submittedAt: new Date('2026-11-16T00:05:00.000Z'),
         answers: [
@@ -234,44 +236,84 @@ describe('Quiz Service Unit Tests', () => {
       expect(resultDto.status).toBe('submitted');
       expect(resultDto.score).toBe(2);
       expect(resultDto.total).toBe(3);
+      expect(resultDto.version).toBe(1);
       expect(resultDto.submittedAt).toBe('2026-11-16T00:05:00.000Z');
+      expect(resultDto.answers).toHaveLength(3);
+      expect(resultDto.results).toHaveLength(3);
 
-      const q1 = resultDto.questions.find(
-        (/** @type {any} */ q) => q.questionVersionId === q1Id.toHexString(),
+      // questions giữ cấu trúc sạch như QuizPublic
+      for (const q of resultDto.questions) {
+        expect(q).not.toHaveProperty('isCorrect');
+        expect(q).not.toHaveProperty('points');
+      }
+
+      const res1 = resultDto.results.find(
+        (/** @type {any} */ r) => r.questionVersionId === q1Id.toHexString(),
       );
-      expect(q1?.isCorrect).toBe(true);
-      expect(q1?.points).toBe(1);
-      expect(q1?.correctOptionId).toBe('opt_1');
-      expect(q1?.explanation).toBe(snapshotQuestions[0].explanation);
-      expect(q1?.knowledgeVersionIds).toEqual([k1Id.toHexString()]);
+      expect(res1?.isCorrect).toBe(true);
+      expect(res1?.points).toBe(1);
+      expect(res1?.correctOptionId).toBe('opt_1');
+      expect(res1?.explanation).toBe(snapshotQuestions[0].explanation);
+      expect(res1?.knowledgeVersionIds).toEqual([k1Id.toHexString()]);
     });
   });
 
   describe('Pagination Cursor Encoding / Decoding', () => {
-    it('encodes and decodes quiz attempt cursor correctly', () => {
+    it('encodes and decodes quiz attempt cursor correctly with context', () => {
       const doc = {
         _id: new ObjectId(),
         createdAt: new Date('2026-11-16T02:00:00.000Z'),
       };
-      const cursor = encodeQuizCursor(doc);
+      const context = JSON.stringify([
+        'user:123',
+        null,
+        'createdAt:desc,_id:desc',
+      ]);
+      const cursor = encodeQuizCursor(doc, context);
       expect(typeof cursor).toBe('string');
 
-      const decoded = decodeQuizCursor(cursor);
+      const decoded = decodeQuizCursor(cursor, context);
       expect(decoded).not.toBeNull();
       expect(decoded?.id.toHexString()).toBe(doc._id.toHexString());
       expect(decoded?.createdAt.toISOString()).toBe(
         doc.createdAt.toISOString(),
       );
+
+      // Context mismatch returns null (Must fix 4)
+      const differentContext = JSON.stringify([
+        'user:123',
+        'session_456',
+        'createdAt:desc,_id:desc',
+      ]);
+      expect(decodeQuizCursor(cursor, differentContext)).toBeNull();
     });
 
     it('returns null for invalid or corrupted cursors', () => {
-      expect(decodeQuizCursor('not-valid-base64')).toBeNull();
-      expect(decodeQuizCursor('')).toBeNull();
-      expect(decodeQuizCursor(null)).toBeNull();
+      const context = JSON.stringify([
+        'user:123',
+        null,
+        'createdAt:desc,_id:desc',
+      ]);
+      expect(decodeQuizCursor('not-valid-base64', context)).toBeNull();
+      expect(decodeQuizCursor('', context)).toBeNull();
+      expect(decodeQuizCursor(null, context)).toBeNull();
       const corrupted = Buffer.from(
-        JSON.stringify({ c: 'invalid-date', i: '123' }),
+        JSON.stringify({ ctx: context, c: 'invalid-date', i: '123' }),
       ).toString('base64url');
-      expect(decodeQuizCursor(corrupted)).toBeNull();
+      expect(decodeQuizCursor(corrupted, context)).toBeNull();
+      // Non-ISO timestamp format fails strict check
+      const nonIso = Buffer.from(
+        JSON.stringify({
+          ctx: context,
+          c: '2026-11-16',
+          i: '507f1f77bcf86cd799439011',
+        }),
+      ).toString('base64url');
+      expect(decodeQuizCursor(nonIso, context)).toBeNull();
+      // Missing expectedContext throws error
+      expect(() => decodeQuizCursor('abc', /** @type {any} */ (''))).toThrow(
+        /expectedContext is required/,
+      );
     });
   });
 

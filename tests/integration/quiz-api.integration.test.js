@@ -31,6 +31,30 @@ import {
 } from '../helpers/contract-helpers.js';
 import { seedContractFixtures } from '../helpers/db-test-helpers.js';
 
+let revokeGuestBeforeRoute = false;
+
+vi.mock('../../server/middleware/rate-limit.js', async (importOriginal) => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return {
+    ...actual,
+    enforceWriteRateLimit: async (/** @type {any} */ params) => {
+      const result = await actual.enforceWriteRateLimit(params);
+      if (revokeGuestBeforeRoute) {
+        revokeGuestBeforeRoute = false;
+        if (db) {
+          await db
+            .collection('guest_sessions')
+            .updateOne(
+              { _id: new ObjectId(FIXTURE_GUEST_IDS.active) },
+              { $set: { revokedAt: new Date() } },
+            );
+        }
+      }
+      return result;
+    },
+  };
+});
+
 const { ObjectId } = mongoose.Types;
 const app = createApp();
 const origin = 'http://127.0.0.1:5173';
@@ -74,7 +98,7 @@ function account(user = 'learnerA') {
  *
  * @param {'get'|'post'} method
  * @param {string} endpoint
- * @param {{ user?: 'learnerA'|'learnerB'|'admin', guest?: boolean, guestExpired?: boolean, key?: string }} [options]
+ * @param {{ user?: 'learnerA'|'learnerB'|'admin', guest?: boolean, guestExpired?: boolean, key?: string | null }} [options]
  */
 function api(method, endpoint, options = {}) {
   const guestToken = options.guestExpired
@@ -94,8 +118,10 @@ function api(method, endpoint, options = {}) {
     );
   if (method !== 'get') {
     call.set('Origin', origin).set('X-CSRF-Token', csrf.csrfToken);
-    if (options.key) {
-      call.set('Idempotency-Key', options.key);
+    const key =
+      options.key !== undefined ? options.key : createTestIdempotencyKey();
+    if (key) {
+      call.set('Idempotency-Key', key);
     }
   }
   return call;
@@ -122,6 +148,7 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
   let guestTrialSessionId;
 
   beforeEach(async () => {
+    revokeGuestBeforeRoute = false;
     await seedContractFixtures(db);
 
     // Dọn sạch collections liên quan trước mỗi test
@@ -130,6 +157,7 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       'card_progress',
       'saved_items',
       'saved_sources',
+      'operation_receipts',
     ]) {
       await db.collection(name).deleteMany({});
     }
@@ -361,9 +389,11 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       assertSuccessEnvelope(response, { expectedStatus: 201 });
       const data = response.body.data;
       expect(data).toHaveProperty('id');
+      expect(response.headers.location).toBe(`/api/v1/quizzes/${data.id}`);
       expect(data.deckVersionId).toBe(deckVersionId.toHexString());
       expect(data.status).toBe('inProgress');
       expect(data.total).toBe(3);
+      expect(data.version).toBe(0);
       expect(data.questions).toHaveLength(3);
 
       // Kiểm tra snapshot bảo mật: không lộ đáp án chuẩn hay giải thích
@@ -606,6 +636,39 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       expect(countAfter).toBe(countBefore);
     });
 
+    it('từ chối 422 VALIDATION_FAILED khi sourceSessionId chưa ở trạng thái ended', async () => {
+      const activeSessionId = new ObjectId();
+      await db.collection('practice_sessions').insertOne({
+        _id: activeSessionId,
+        originKind: 'invitation',
+        originId: new ObjectId(),
+        roomName: 'active-session',
+        deckVersionId,
+        status: 'active',
+        members: [
+          { actorKey: `user:${FIXTURE_USER_IDS.learnerA}`, role: 'host' },
+        ],
+        createdAt: new Date(),
+      });
+
+      const res = await api('post', '/api/v1/quizzes')
+        .send({
+          deckVersionId: deckVersionId.toHexString(),
+          sourceSessionId: activeSessionId.toHexString(),
+        })
+        .expect(422);
+
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+      expect(res.body.error.details.fields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'sourceSessionId',
+            code: 'INVALID_FIELD',
+          }),
+        ]),
+      );
+    });
+
     it('từ chối 404 RESOURCE_NOT_FOUND khi deck đang ở trạng thái hidden và người học không có nguồn hợp lệ (B7)', async () => {
       const hiddenDeckContentId = new ObjectId();
       const hiddenDeckVersionId = new ObjectId();
@@ -686,6 +749,86 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       expect(res.body.data.sourceSessionId).toBe(memberSessionId.toHexString());
       expect(res.body.data.questions).toHaveLength(1);
     });
+
+    it('từ chối 422 VALIDATION_FAILED khi thiếu Idempotency-Key trên POST /quizzes (Must fix 1)', async () => {
+      const res = await api('post', '/api/v1/quizzes', { key: null })
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(422);
+
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('xử lý idempotency khi tạo quiz: cùng key trả cùng 201 và 1 receipt, khác body trả 409 IDEMPOTENCY_CONFLICT (Must fix 1)', async () => {
+      const idemKey = createTestIdempotencyKey();
+      const payloadA = { deckVersionId: deckVersionId.toHexString() };
+      const payloadB = { deckVersionId: largeDeckVersionId.toHexString() };
+
+      // 1. Tạo lần 1
+      const res1 = await api('post', '/api/v1/quizzes', { key: idemKey })
+        .send(payloadA)
+        .expect(201);
+      const quizId = res1.body.data.id;
+
+      // 2. Replay cùng key và body -> 201 trả cùng kết quả
+      const res2 = await api('post', '/api/v1/quizzes', { key: idemKey })
+        .send(payloadA)
+        .expect(201);
+      expect(res2.body.data.id).toBe(quizId);
+
+      // Kiểm tra DB chỉ có 1 attempt và 1 receipt
+      const attemptsCount = await db
+        .collection('quiz_attempts')
+        .countDocuments({ _id: new ObjectId(quizId) });
+      expect(attemptsCount).toBe(1);
+      const receiptCount = await db
+        .collection('operation_receipts')
+        .countDocuments({ operationId: idemKey });
+      expect(receiptCount).toBe(1);
+
+      // 3. Cùng key khác body -> 409 IDEMPOTENCY_CONFLICT
+      const res3 = await api('post', '/api/v1/quizzes', { key: idemKey })
+        .send(payloadB)
+        .expect(409);
+      expect(res3.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
+
+      // 4. Replay sau khi quiz đã submit -> trả QuizResult
+      await api('post', `/api/v1/quizzes/${quizId}/submission`)
+        .send({ expectedVersion: 0, answers: [] })
+        .expect(200);
+
+      const resReplayAfterSubmit = await api('post', '/api/v1/quizzes', {
+        key: idemKey,
+      })
+        .send(payloadA)
+        .expect(201);
+      expect(resReplayAfterSubmit.body.data.status).toBe('submitted');
+      expect(resReplayAfterSubmit.body.data.id).toBe(quizId);
+    });
+
+    it('hai request tạo quiz đồng thời cùng key và body: cả hai 201, cùng ID (Must fix 1)', async () => {
+      const idemKey = createTestIdempotencyKey();
+      const payload = { deckVersionId: deckVersionId.toHexString() };
+
+      const [resA, resB] = await Promise.all([
+        api('post', '/api/v1/quizzes', { key: idemKey }).send(payload),
+        api('post', '/api/v1/quizzes', { key: idemKey }).send(payload),
+      ]);
+
+      expect(resA.status).toBe(201);
+      expect(resB.status).toBe(201);
+      expect(resA.body.data.id).toBe(resB.body.data.id);
+
+      // Kiểm tra DB chỉ tạo đúng 1 attempt và đúng 1 receipt
+      const attemptsCount = await db
+        .collection('quiz_attempts')
+        .countDocuments({ ownerKey: `user:${FIXTURE_USER_IDS.learnerA}` });
+      expect(attemptsCount).toBe(1);
+
+      const receiptsCount = await db
+        .collection('operation_receipts')
+        .countDocuments({ operationId: idemKey });
+      expect(receiptsCount).toBe(1);
+    });
   });
 
   describe('2. GET /api/v1/quizzes/:id (Đọc projection theo trạng thái & B5 404)', () => {
@@ -754,14 +897,14 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
         .expect(200);
 
       // Điểm câu 1 vẫn phải là 1 (đúng theo snapshot), và giải thích giữ nguyên snapshot cũ
-      const q1 = submitRes.body.data.questions.find(
-        (/** @type {any} */ q) =>
-          q.questionVersionId === q1VersionId.toHexString(),
+      const res1 = submitRes.body.data.results.find(
+        (/** @type {any} */ r) =>
+          r.questionVersionId === q1VersionId.toHexString(),
       );
-      expect(q1.isCorrect).toBe(true);
-      expect(q1.points).toBe(1);
-      expect(q1.correctOptionId).toBe('opt_a');
-      expect(q1.explanation).toBe('Konnichiwa là chào buổi trưa/chiều.');
+      expect(res1.isCorrect).toBe(true);
+      expect(res1.points).toBe(1);
+      expect(res1.correctOptionId).toBe('opt_a');
+      expect(res1.explanation).toBe('Konnichiwa là chào buổi trưa/chiều.');
     });
 
     it('cô lập hoàn toàn FSRS card_progress và saved_items khi nộp quiz (B10.2)', async () => {
@@ -821,7 +964,7 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       expect(afterSaved).toEqual(beforeSaved);
     });
 
-    it('chấm điểm chính xác câu trắc nghiệm và điền ngắn, cập nhật submittedQuizCount (TX-10, BR-22)', async () => {
+    it('chấm điểm chính xác câu trắc nghiệm và điền ngắn, cập nhật submittedQuizCount (TX-10, BR-22, Must fix 2)', async () => {
       const createRes = await api('post', '/api/v1/quizzes').send({
         deckVersionId: deckVersionId.toHexString(),
       });
@@ -847,35 +990,84 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       expect(data.status).toBe('submitted');
       expect(data.score).toBe(2);
       expect(data.total).toBe(3);
+      expect(data.version).toBe(1);
       expect(data.submittedAt).toBeDefined();
+      expect(data.answers).toHaveLength(2);
+      expect(data.results).toHaveLength(3);
 
-      const q1 = data.questions.find(
-        (/** @type {any} */ q) =>
-          q.questionVersionId === q1VersionId.toHexString(),
+      const res1 = data.results.find(
+        (/** @type {any} */ r) =>
+          r.questionVersionId === q1VersionId.toHexString(),
       );
-      expect(q1.isCorrect).toBe(true);
-      expect(q1.points).toBe(1);
+      expect(res1.isCorrect).toBe(true);
+      expect(res1.points).toBe(1);
+      expect(res1.correctOptionId).toBe('opt_a');
 
-      const q2 = data.questions.find(
-        (/** @type {any} */ q) =>
-          q.questionVersionId === q2VersionId.toHexString(),
+      const res2 = data.results.find(
+        (/** @type {any} */ r) =>
+          r.questionVersionId === q2VersionId.toHexString(),
       );
-      expect(q2.isCorrect).toBe(true);
-      expect(q2.points).toBe(1);
+      expect(res2.isCorrect).toBe(true);
+      expect(res2.points).toBe(1);
+      expect(res2.acceptedAnswers).toEqual(['たべて', '食べて']);
 
-      const q3 = data.questions.find(
-        (/** @type {any} */ q) =>
-          q.questionVersionId === q3VersionId.toHexString(),
+      const res3 = data.results.find(
+        (/** @type {any} */ r) =>
+          r.questionVersionId === q3VersionId.toHexString(),
       );
-      expect(q3.isCorrect).toBe(false);
-      expect(q3.points).toBe(0);
-      expect(q3.userAnswer).toBeNull();
+      expect(res3.isCorrect).toBe(false);
+      expect(res3.points).toBe(0);
+
+      // questions giữ nguyên cấu trúc sạch, không bị trộn kết quả chấm
+      for (const q of data.questions) {
+        expect(q).not.toHaveProperty('isCorrect');
+        expect(q).not.toHaveProperty('points');
+      }
+
+      // GET /quizzes/:id trả kết quả khớp hoàn toàn với DTO nộp (Must fix 2)
+      const getRes = await api('get', `/api/v1/quizzes/${quizId}`).expect(200);
+      expect(getRes.body.data).toEqual(data);
 
       // Kiểm tra statistics submittedQuizCount tăng 1 (TX-10)
       const stats = await db
         .collection('statistics')
         .findOne({ _id: /** @type {any} */ ('lifetime') });
       expect(stats?.submittedQuizCount).toBe(1);
+    });
+
+    it('từ chối 422 VALIDATION_FAILED khi thiếu Idempotency-Key trên submission (Must fix 1)', async () => {
+      const createRes = await api('post', '/api/v1/quizzes').send({
+        deckVersionId: deckVersionId.toHexString(),
+      });
+      const quizId = createRes.body.data.id;
+
+      const res = await api('post', `/api/v1/quizzes/${quizId}/submission`, {
+        key: null,
+      })
+        .send({
+          expectedVersion: 0,
+          answers: [],
+        })
+        .expect(422);
+
+      expect(res.body.error.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('từ chối 409 VERSION_CONFLICT kèm details.currentVersion khi expectedVersion không khớp (Should fix)', async () => {
+      const createRes = await api('post', '/api/v1/quizzes').send({
+        deckVersionId: deckVersionId.toHexString(),
+      });
+      const quizId = createRes.body.data.id;
+
+      const res = await api('post', `/api/v1/quizzes/${quizId}/submission`)
+        .send({
+          expectedVersion: 99,
+          answers: [],
+        })
+        .expect(409);
+
+      expect(res.body.error.code).toBe('VERSION_CONFLICT');
+      expect(res.body.error.details).toEqual({ currentVersion: 0 });
     });
 
     it('từ chối 422 VALIDATION_FAILED khi expectedVersion bị ép kiểu hoặc không hợp lệ (B1)', async () => {
@@ -1242,11 +1434,23 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
 
       const quizId = resCreate.body.data.id;
 
-      // Kiểm tra purgeAt trong database khớp với hạn của guest
+      // Kiểm tra purgeAt trong database khớp chính xác với hạn của guest (min(endedAt + 15m, expiresAt))
       const attemptDoc = await db
         .collection('quiz_attempts')
         .findOne({ _id: new ObjectId(quizId) });
-      expect(attemptDoc?.purgeAt).toBeDefined();
+      const guestDoc = await db
+        .collection('guest_sessions')
+        .findOne({ _id: new ObjectId(FIXTURE_GUEST_IDS.active) });
+      const trialDoc = await db
+        .collection('practice_sessions')
+        .findOne({ _id: guestTrialSessionId });
+      const expectedPurgeTime = Math.min(
+        trialDoc?.endedAt
+          ? trialDoc.endedAt.getTime() + 15 * 60 * 1000
+          : Infinity,
+        guestDoc?.expiresAt ? guestDoc.expiresAt.getTime() : Infinity,
+      );
+      expect(attemptDoc?.purgeAt?.getTime()).toBe(expectedPurgeTime);
 
       // Nộp bài
       const resSubmit = await api(
@@ -1319,6 +1523,210 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       }).expect(410);
       expect(resList.body.error.code).toBe('GUEST_EXPIRED');
     });
+
+    it('từ chối 410 GUEST_EXPIRED và không tạo bản ghi/receipt khi khách bị thu hồi quyền giữa chừng lúc tạo lượt (Must fix 3)', async () => {
+      revokeGuestBeforeRoute = true;
+
+      const res = await api('post', '/api/v1/quizzes', { guest: true })
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(410);
+
+      expect(res.body.error.code).toBe('GUEST_EXPIRED');
+
+      // Kiểm tra quiz_attempts không có bản ghi mới của khách
+      const attemptsCount = await db
+        .collection('quiz_attempts')
+        .countDocuments({ ownerKey: `guest:${FIXTURE_GUEST_IDS.active}` });
+      expect(attemptsCount).toBe(0);
+
+      // Kiểm tra operation_receipts không có receipt nào của khách
+      const receiptsCount = await db
+        .collection('operation_receipts')
+        .countDocuments({ actorKey: `guest:${FIXTURE_GUEST_IDS.active}` });
+      expect(receiptsCount).toBe(0);
+    });
+
+    it('từ chối 410 GUEST_EXPIRED và không thay đổi trạng thái khi khách bị thu hồi quyền giữa chừng lúc nộp bài (Must fix 3)', async () => {
+      // 1. Khách tạo quiz bình thường
+      const createRes = await api('post', '/api/v1/quizzes', { guest: true })
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(201);
+      const quizId = createRes.body.data.id;
+
+      // 2. Thu hồi khách giữa chừng lúc submit
+      revokeGuestBeforeRoute = true;
+
+      const resSubmit = await api(
+        'post',
+        `/api/v1/quizzes/${quizId}/submission`,
+        { guest: true },
+      )
+        .send({
+          expectedVersion: 0,
+          answers: [
+            { questionVersionId: q1VersionId.toHexString(), optionId: 'opt_a' },
+          ],
+        })
+        .expect(410);
+
+      expect(resSubmit.body.error.code).toBe('GUEST_EXPIRED');
+
+      // 3. Kiểm tra DB: attempt vẫn inProgress, version vẫn là 0
+      const attemptDoc = await db
+        .collection('quiz_attempts')
+        .findOne({ _id: new ObjectId(quizId) });
+      expect(attemptDoc?.status).toBe('inProgress');
+      expect(attemptDoc?.version).toBe(0);
+
+      // 4. Thống kê submittedQuizCount không tăng
+      const stats = await db
+        .collection('statistics')
+        .findOne({ _id: /** @type {any} */ ('lifetime') });
+      expect(stats?.submittedQuizCount).toBe(0);
+    });
+
+    it('từ chối 410 GUEST_EXPIRED khi replay nộp bài nhưng phiên khách đã hết hạn (Item 2.3)', async () => {
+      // 1. Tạo và nộp thành công khi khách còn hạn
+      const createRes = await api('post', '/api/v1/quizzes', { guest: true })
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(201);
+      const quizId = createRes.body.data.id;
+
+      await api('post', `/api/v1/quizzes/${quizId}/submission`, { guest: true })
+        .send({
+          expectedVersion: 0,
+          answers: [
+            { questionVersionId: q1VersionId.toHexString(), optionId: 'opt_a' },
+          ],
+        })
+        .expect(200);
+
+      // 2. Cố tình làm hết hạn guest trong DB
+      await db
+        .collection('guest_sessions')
+        .updateOne(
+          { _id: new ObjectId(FIXTURE_GUEST_IDS.active) },
+          { $set: { expiresAt: new Date(Date.now() - 1000) } },
+        );
+
+      // 3. Replay nộp bài khi đã hết hạn -> phải nhận 410 GUEST_EXPIRED
+      const resReplay = await api(
+        'post',
+        `/api/v1/quizzes/${quizId}/submission`,
+        { guest: true },
+      )
+        .send({
+          expectedVersion: 0,
+          answers: [
+            { questionVersionId: q1VersionId.toHexString(), optionId: 'opt_a' },
+          ],
+        })
+        .expect(410);
+
+      expect(resReplay.body.error.code).toBe('GUEST_EXPIRED');
+    });
+
+    it('từ chối 410 GUEST_EXPIRED và không tạo bản ghi/receipt khi khách bị thu hồi quyền giữa chừng lúc tạo lượt (Must fix 3)', async () => {
+      revokeGuestBeforeRoute = true;
+
+      const res = await api('post', '/api/v1/quizzes', { guest: true })
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(410);
+
+      expect(res.body.error.code).toBe('GUEST_EXPIRED');
+
+      // Kiểm tra quiz_attempts không có bản ghi mới của khách
+      const attemptsCount = await db
+        .collection('quiz_attempts')
+        .countDocuments({ ownerKey: `guest:${FIXTURE_GUEST_IDS.active}` });
+      expect(attemptsCount).toBe(0);
+
+      // Kiểm tra operation_receipts không có receipt nào của khách
+      const receiptsCount = await db
+        .collection('operation_receipts')
+        .countDocuments({ actorKey: `guest:${FIXTURE_GUEST_IDS.active}` });
+      expect(receiptsCount).toBe(0);
+    });
+
+    it('từ chối 410 GUEST_EXPIRED và không thay đổi trạng thái khi khách bị thu hồi quyền giữa chừng lúc nộp bài (Must fix 3)', async () => {
+      // 1. Khách tạo quiz bình thường
+      const createRes = await api('post', '/api/v1/quizzes', { guest: true })
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(201);
+      const quizId = createRes.body.data.id;
+
+      // 2. Thu hồi khách giữa chừng lúc submit
+      revokeGuestBeforeRoute = true;
+
+      const resSubmit = await api(
+        'post',
+        `/api/v1/quizzes/${quizId}/submission`,
+        { guest: true },
+      )
+        .send({
+          expectedVersion: 0,
+          answers: [
+            { questionVersionId: q1VersionId.toHexString(), optionId: 'opt_a' },
+          ],
+        })
+        .expect(410);
+
+      expect(resSubmit.body.error.code).toBe('GUEST_EXPIRED');
+
+      // 3. Kiểm tra DB: attempt vẫn inProgress, version vẫn là 0
+      const attemptDoc = await db
+        .collection('quiz_attempts')
+        .findOne({ _id: new ObjectId(quizId) });
+      expect(attemptDoc?.status).toBe('inProgress');
+      expect(attemptDoc?.version).toBe(0);
+
+      // 4. Thống kê submittedQuizCount không tăng
+      const stats = await db
+        .collection('statistics')
+        .findOne({ _id: /** @type {any} */ ('lifetime') });
+      expect(stats?.submittedQuizCount).toBe(0);
+    });
+
+    it('từ chối 410 GUEST_EXPIRED khi replay nộp bài nhưng phiên khách đã hết hạn (Item 2.3)', async () => {
+      // 1. Tạo và nộp thành công khi khách còn hạn
+      const createRes = await api('post', '/api/v1/quizzes', { guest: true })
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(201);
+      const quizId = createRes.body.data.id;
+
+      await api('post', `/api/v1/quizzes/${quizId}/submission`, { guest: true })
+        .send({
+          expectedVersion: 0,
+          answers: [
+            { questionVersionId: q1VersionId.toHexString(), optionId: 'opt_a' },
+          ],
+        })
+        .expect(200);
+
+      // 2. Cố tình làm hết hạn guest trong DB
+      await db
+        .collection('guest_sessions')
+        .updateOne(
+          { _id: new ObjectId(FIXTURE_GUEST_IDS.active) },
+          { $set: { expiresAt: new Date(Date.now() - 1000) } },
+        );
+
+      // 3. Replay nộp bài khi đã hết hạn -> phải nhận 410 GUEST_EXPIRED
+      const resReplay = await api(
+        'post',
+        `/api/v1/quizzes/${quizId}/submission`,
+        { guest: true },
+      )
+        .send({
+          expectedVersion: 0,
+          answers: [
+            { questionVersionId: q1VersionId.toHexString(), optionId: 'opt_a' },
+          ],
+        })
+        .expect(410);
+
+      expect(resReplay.body.error.code).toBe('GUEST_EXPIRED');
+    });
   });
 
   describe('5. GET /api/v1/me/quizzes (Lịch sử & Phân trang cursor)', () => {
@@ -1372,17 +1780,75 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       );
     });
 
-    it('từ chối 400 INVALID_CURSOR khi cursor giải mã thất bại (D1)', async () => {
-      const res = await api('get', '/api/v1/me/quizzes?cursor=abc').expect(400);
-      expect(res.body.error.code).toBe('INVALID_CURSOR');
+    it('từ chối 400 INVALID_CURSOR khi cursor giải mã thất bại hoặc sai lệch context (Must fix 4)', async () => {
+      // 1. Cursor chuỗi rác
+      const resMalformed = await api(
+        'get',
+        '/api/v1/me/quizzes?cursor=abc',
+      ).expect(400);
+      expect(resMalformed.body.error.code).toBe('INVALID_CURSOR');
+
+      // 2. Cursor sinh từ query có sourceSessionId nhưng dùng cho query không có sourceSessionId
+      for (let i = 0; i < 2; i++) {
+        await api('post', '/api/v1/quizzes').send({
+          deckVersionId: deckVersionId.toHexString(),
+          sourceSessionId: sessionId.toHexString(),
+        });
+      }
+      const resWithFilter = await api(
+        'get',
+        `/api/v1/me/quizzes?sourceSessionId=${sessionId.toHexString()}&limit=1`,
+      ).expect(200);
+      const cursorWithContext = resWithFilter.body.data.nextCursor;
+      expect(cursorWithContext).toBeDefined();
+
+      // Dùng cursorWithContext nhưng không truyền sourceSessionId -> context mismatch -> 400
+      const resMismatch = await api(
+        'get',
+        `/api/v1/me/quizzes?cursor=${encodeURIComponent(cursorWithContext)}`,
+      ).expect(400);
+      expect(resMismatch.body.error.code).toBe('INVALID_CURSOR');
     });
 
-    it('từ chối 422 VALIDATION_FAILED khi limit nằm ngoài khoảng 1..100 (D1)', async () => {
-      const res = await api('get', '/api/v1/me/quizzes?limit=0').expect(422);
+    it('chấp nhận limit tối đa 50 và từ chối 422 VALIDATION_FAILED khi limit < 1 hoặc > 50 (Should fix 5)', async () => {
+      // limit = 50 hợp lệ
+      await api('get', '/api/v1/me/quizzes?limit=50').expect(200);
+
+      // limit = 51 vượt ngưỡng
+      const resOver = await api('get', '/api/v1/me/quizzes?limit=51').expect(
+        422,
+      );
+      expect(resOver.body.error.code).toBe('VALIDATION_FAILED');
+      expect(resOver.body.error.details.fields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: 'limit', code: 'INVALID_FIELD' }),
+        ]),
+      );
+
+      // limit = 0 dưới ngưỡng
+      const resZero = await api('get', '/api/v1/me/quizzes?limit=0').expect(
+        422,
+      );
+      expect(resZero.body.error.code).toBe('VALIDATION_FAILED');
+      expect(resZero.body.error.details.fields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: 'limit', code: 'INVALID_FIELD' }),
+        ]),
+      );
+    });
+
+    it('từ chối 422 VALIDATION_FAILED khi truyền query parameter không được phép', async () => {
+      const res = await api(
+        'get',
+        '/api/v1/me/quizzes?unexpectedParam=123',
+      ).expect(422);
       expect(res.body.error.code).toBe('VALIDATION_FAILED');
       expect(res.body.error.details.fields).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ path: 'limit', code: 'INVALID_FIELD' }),
+          expect.objectContaining({
+            path: 'unexpectedParam',
+            code: 'UNKNOWN_FIELD',
+          }),
         ]),
       );
     });

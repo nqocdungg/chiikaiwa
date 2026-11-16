@@ -43,6 +43,8 @@ const writeOperations = [
   ['/admin/content/{id}/hide', 'post'],
   ['/me/saved-items', 'post'],
   ['/me/saved-items/{id}', 'delete'],
+  ['/quizzes', 'post'],
+  ['/quizzes/{id}/submission', 'post'],
 ];
 
 describe('OpenAPI contract', () => {
@@ -106,10 +108,12 @@ describe('OpenAPI contract', () => {
     expect(schemas.QuizQuestionPublic.properties).not.toHaveProperty(
       'explanation',
     );
-    expect(schemas.QuizQuestionResult.properties).toHaveProperty(
-      'correctOptionId',
-    );
-    expect(schemas.QuizQuestionResult.properties).toHaveProperty('explanation');
+    expect(schemas.QuizPublic.properties).toHaveProperty('version');
+    expect(schemas.QuizResult.properties).toHaveProperty('version');
+    expect(schemas.QuizResult.properties).toHaveProperty('answers');
+    expect(schemas.QuizResult.properties).toHaveProperty('results');
+    expect(schemas.QuizResultItem.properties).toHaveProperty('correctOptionId');
+    expect(schemas.QuizResultItem.properties).toHaveProperty('explanation');
     expect(schemas.SubmitQuizRequest.properties.answers.maxItems).toBe(5);
     expect(schemas.SubmitQuizAnswerItem.properties.optionId.maxLength).toBe(64);
     expect(schemas.SubmitQuizAnswerItem.properties.text.maxLength).toBe(500);
