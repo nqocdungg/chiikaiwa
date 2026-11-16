@@ -582,3 +582,166 @@ export function validateProfileUpdateInput(body) {
   }
   return result;
 }
+
+/**
+ * Validates POST /auth/password-change request payload.
+ * Rejects unknown fields and enforces 8..128 Unicode code points on `newPassword` without trimming.
+ *
+ * @param {unknown} body
+ * @returns {{ currentPassword: string, newPassword: string }}
+ */
+export function validatePasswordChangeInput(body) {
+  if (!isPlainObject(body)) {
+    throw createMalformedRequestError();
+  }
+
+  const allowedKeys = new Set(['currentPassword', 'newPassword']);
+  /** @type {Array<{ path: string, code: string, message: string }>} */
+  const fields = [];
+
+  for (const key of Object.keys(body)) {
+    if (!allowedKeys.has(key)) {
+      fields.push({
+        path: key,
+        code: 'UNKNOWN_FIELD',
+        message: `Trường "${key}" không được phép trong yêu cầu này.`,
+      });
+    }
+  }
+
+  if (
+    typeof body.currentPassword !== 'string' ||
+    body.currentPassword.length === 0
+  ) {
+    fields.push({
+      path: 'currentPassword',
+      code:
+        typeof body.currentPassword === 'string' ? 'REQUIRED' : 'INVALID_TYPE',
+      message: 'Vui lòng nhập mật khẩu hiện tại.',
+    });
+  } else if (countCodePoints(body.currentPassword) > 128) {
+    fields.push({
+      path: 'currentPassword',
+      code: 'INVALID_LENGTH',
+      message: 'Mật khẩu hiện tại không được vượt quá 128 ký tự.',
+    });
+  }
+
+  const newPasswordRes = validatePasswordField(body.newPassword, 'newPassword');
+  if ('error' in newPasswordRes) {
+    fields.push(newPasswordRes.error);
+  }
+
+  if (fields.length > 0 || 'error' in newPasswordRes) {
+    throw createValidationError(fields);
+  }
+
+  return {
+    currentPassword: /** @type {string} */ (body.currentPassword),
+    newPassword: newPasswordRes.password,
+  };
+}
+
+/**
+ * Validates POST /auth/password-reset-requests request payload.
+ *
+ * @param {unknown} body
+ * @returns {{ email: string, emailKey: string }}
+ */
+export function validatePasswordResetRequestInput(body) {
+  if (!isPlainObject(body)) {
+    throw createMalformedRequestError();
+  }
+
+  const allowedKeys = new Set(['email']);
+  /** @type {Array<{ path: string, code: string, message: string }>} */
+  const fields = [];
+
+  for (const key of Object.keys(body)) {
+    if (!allowedKeys.has(key)) {
+      fields.push({
+        path: key,
+        code: 'UNKNOWN_FIELD',
+        message: `Trường "${key}" không được phép trong yêu cầu này.`,
+      });
+    }
+  }
+
+  const emailRes = validateEmailField(body.email, 'email');
+  if ('error' in emailRes) {
+    fields.push(emailRes.error);
+  }
+
+  if (fields.length > 0 || 'error' in emailRes) {
+    throw createValidationError(fields);
+  }
+
+  return {
+    email: emailRes.email,
+    emailKey: emailRes.emailKey,
+  };
+}
+
+/**
+ * Validates POST /auth/password-resets request payload.
+ *
+ * @param {unknown} body
+ * @returns {{ token: string, newPassword: string }}
+ */
+export function validatePasswordResetInput(body) {
+  if (!isPlainObject(body)) {
+    throw createMalformedRequestError();
+  }
+
+  const allowedKeys = new Set(['token', 'newPassword']);
+  /** @type {Array<{ path: string, code: string, message: string }>} */
+  const fields = [];
+
+  for (const key of Object.keys(body)) {
+    if (!allowedKeys.has(key)) {
+      fields.push({
+        path: key,
+        code: 'UNKNOWN_FIELD',
+        message: `Trường "${key}" không được phép trong yêu cầu này.`,
+      });
+    }
+  }
+
+  let normalizedToken = '';
+  if (typeof body.token !== 'string') {
+    fields.push({
+      path: 'token',
+      code: 'INVALID_TYPE',
+      message: 'Mã đặt lại mật khẩu phải là chuỗi ký tự.',
+    });
+  } else {
+    normalizedToken = body.token.trim();
+    if (!normalizedToken) {
+      fields.push({
+        path: 'token',
+        code: 'REQUIRED',
+        message: 'Vui lòng cung cấp mã đặt lại mật khẩu.',
+      });
+    } else if (normalizedToken.length > 512) {
+      fields.push({
+        path: 'token',
+        code: 'INVALID_LENGTH',
+        message: 'Mã đặt lại mật khẩu vượt quá độ dài cho phép.',
+      });
+    }
+  }
+
+  const newPasswordRes = validatePasswordField(body.newPassword, 'newPassword');
+  if ('error' in newPasswordRes) {
+    fields.push(newPasswordRes.error);
+  }
+
+  if (fields.length > 0 || 'error' in newPasswordRes) {
+    throw createValidationError(fields);
+  }
+
+  return {
+    token: normalizedToken,
+    newPassword: newPasswordRes.password,
+  };
+}

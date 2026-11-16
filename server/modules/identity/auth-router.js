@@ -12,17 +12,27 @@ import {
 import { issueCsrfToken } from '../../middleware/csrf.js';
 import {
   enforceLoginRateLimit,
+  enforcePasswordResetRequestRateLimit,
   enforceWriteRateLimit,
   getClientIp,
 } from '../../middleware/rate-limit.js';
 import {
+  changeUserPassword,
   formatAuthMeDto,
   loginUser,
   logoutSession,
   registerUser,
+  requestPasswordReset,
+  resetPasswordWithToken,
 } from './identity-service.js';
 
-export function createAuthRouter() {
+/**
+ * @param {{
+ *   sendPasswordResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>,
+ *   waitUntil?: (promise: Promise<unknown>) => void
+ * }} [options]
+ */
+export function createAuthRouter({ sendPasswordResetEmail, waitUntil } = {}) {
   const router = express.Router();
 
   // GET /api/v1/auth/csrf (P)
@@ -121,6 +131,66 @@ export function createAuthRouter() {
       data: formatAuthMeDto(identity),
       meta: response.locals.meta,
     });
+  });
+
+  // POST /api/v1/auth/password-change (U)
+  router.post(
+    '/password-change',
+    requireAuth(['U']),
+    async (request, response, next) => {
+      try {
+        const identity = response.locals.identity;
+        await enforceWriteRateLimit({ actorOrIpKey: identity.actorKey });
+        await changeUserPassword({
+          userId: identity.userId,
+          rawBody: request.body,
+        });
+        response.status(204).end();
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
+  // POST /api/v1/auth/password-reset-requests (P)
+  router.post('/password-reset-requests', async (request, response, next) => {
+    try {
+      const ip = getClientIp(request);
+      const rawEmail = request.body?.email;
+      const normalizedEmailKey =
+        typeof rawEmail === 'string' && rawEmail.trim()
+          ? rawEmail.trim().toLowerCase()
+          : undefined;
+
+      await enforcePasswordResetRequestRateLimit({
+        ip,
+        emailKey: normalizedEmailKey,
+      });
+
+      const data = await requestPasswordReset(request.body, {
+        sendResetEmail: sendPasswordResetEmail,
+        waitUntil,
+      });
+
+      response.status(202).json({
+        data,
+        meta: response.locals.meta,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/v1/auth/password-resets (P)
+  router.post('/password-resets', async (request, response, next) => {
+    try {
+      const ip = getClientIp(request);
+      await enforceWriteRateLimit({ actorOrIpKey: `ip:${ip}` });
+      await resetPasswordWithToken(request.body);
+      response.status(204).end();
+    } catch (err) {
+      next(err);
+    }
   });
 
   return router;

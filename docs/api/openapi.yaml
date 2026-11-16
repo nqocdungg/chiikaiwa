@@ -12,6 +12,7 @@ servers:
     description: Cùng origin với ứng dụng
 
 tags:
+  - name: Auth
   - name: Sessions
   - name: System
   - name: Profile
@@ -373,6 +374,7 @@ paths:
       tags: [Invitation Requests]
       operationId: createInvitationRequest
       summary: Người học gửi request bằng mã mời
+      description: Checks two-way pair blocks in the transaction before reserving the requester or reopening a request; returns 409 PAIR_BLOCKED for a blocked pair.
       security:
         - sessionCookie: []
           csrfToken: []
@@ -494,14 +496,121 @@ paths:
                 $ref: '#/components/schemas/InviteRequestResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+
+  /auth/password-change:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Đổi mật khẩu của tài khoản đang hoạt động
+      description: >-
+        Kiểm tra mật khẩu hiện tại, cập nhật passwordHash, tăng authVersion và
+        version, thu hồi mọi phiên đăng nhập cũ và vô hiệu các token đặt lại mật
+        khẩu chưa dùng trong transaction TX-02. Không dùng Idempotency-Key.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '204':
+          description: Đổi mật khẩu thành công và thu hồi mọi phiên đăng nhập cũ
+        '400': *a1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403': *a1
+        '413': *a1
+        '415': *a1
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/password-reset-requests:
+    post:
+      tags: [Auth]
+      operationId: requestPasswordReset
+      summary: Yêu cầu gửi liên kết đặt lại mật khẩu dùng một lần
+      description: >-
+        Tạo token đặt lại mật khẩu hiệu lực 15 phút (chỉ lưu SHA-256 tokenHash)
+        cho tài khoản đang hoạt động trong transaction và đăng ký tác vụ gửi
+        qua Brevo HTTPS API cùng hậu xử lý token qua Vercel waitUntil để không
+        chặn phản hồi HTTP 202 (không phải durable queue và không tự retry khi
+        lượt gửi thất bại). Luôn trả phản hồi 202 trung tính không tiết lộ email
+        có tồn tại hoặc bị khóa hay không, kể cả khi lượt gửi riêng lẻ thất bại
+        sau phản hồi (chỉ trả 503 trước khi tra email theo trạng thái cấu hình
+        dịch vụ chung). Không thay mật khẩu nếu gửi thư thất bại.
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestInput'
+      responses:
+        '202':
+          description: Phản hồi trung tính cho mọi yêu cầu hợp lệ về cú pháp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetRequestResponse'
+        '400': *a1
+        '403': *a1
+        '413': *a1
+        '415': *a1
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /auth/password-resets:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Đặt lại mật khẩu bằng liên kết một lần
+      description: >-
+        Tiêu thụ nguyên tử token còn hạn (15 phút, dùng một lần), cập nhật mật
+        khẩu, tăng authVersion, vô hiệu các token reset còn lại và thu hồi mọi
+        phiên đăng nhập cũ trong transaction TX-02. Không tự đăng nhập sau khi
+        đặt lại. Token sai, đã hết hạn hoặc đã dùng đều trả 400
+        RESET_TOKEN_INVALID.
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetInput'
+      responses:
+        '204':
+          description: Đặt lại mật khẩu thành công; không tự đăng nhập
+        '400': *a1
+        '403': *a1
+        '413': *a1
+        '415': *a1
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /admin/content/{id}/publish:
     post:
@@ -1785,6 +1894,57 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
       additionalProperties: false
+    PasswordChangeRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+      additionalProperties: false
+    PasswordResetRequestInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+      additionalProperties: false
+    PasswordResetRequestNotice:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+      additionalProperties: false
+    PasswordResetRequestResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/PasswordResetRequestNotice'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    PasswordResetInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 512
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+      additionalProperties: false
     ContentItem:
       type: object
       required: [id, kind, status, latestRevision, version]
@@ -2348,6 +2508,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Không có quyền, sai CSRF/Origin hoặc tài khoản đã bị khóa (FORBIDDEN, CSRF_INVALID, ACCOUNT_LOCKED)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     NotFound:
       description: Tài nguyên không tồn tại hoặc ngoài phạm vi truy cập
       content:
@@ -2359,6 +2525,12 @@ components:
         Xung đột trạng thái hoặc danh tính (`VERSION_CONFLICT`,
         `IDEMPOTENCY_CONFLICT`, `IDENTITY_CONFLICT`, `ACTOR_BUSY`,
         `INVITATION_UNAVAILABLE`, ...)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: Quyền truy cập tạm của khách đã hết hạn hoặc bị thu hồi (GUEST_EXPIRED)
       content:
         application/json:
           schema:

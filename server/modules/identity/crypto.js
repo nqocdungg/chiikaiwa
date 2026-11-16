@@ -312,3 +312,20 @@ export function verifyJwtIgnoreExpiration(token, secret, { issuer, audience }) {
 export function hashGuestCredential(credential) {
   return createHash('sha256').update(credential).digest('hex');
 }
+
+/**
+ * Generates a cryptographically strong, URL-safe password reset token (256-bit entropy).
+ * @returns {string}
+ */
+export function generatePasswordResetToken() {
+  return randomBytes(32).toString('base64url');
+}
+
+/**
+ * Hashes a raw password reset token using SHA-256 so raw tokens are never stored in the database.
+ * @param {string} token
+ * @returns {string}
+ */
+export function hashPasswordResetToken(token) {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
