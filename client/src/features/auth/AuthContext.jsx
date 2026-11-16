@@ -33,6 +33,9 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
   );
   const [isLoading, setIsLoading] = useState(!skipInitialCheck);
   const [error, setError] = useState(/** @type {ApiError | null} */ (null));
+  const [authNotice, setAuthNotice] = useState(
+    /** @type {string | null} */ (null),
+  );
   const authRequestSeqRef = useRef(0);
 
   const resetState = useCallback(() => {
@@ -45,6 +48,21 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
     setIdentityKey(null);
     clearPrivateCache();
   }, []);
+
+  const clearAuthNotice = useCallback(() => {
+    setAuthNotice(null);
+  }, []);
+
+  const invalidateSession = useCallback(
+    (/** @type {string | null} */ notice = null) => {
+      authRequestSeqRef.current += 1;
+      resetState();
+      setError(null);
+      setIsLoading(false);
+      setAuthNotice(notice);
+    },
+    [resetState],
+  );
 
   const applyMeResponse = useCallback(
     (
@@ -183,6 +201,7 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
       const requestSeq = ++authRequestSeqRef.current;
       setIsLoading(true);
       setError(null);
+      setAuthNotice(null);
       try {
         const res = await api.post('/auth/login', credentials);
         if (requestSeq !== authRequestSeqRef.current) {
@@ -267,6 +286,7 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
       const requestSeq = ++authRequestSeqRef.current;
       setIsLoading(true);
       setError(null);
+      setAuthNotice(null);
       try {
         const res = await api.post('/auth/register', payload);
         if (requestSeq !== authRequestSeqRef.current) {
@@ -317,6 +337,9 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
       status,
       isLoading,
       error,
+      authNotice,
+      clearAuthNotice,
+      invalidateSession,
       checkAuth,
       login,
       logout,
@@ -332,6 +355,9 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
       status,
       isLoading,
       error,
+      authNotice,
+      clearAuthNotice,
+      invalidateSession,
       checkAuth,
       login,
       logout,

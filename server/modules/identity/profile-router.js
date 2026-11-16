@@ -1,5 +1,6 @@
 import express from 'express';
 import { requireAuth } from '../../middleware/auth.js';
+import { AppError } from '../../middleware/http-error.js';
 import { enforceWriteRateLimit } from '../../middleware/rate-limit.js';
 import { getCatalogsDto } from './catalogs.js';
 import { updateUserProfile } from './identity-service.js';
@@ -23,6 +24,22 @@ export function createProfileRouter() {
     async (request, response, next) => {
       try {
         const identity = response.locals.identity;
+        const expectedActor = request.get('X-Expected-Actor');
+        if (expectedActor !== undefined) {
+          const normalizedExpected = expectedActor.trim();
+          const currentUserId = String(identity.userId);
+          if (
+            normalizedExpected !== currentUserId &&
+            normalizedExpected !== identity.actorKey
+          ) {
+            throw new AppError({
+              status: 409,
+              code: 'IDENTITY_CONFLICT',
+              message:
+                'Tài khoản đăng nhập đã thay đổi. Vui lòng tải lại hồ sơ trước khi lưu.',
+            });
+          }
+        }
         const idempotencyKey = validateIdempotencyKey(
           request.get('Idempotency-Key'),
         );
