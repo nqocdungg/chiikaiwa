@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import mongoose from 'mongoose';
 import { AppError } from '../../middleware/http-error.js';
+import { assertPairNotBlocked } from '../safety/safety-service.js';
 import { reconcileActorSessionMedia } from '../sessions/media-cleanup-service.js';
 import {
   connectDatabase,
@@ -485,6 +486,13 @@ export async function createInviteRequest({
         invitation.hostKey === identity.actorKey
       )
         throw unavailable();
+      await assertPairNotBlocked({
+        db,
+        session,
+        firstActorKey: invitation.hostKey,
+        secondActorKey: identity.actorKey,
+        now,
+      });
       const existing = await db
         .collection('invite_requests')
         .findOne(
@@ -780,6 +788,13 @@ async function respondInTransaction({
     firstActorKey: hostKey,
     secondActorKey: request.requesterKey,
     now,
+    expectedStates: {
+      [hostKey]: { mode: 'inviting', resourceId: idString(invitation._id) },
+      [request.requesterKey]: {
+        mode: 'requestingInvite',
+        resourceId: requestId,
+      },
+    },
   });
   const practiceSessionId = new ObjectId();
   const resourceId = idString(practiceSessionId);
@@ -908,16 +923,17 @@ export async function respondToInviteRequest({
   decision,
   operationId,
   assertPairCanEnterSession,
-  now = new Date(),
+  now,
 }) {
-  await reconcileInvitationForRequest(requestId, now);
+  const startedAt = now ?? new Date();
+  await reconcileInvitationForRequest(requestId, startedAt);
   return runIdempotentOperation({
     actorKey: hostKey,
     method: 'POST',
     path: `/api/v1/invitation-requests/${requestId}/responses`,
     operationId,
     payload: { expectedVersion, decision },
-    now,
+    now: startedAt,
     authorize: async ({ session }) => {
       const db = await connectDatabase();
       await loadRequestForActor(db, requestId, hostKey, session);
@@ -931,7 +947,7 @@ export async function respondToInviteRequest({
         hostKey,
         expectedVersion,
         decision,
-        now,
+        now: now ?? new Date(),
         assertPairCanEnterSession,
       });
       return { resultRef: requestId, value };
