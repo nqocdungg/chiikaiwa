@@ -74,16 +74,17 @@ export function App({ skipInitialAuthCheck = false } = {}) {
     );
   }
 
+  const hasPageLandmark = pathname === '/' || pathname === '/home';
   const isFullBleedRoute =
-    pathname === '/' ||
-    pathname === '/home' ||
+    hasPageLandmark ||
     pathname === '/forgot-password' ||
     pathname === '/reset-password';
+  const RouteContainer = hasPageLandmark ? 'div' : 'main';
 
   return (
     <AuthProvider skipInitialCheck={skipInitialAuthCheck}>
       <div className="ck-app">
-        <main
+        <RouteContainer
           className={isFullBleedRoute ? 'w-full' : 'ck-page-container py-10'}
         >
           <Routes>
@@ -101,9 +102,13 @@ export function App({ skipInitialAuthCheck = false } = {}) {
               <Route path="/reset-password" element={<ResetPasswordPage />} />
             </Route>
 
-            {/* SC-03 - SC-05, SC-13, SC-16, SC-18: User-only routes (U) */}
-            <Route element={<ProtectedRoute allowedRoles={['U']} />}>
+            {/* SC-03: Learner Home */}
+            <Route element={<ProtectedRoute learnerOnly />}>
               <Route path="/home" element={<Home />} />
+            </Route>
+
+            {/* SC-04, SC-05, SC-13, SC-16, SC-18: User-only routes (U) */}
+            <Route element={<ProtectedRoute allowedRoles={['U']} />}>
               <Route path="/profile" element={<ProfilePage />} />
               <Route
                 path="/match"
@@ -211,7 +216,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
               }
             />
           </Routes>
-        </main>
+        </RouteContainer>
       </div>
     </AuthProvider>
   );

@@ -12,5 +12,3 @@ eca4ebaa3b07f24e6d01ad13a2c13aa7e5a66300:docs/design/07-api-specification.md:gen
 # Synthetic JWT and LiveKit keys in the safety guard integration test setup.
 418a2dba6384c3a28654ee852a6421cffcef3eb4:tests/integration/safety-guard.integration.test.js:generic-api-key:126
 418a2dba6384c3a28654ee852a6421cffcef3eb4:tests/integration/safety-guard.integration.test.js:generic-api-key:129
-tests/integration/safety-guard.integration.test.js:generic-api-key:126
-tests/integration/safety-guard.integration.test.js:generic-api-key:129

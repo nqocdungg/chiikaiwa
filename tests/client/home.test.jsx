@@ -24,14 +24,9 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
    * Helper render Home với AuthContext tùy chỉnh và Routes điều hướng
    * @param {Object} [options]
    * @param {Partial<import('../../client/src/features/auth/auth-context.js').AuthState>} [options.authState]
-   * @param {() => void} [options.onStart]
    * @param {string[]} [options.initialEntries]
    */
-  function renderHome({
-    authState = {},
-    onStart,
-    initialEntries = ['/home'],
-  } = {}) {
+  function renderHome({ authState = {}, initialEntries = ['/home'] } = {}) {
     const defaultAuth = {
       user: {
         id: 'u-456',
@@ -63,7 +58,7 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
         <AuthContext.Provider value={defaultAuth}>
           <MemoryRouter initialEntries={initialEntries}>
             <Routes>
-              <Route path="/home" element={<Home onStart={onStart} />} />
+              <Route path="/home" element={<Home />} />
               <Route path="/login" element={<div>Trang đăng nhập</div>} />
             </Routes>
           </MemoryRouter>
@@ -215,12 +210,15 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     expect(screen.queryByText(/Bản demo · Dữ liệu mẫu/i)).toBeNull();
   });
 
-  it('keeps start button and invitation CTAs disabled while coordination check is pending', () => {
+  it('announces the pending coordination check and disables new practice flows', () => {
     vi.spyOn(api, 'get').mockImplementationOnce(() => new Promise(() => {}));
 
     renderHome();
 
     expect(screen.getByRole('heading', { name: 'Trang chính' })).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Đang kiểm tra trạng thái điều phối',
+    );
 
     // Nút tìm bạn luyện bị disabled khi đang chờ coordination check
     const startBtn = screen.getByRole('button', {
@@ -411,24 +409,6 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
       'href',
       `/room/${encodeURIComponent('session/456?filter=1&test=true')}`,
     );
-  });
-
-  it('calls onStart prop when provided for backward compatibility with KaiwaDemo/Storybook', async () => {
-    vi.spyOn(api, 'get').mockResolvedValueOnce({
-      data: { mode: 'idle', version: 1 },
-      meta: {},
-      epoch: getIdentityEpoch(),
-    });
-
-    const onStartMock = vi.fn();
-    renderHome({ onStart: onStartMock });
-
-    const startBtn = screen.getByRole('button', {
-      name: /Tìm bạn luyện nói/i,
-    });
-    fireEvent.click(startBtn);
-
-    expect(onStartMock).toHaveBeenCalledTimes(1);
   });
 
   it('navigates to /login on successful logout (R1 Test A)', async () => {

@@ -128,6 +128,7 @@ describe('FE-002: SC-03 Home Logout Flow with Real Auth Stack', () => {
 
     // Focus tự động được chuyển vào nút "Thử đăng xuất lại" (A3)
     const retryBtn = screen.getByRole('button', { name: 'Thử đăng xuất lại' });
+    expect(screen.getByRole('main')).toContainElement(retryBtn);
     expect(retryBtn).toHaveFocus();
     expect(logoutSpy).toHaveBeenCalledTimes(1);
   });
@@ -213,19 +214,23 @@ describe('FE-002: SC-03 Home Logout Flow with Real Auth Stack', () => {
       name: /Menu tài khoản: Minh Hoàng/i,
     });
     fireEvent.click(accountBtn);
-    fireEvent.click(screen.getByRole('button', { name: /Đăng xuất/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Đăng xuất/i }));
+    });
 
     // Banner lỗi xuất hiện
     expect(await screen.findByRole('alert')).toBeVisible();
 
-    // Người dùng điều hướng sang trang khác (ví dụ /profile)
-    navRef?.('/profile');
+    await act(async () => {
+      navRef?.('/profile');
+    });
     expect(
       await screen.findByRole('heading', { name: 'Hồ sơ cá nhân' }),
     ).toBeVisible();
 
-    // Người dùng bấm Back quay lại /home
-    navRef?.(-1);
+    await act(async () => {
+      navRef?.(-1);
+    });
     expect(
       await screen.findByRole('heading', { name: 'Trang chính' }),
     ).toBeVisible();

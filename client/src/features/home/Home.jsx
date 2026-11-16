@@ -20,14 +20,17 @@ const VALID_COORDINATION_MODES = [
   'inSession',
 ];
 
+/** @param {HTMLButtonElement | null} button */
+function focusLogoutRetry(button) {
+  button?.focus();
+}
+
 /**
  * SC-03: Trang chính (Home) dành cho Người học sau đăng nhập (04 §5.1, §3.2, docs/frontend/design-system.md).
  * Tái cấu trúc theo bản thiết kế mới Figma Make: Centered Hero với 2 linh vật Usagi & Hachiware.
  * Nối dữ liệu người học thật qua auth/me và trạng thái điều phối me/coordination (chống tạo luồng kép).
- *
- * @param {{ onStart?: () => void }} [props] - Hỗ trợ prop onStart cho Storybook & KaiwaDemo
  */
-export function Home({ onStart } = {}) {
+export function Home() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -48,7 +51,6 @@ export function Home({ onStart } = {}) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const triggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
-  const retryRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
   const menuId = 'ck-account-menu';
 
   const [coordination, setCoordination] = useState(
@@ -82,12 +84,6 @@ export function Home({ onStart } = {}) {
     location.state,
     navigate,
   ]);
-
-  useEffect(() => {
-    if (logoutNotice) {
-      retryRef.current?.focus();
-    }
-  }, [logoutNotice]);
 
   useEffect(() => {
     if (!isDropdownOpen) return;
@@ -203,18 +199,10 @@ export function Home({ onStart } = {}) {
     };
   }, [retryKey]);
 
-  const handleStart = () => {
-    if (typeof onStart === 'function') {
-      onStart();
-    } else {
-      navigate('/match');
-    }
-  };
+  const handleStart = () => navigate('/match');
 
   const isBusy = Boolean(coordination && coordination.mode !== 'idle');
-  const isStartDisabled = onStart
-    ? false
-    : coordinationLoading || coordinationError || isBusy;
+  const isStartDisabled = coordinationLoading || coordinationError || isBusy;
 
   const displayName = user?.displayName || 'Người học';
   const level = user?.profile?.level;
@@ -283,7 +271,7 @@ export function Home({ onStart } = {}) {
             aria-label={`Menu tài khoản: ${displayName}${level ? ` ${level}` : ''}`}
           >
             <Avatar name={displayName} size={32} />
-            <span className="font-semibold">{displayName}</span>
+            <span className="ck-profile-name font-semibold">{displayName}</span>
             {level ? <Badge tone="accent">{level}</Badge> : null}
             <span className="text-xs text-muted" aria-hidden="true">
               ▾
@@ -326,7 +314,7 @@ export function Home({ onStart } = {}) {
               </div>
               <div className="flex gap-2">
                 <button
-                  ref={retryRef}
+                  ref={focusLogoutRetry}
                   type="button"
                   className="ck-button ck-button--primary"
                   onClick={handleLogout}
@@ -467,6 +455,11 @@ export function Home({ onStart } = {}) {
               >
                 Tìm bạn luyện nói
               </Button>
+              {coordinationLoading && (
+                <p className="mt-2 text-sm text-muted" role="status">
+                  Đang kiểm tra trạng thái điều phối…
+                </p>
+              )}
             </div>
 
             {/* Hàng nút phụ: Tạo mã mời / Nhập mã (Tuân thủ trạng thái điều phối) */}
