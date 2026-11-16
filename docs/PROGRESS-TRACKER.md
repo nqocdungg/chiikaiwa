@@ -348,9 +348,13 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
   - `npm run typecheck`: Pass 100% (0 errors trên client, server và root jsconfig).
   - `npm test`: **422/422 tests pass** trên 30 test suites (bao gồm 20/20 quiz-service unit tests).
   - `npm run openapi:check`: **9/9 tests pass** (kiểm chứng tag `Quizzes`, security, schemas `QuizPublic`, `QuizResult`, `QuizResultItem`, headers).
-  - `tests/integration/quiz-api.integration.test.js`: **44/44 tests pass** trên MongoDB replica set (bao gồm các ca thu hồi khách giữa chừng Must fix 3, DB count đồng thời, sourceSessionId active, guest expired replay).
-  - `npm run test:integration`: **228/228 integration tests pass** trên toàn bộ 17 suites của hệ thống.
+  - `tests/integration/quiz-api.integration.test.js`: **41/41 tests pass** trên môi trường MongoDB 8.2.7 replica set tạm (`MongoMemoryReplSet`); chưa chạy trên cụm MongoDB/Atlas thật.
+  - `npm run test:integration`: **225/225 integration tests pass** trên replica set tạm.
   - `npm run build`: Pass 100% (client vite production build & server app/index syntax check).
+- Giới hạn và ghi chú PR:
+  - Chưa kiểm chứng integration test trên MongoDB/Atlas thật do phụ thuộc môi trường chạy replica set.
+  - Test thu hồi khách mới chứng minh việc service đọc lại trạng thái khách trong transaction snapshot trước khi ghi; chưa mô phỏng ca thu hồi chen ngang giữa lúc đọc và ghi trong `guestAccess` (phần này được bảo vệ bởi điều kiện CAS `updateOne({ _id, version })`).
+  - Quyết định nghiệp vụ: chỉ phiên thực hành đã kết thúc (`ended`) mới được dùng làm `sourceSessionId`; không trả `createdAt` trong body data theo đúng DTO spec.
 - Tiếp theo: Trình người dùng cho phép commit và push branch `feature/BE-018-quiz-attempts-and-results`, mở PR về `develop` để reviewer Ngọc Dung rà soát.
 
 ## Sprint 2

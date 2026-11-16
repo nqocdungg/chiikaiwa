@@ -154,6 +154,9 @@ export function decodeQuizCursor(cursor, expectedContext) {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return null;
     }
+    if (parsed.v !== 1) {
+      return null;
+    }
     if (parsed.ctx !== expectedContext) {
       return null;
     }
