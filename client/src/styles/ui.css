@@ -388,6 +388,7 @@
 .ck-profile-pill {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   gap: 8px;
   background: #ffffff;
   border: 1.5px solid var(--color-border);
@@ -408,9 +409,18 @@
   box-shadow: 0 3px 10px rgba(184, 116, 141, 0.16);
 }
 
+.ck-profile-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ck-profile-dropdown-container {
   position: relative;
   display: inline-flex;
+  min-width: 0;
+  max-width: min(100%, 20rem);
 }
 
 .ck-profile-dropdown {
@@ -707,6 +717,10 @@
     flex-wrap: wrap;
     gap: 12px;
     justify-content: space-between;
+  }
+
+  .ck-profile-dropdown-container {
+    margin-inline-start: auto;
   }
 
   .ck-home-hero {

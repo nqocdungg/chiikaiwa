@@ -102,9 +102,13 @@ export function App({ skipInitialAuthCheck = false } = {}) {
               <Route path="/reset-password" element={<ResetPasswordPage />} />
             </Route>
 
-            {/* SC-03 - SC-05, SC-13, SC-16, SC-18: User-only routes (U) */}
-            <Route element={<ProtectedRoute allowedRoles={['U']} />}>
+            {/* SC-03: Learner Home */}
+            <Route element={<ProtectedRoute learnerOnly />}>
               <Route path="/home" element={<Home />} />
+            </Route>
+
+            {/* SC-04, SC-05, SC-13, SC-16, SC-18: User-only routes (U) */}
+            <Route element={<ProtectedRoute allowedRoles={['U']} />}>
               <Route path="/profile" element={<ProfilePage />} />
               <Route
                 path="/match"

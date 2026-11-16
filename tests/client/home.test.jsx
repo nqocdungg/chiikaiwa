@@ -215,12 +215,15 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     expect(screen.queryByText(/Bản demo · Dữ liệu mẫu/i)).toBeNull();
   });
 
-  it('keeps start button and invitation CTAs disabled while coordination check is pending', () => {
+  it('announces the pending coordination check and disables new practice flows', () => {
     vi.spyOn(api, 'get').mockImplementationOnce(() => new Promise(() => {}));
 
     renderHome();
 
     expect(screen.getByRole('heading', { name: 'Trang chính' })).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Đang kiểm tra trạng thái điều phối',
+    );
 
     // Nút tìm bạn luyện bị disabled khi đang chờ coordination check
     const startBtn = screen.getByRole('button', {
@@ -413,12 +416,8 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     );
   });
 
-  it('calls onStart prop when provided for backward compatibility with KaiwaDemo/Storybook', async () => {
-    vi.spyOn(api, 'get').mockResolvedValueOnce({
-      data: { mode: 'idle', version: 1 },
-      meta: {},
-      epoch: getIdentityEpoch(),
-    });
+  it('starts the Storybook demo without calling the coordination API', () => {
+    const coordinationRequest = vi.spyOn(api, 'get');
 
     const onStartMock = vi.fn();
     renderHome({ onStart: onStartMock });
@@ -429,6 +428,10 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     fireEvent.click(startBtn);
 
     expect(onStartMock).toHaveBeenCalledTimes(1);
+    expect(coordinationRequest).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(/Đang kiểm tra trạng thái điều phối/i),
+    ).toBeNull();
   });
 
   it('navigates to /login on successful logout (R1 Test A)', async () => {

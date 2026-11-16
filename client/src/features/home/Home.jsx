@@ -36,6 +36,7 @@ export function Home({ onStart } = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const isDemo = typeof onStart === 'function';
 
   const [prevLocationState, setPrevLocationState] = useState(location.state);
   const [logoutNotice, setLogoutNotice] = useState(
@@ -58,7 +59,7 @@ export function Home({ onStart } = {}) {
   const [coordination, setCoordination] = useState(
     /** @type {{ mode: string, resourceId?: string } | null} */ (null),
   );
-  const [coordinationLoading, setCoordinationLoading] = useState(true);
+  const [coordinationLoading, setCoordinationLoading] = useState(!isDemo);
   const [coordinationError, setCoordinationError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
@@ -160,6 +161,8 @@ export function Home({ onStart } = {}) {
   };
 
   useEffect(() => {
+    if (isDemo) return;
+
     let isMounted = true;
 
     api
@@ -199,7 +202,7 @@ export function Home({ onStart } = {}) {
     return () => {
       isMounted = false;
     };
-  }, [retryKey]);
+  }, [isDemo, retryKey]);
 
   const handleStart = () => {
     if (typeof onStart === 'function') {
@@ -210,9 +213,8 @@ export function Home({ onStart } = {}) {
   };
 
   const isBusy = Boolean(coordination && coordination.mode !== 'idle');
-  const isStartDisabled = onStart
-    ? false
-    : coordinationLoading || coordinationError || isBusy;
+  const isStartDisabled =
+    !isDemo && (coordinationLoading || coordinationError || isBusy);
 
   const displayName = user?.displayName || 'Người học';
   const level = user?.profile?.level;
@@ -281,7 +283,7 @@ export function Home({ onStart } = {}) {
             aria-label={`Menu tài khoản: ${displayName}${level ? ` ${level}` : ''}`}
           >
             <Avatar name={displayName} size={32} />
-            <span className="font-semibold">{displayName}</span>
+            <span className="ck-profile-name font-semibold">{displayName}</span>
             {level ? <Badge tone="accent">{level}</Badge> : null}
             <span className="text-xs text-muted" aria-hidden="true">
               ▾
@@ -465,6 +467,11 @@ export function Home({ onStart } = {}) {
               >
                 Tìm bạn luyện nói
               </Button>
+              {!isDemo && coordinationLoading && (
+                <p className="mt-2 text-sm text-muted" role="status">
+                  Đang kiểm tra trạng thái điều phối…
+                </p>
+              )}
             </div>
 
             {/* Hàng nút phụ: Tạo mã mời / Nhập mã (Tuân thủ trạng thái điều phối) */}
