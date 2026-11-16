@@ -1,5 +1,13 @@
 import express from 'express';
+import { readAuthEnv } from '../../config/env.js';
 import { requireAuth } from '../../middleware/auth.js';
+import { AppError } from '../../middleware/http-error.js';
+import {
+  AUTH_COOKIE_NAME,
+  GUEST_COOKIE_NAME,
+  parseCookies,
+  setGuestSessionCookie,
+} from '../../middleware/cookies.js';
 import {
   consumeRateLimit,
   enforceWriteRateLimit,
@@ -9,6 +17,7 @@ import { connectDatabase } from '../../persistence/database.js';
 import {
   cancelInvitation,
   cancelInviteRequest,
+  createGuestTrial,
   createInvitation,
   createInviteRequest,
   getInvitation,
@@ -19,6 +28,7 @@ import {
   respondToInviteRequest,
 } from './invitation-service.js';
 import {
+  validateCreateGuestTrialInput,
   validateCreateInvitationInput,
   validateCreateInviteRequestInput,
   validateExpectedVersion,
@@ -54,6 +64,47 @@ async function applyWriteLimit(request, response) {
  */
 export function createInvitationRouter({ assertPairCanEnterSession } = {}) {
   const router = express.Router();
+
+  // POST /api/v1/guest-trials (P) — public browser mutation with CSRF.
+  router.post('/guest-trials', async (request, response, next) => {
+    try {
+      const cookies = parseCookies(request.headers.cookie);
+      if (cookies[AUTH_COOKIE_NAME] !== undefined) {
+        throw new AppError({
+          status: 409,
+          code: 'IDENTITY_CONFLICT',
+          message:
+            'Không thể tạo lượt thử khách khi đang mang phiên tài khoản.',
+        });
+      }
+      const { code } = validateCreateGuestTrialInput(request.body);
+      const operation = operationId(request);
+      await applyWriteLimit(request, response);
+      const db = await connectDatabase();
+      await consumeRateLimit({
+        db,
+        scope: 'invitation-code-ip',
+        subjectKey: getClientIp(request),
+        limit: INVITATION_CODE_LOOKUP_MAX,
+        windowMs: INVITATION_CODE_LOOKUP_WINDOW_MS,
+      });
+      const result = await createGuestTrial({
+        code,
+        operationId: operation,
+        existingGuestCredential: cookies[GUEST_COOKIE_NAME],
+      });
+      if (result.credentialToSet) {
+        setGuestSessionCookie(response, result.credentialToSet, {
+          secure: readAuthEnv().secureCookies,
+        });
+      }
+      response
+        .status(201)
+        .json({ data: result.data, meta: response.locals.meta });
+    } catch (caught) {
+      next(caught);
+    }
+  });
 
   router.post(
     '/invitations',

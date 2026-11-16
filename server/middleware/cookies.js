@@ -147,3 +147,23 @@ export function clearGuestSessionCookie(response, { secure }) {
     }),
   );
 }
+
+/**
+ * Sets the guest session cookie with the raw credential value.
+ * No expiry is set so the cookie lives for the browser session; deadline
+ * enforcement is done server-side via guest_sessions.status and expiresAt.
+ * @param {import('express').Response} response
+ * @param {string} credential - raw guest credential (must not be logged)
+ * @param {{ secure: boolean }} options
+ */
+export function setGuestSessionCookie(response, credential, { secure }) {
+  response.append(
+    'Set-Cookie',
+    serializeCookie(GUEST_COOKIE_NAME, credential, {
+      httpOnly: true,
+      secure,
+      sameSite: 'Lax',
+      path: '/',
+    }),
+  );
+}

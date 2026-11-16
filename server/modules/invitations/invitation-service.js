@@ -11,6 +11,10 @@ import {
   claimActorState,
   runIdempotentOperation,
 } from '../coordination/coordination-service.js';
+import {
+  generateGuestCredential,
+  hashGuestCredential,
+} from '../identity/crypto.js';
 
 export const INVITATION_TTL_MS = 10 * 60 * 1000;
 export const INVITATION_CODE_LOOKUP_WINDOW_MS = 5 * 60 * 1000;
@@ -52,6 +56,24 @@ const serviceUnavailable = () =>
     'SERVICE_UNAVAILABLE',
     'Kiểm tra an toàn cặp người học chưa sẵn sàng.',
   );
+const actorBusy = () =>
+  error(409, 'ACTOR_BUSY', 'Danh tính đang tham gia một luồng khác.');
+const sessionExpired = () =>
+  error(
+    401,
+    'SESSION_EXPIRED',
+    'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
+  );
+const guestExpired = () =>
+  error(410, 'GUEST_EXPIRED', 'Quyền truy cập tạm của khách đã hết hạn.');
+
+/** @param {any} guest @param {Date} now */
+function isGuestExpired(guest, now) {
+  return (
+    guest.status === 'expired' ||
+    (guest.expiresAt instanceof Date && guest.expiresAt <= now)
+  );
+}
 
 /** @param {unknown} value */
 function isDuplicateKeyError(value) {
@@ -204,6 +226,12 @@ async function expireInvitation(db, invitation, now, session) {
       actorKey: request.requesterKey,
       mode: 'requestingInvite',
       resourceId: idString(request._id),
+      now,
+      session,
+    });
+    await expireWaitingGuestForRequest(db, {
+      requesterKey: request.requesterKey,
+      invitationId: invitation._id,
       now,
       session,
     });
@@ -443,6 +471,12 @@ export async function cancelInvitation({
           actorKey: request.requesterKey,
           mode: 'requestingInvite',
           resourceId: idString(request._id),
+          now,
+          session,
+        });
+        await expireWaitingGuestForRequest(db, {
+          requesterKey: request.requesterKey,
+          invitationId: invitation._id,
           now,
           session,
         });
@@ -697,6 +731,10 @@ export async function cancelInviteRequest({
     },
     execute: async ({ session }) => {
       const db = await connectDatabase();
+      const reqDoc = await db
+        .collection('invite_requests')
+        .findOne({ _id: new ObjectId(requestId) }, { session });
+      if (!reqDoc) throw notFound();
       const result = await db.collection('invite_requests').updateOne(
         {
           _id: new ObjectId(requestId),
@@ -715,6 +753,12 @@ export async function cancelInviteRequest({
         actorKey,
         mode: 'requestingInvite',
         resourceId: requestId,
+        now,
+        session,
+      });
+      await expireWaitingGuestForRequest(db, {
+        requesterKey: actorKey,
+        invitationId: reqDoc.invitationId,
         now,
         session,
       });
@@ -772,6 +816,12 @@ async function respondInTransaction({
       actorKey: request.requesterKey,
       mode: 'requestingInvite',
       resourceId: requestId,
+      now,
+      session,
+    });
+    await expireWaitingGuestForRequest(db, {
+      requesterKey: request.requesterKey,
+      invitationId: invitation._id,
       now,
       session,
     });
@@ -898,16 +948,27 @@ async function respondInTransaction({
       now,
       session,
     });
+    await expireWaitingGuestForRequest(db, {
+      requesterKey: loser.requesterKey,
+      invitationId: invitation._id,
+      now,
+      session,
+    });
   }
   if (request.requesterKey.startsWith('guest:')) {
-    await db.collection('guest_sessions').updateOne(
-      { _id: new ObjectId(request.requesterKey.slice(6)), status: 'waiting' },
+    const guestUpdate = await db.collection('guest_sessions').updateOne(
+      {
+        _id: new ObjectId(request.requesterKey.slice(6)),
+        status: 'waiting',
+        invitationId: invitation._id,
+      },
       {
         $set: { status: 'active', practiceSessionId, updatedAt: now },
         $inc: { version: 1 },
       },
       { session },
     );
+    if (guestUpdate.modifiedCount !== 1) throw versionConflict();
   }
   const current = await db
     .collection('invite_requests')
@@ -963,4 +1024,282 @@ export async function respondToInviteRequest({
       return (await requestDtos(db, [doc], session))[0];
     },
   });
+}
+
+/**
+ * Revokes a waiting guest_sessions document that belongs to the requester of a specific request,
+ * in the same transaction that cancels/rejects/expires the request or invitation.
+ * Only acts when the requesterKey is a guest actor and the guest is in waiting status
+ * with the matching invitationId.
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {{ requesterKey: string, invitationId: import('mongoose').Types.ObjectId, now: Date, session: import('mongoose').ClientSession }} input
+ */
+async function expireWaitingGuestForRequest(
+  db,
+  { requesterKey, invitationId, now, session },
+) {
+  if (!requesterKey.startsWith('guest:')) return;
+  const guestId = requesterKey.slice(6);
+  if (!ObjectId.isValid(guestId)) return;
+  await db.collection('guest_sessions').updateOne(
+    {
+      _id: new ObjectId(guestId),
+      status: 'waiting',
+      invitationId,
+    },
+    {
+      $set: { status: 'expired', cleanupState: 'pending', updatedAt: now },
+      $inc: { version: 1 },
+    },
+    { session },
+  );
+}
+
+/**
+ * Loads an invitation by code inside a transaction and reconciles its expiry.
+ * @param {import('mongoose').mongo.Db} db
+ * @param {string} code
+ * @param {string} actorKey
+ * @param {Date} now
+ * @param {import('mongoose').ClientSession} session
+ */
+async function loadOpenInvitationByCode(db, code, actorKey, now, session) {
+  let invitation = await db
+    .collection('invitations')
+    .findOne({ code }, { session });
+  if (!invitation) throw unavailable();
+  invitation = /** @type {any} */ (
+    await expireInvitation(db, invitation, now, session)
+  );
+  if (!invitation) throw unavailable();
+  if (invitation.status !== 'open' || invitation.hostKey === actorKey)
+    throw unavailable();
+  return invitation;
+}
+
+/**
+ * Creates a guest trial via POST /api/v1/guest-trials.
+ * - Case 4A: no existing ck_guest cookie → generates new guest identity, inserts guest_sessions,
+ *   actor_states, invite_requests and operation_receipt in one transaction.
+ * - Case 4B: existing ck_guest cookie → resolves guest, validates it, then delegates to
+ *   runIdempotentOperation using the existing guest's actorKey.
+ *
+ * Returns `{ data, credentialToSet? }` where credentialToSet is the raw credential
+ * (ONLY when a new guest was created) for the router to set as cookie. Never put in JSON response.
+ *
+ * @param {{
+ *   code: string,
+ *   operationId: string,
+ *   existingGuestCredential: string | undefined,
+ *   now?: Date
+ * }} input
+ * @returns {Promise<{ data: { request: any, guest: { status: string } }, credentialToSet?: string }>}
+ */
+export async function createGuestTrial({
+  code,
+  operationId,
+  existingGuestCredential,
+  now = new Date(),
+}) {
+  await reconcileInvitationByCode(code, now);
+
+  // Case 4B: existing ck_guest cookie
+  if (existingGuestCredential !== undefined) {
+    const db = await connectDatabase();
+    const credentialHash = hashGuestCredential(existingGuestCredential);
+    const guestDoc = await db
+      .collection('guest_sessions')
+      .findOne({ credentialHash });
+
+    if (!guestDoc || guestDoc.revokedAt) throw sessionExpired();
+    if (isGuestExpired(guestDoc, now)) throw guestExpired();
+
+    const actorKey = `guest:${idString(guestDoc._id)}`;
+    const requestId = new ObjectId();
+
+    const data = await runIdempotentOperation({
+      actorKey,
+      method: 'POST',
+      path: '/api/v1/guest-trials',
+      operationId,
+      payload: { code },
+      now,
+      authorize: async ({ session }) => {
+        const current = await db
+          .collection('guest_sessions')
+          .findOne({ _id: guestDoc._id }, { session });
+        if (!current || current.revokedAt) throw sessionExpired();
+        if (isGuestExpired(current, now)) throw guestExpired();
+      },
+      execute: async ({ session }) => {
+        const txDb = await connectDatabase();
+        const invitation = await loadOpenInvitationByCode(
+          txDb,
+          code,
+          actorKey,
+          now,
+          session,
+        );
+        await reconcileActorInvitationReservation(txDb, actorKey, now, session);
+
+        const guest = await txDb
+          .collection('guest_sessions')
+          .findOne({ _id: guestDoc._id }, { session });
+        if (!guest || guest.revokedAt) throw sessionExpired();
+        if (isGuestExpired(guest, now)) throw guestExpired();
+        if (
+          guest.status !== 'waiting' ||
+          idString(guest.invitationId) !== idString(invitation._id)
+        ) {
+          throw actorBusy();
+        }
+        const existingRequest = await txDb
+          .collection('invite_requests')
+          .findOne({ requesterKey: actorKey, status: 'pending' }, { session });
+        if (existingRequest) throw actorBusy();
+
+        await claimActorState({
+          actorKey,
+          mode: 'requestingInvite',
+          resourceId: idString(requestId),
+          session,
+          now,
+        });
+        const doc = {
+          _id: requestId,
+          invitationId: invitation._id,
+          requesterKey: actorKey,
+          status: 'pending',
+          expiresAt: invitation.expiresAt,
+          version: 0,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await txDb.collection('invite_requests').insertOne(doc, { session });
+        const requestDto = (await requestDtos(txDb, [doc], session))[0];
+        return {
+          resultRef: idString(requestId),
+          value: { request: requestDto, guest: { status: 'waiting' } },
+        };
+      },
+      replay: async ({ session, receipt }) => {
+        const txDb = await connectDatabase();
+        const doc = await txDb
+          .collection('invite_requests')
+          .findOne({ _id: new ObjectId(receipt.resultRef) }, { session });
+        if (!doc || doc.requesterKey !== actorKey) throw unavailable();
+        const latestGuest = await txDb
+          .collection('guest_sessions')
+          .findOne({ _id: guestDoc._id }, { session });
+        const requestDto = (await requestDtos(txDb, [doc], session))[0];
+        return {
+          request: requestDto,
+          guest: { status: latestGuest?.status ?? guestDoc.status },
+        };
+      },
+    });
+
+    return { data: /** @type {any} */ (data) };
+  }
+
+  // Case 4A: no ck_guest cookie — create new guest identity
+  // Pre-generate stable IDs so transaction retries on duplicate credentialHash remain deterministic
+  const guestId = new ObjectId();
+  const actorKey = `guest:${idString(guestId)}`;
+  const requestId = new ObjectId();
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const rawCredential = generateGuestCredential();
+    const credentialHash = hashGuestCredential(rawCredential);
+    /** @type {string | undefined} */
+    let committedCredential;
+
+    try {
+      const result = await runIdempotentOperation({
+        actorKey,
+        method: 'POST',
+        path: '/api/v1/guest-trials',
+        operationId,
+        payload: { code },
+        now,
+        authorize: async () => {},
+        execute: async ({ session }) => {
+          const txDb = await connectDatabase();
+          const invitation = await loadOpenInvitationByCode(
+            txDb,
+            code,
+            actorKey,
+            now,
+            session,
+          );
+
+          const guestDoc = {
+            _id: guestId,
+            credentialHash,
+            invitationId: invitation._id,
+            status: /** @type {const} */ ('waiting'),
+            version: 0,
+            cleanupState: /** @type {const} */ ('pending'),
+            createdAt: now,
+            updatedAt: now,
+          };
+          await txDb
+            .collection('guest_sessions')
+            .insertOne(guestDoc, { session });
+
+          await claimActorState({
+            actorKey,
+            mode: 'requestingInvite',
+            resourceId: idString(requestId),
+            session,
+            now,
+          });
+
+          const requestDoc = {
+            _id: requestId,
+            invitationId: invitation._id,
+            requesterKey: actorKey,
+            status: 'pending',
+            expiresAt: invitation.expiresAt,
+            version: 0,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await txDb
+            .collection('invite_requests')
+            .insertOne(requestDoc, { session });
+
+          const requestDto = (
+            await requestDtos(txDb, [requestDoc], session)
+          )[0];
+          committedCredential = rawCredential;
+          return {
+            resultRef: idString(requestId),
+            value: { request: requestDto, guest: { status: 'waiting' } },
+          };
+        },
+        replay: async ({ session, receipt }) => {
+          const txDb = await connectDatabase();
+          const doc = await txDb
+            .collection('invite_requests')
+            .findOne({ _id: new ObjectId(receipt.resultRef) }, { session });
+          if (!doc || doc.requesterKey !== actorKey) throw unavailable();
+          const requestDto = (await requestDtos(txDb, [doc], session))[0];
+          return { request: requestDto, guest: { status: 'waiting' } };
+        },
+      });
+
+      return {
+        data: /** @type {any} */ (result),
+        ...(committedCredential
+          ? { credentialToSet: committedCredential }
+          : {}),
+      };
+    } catch (caught) {
+      // Retry on duplicate credentialHash (unique index on guest_sessions.credentialHash)
+      if (!isDuplicateKeyError(caught) || attempt === 2) throw caught;
+    }
+  }
+  throw new Error('Guest credential generation exhausted');
 }

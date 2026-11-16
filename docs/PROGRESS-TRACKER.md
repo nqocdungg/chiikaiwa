@@ -234,6 +234,25 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Triển khai: Chạy [migration đăng ký FSRS-6](../server/persistence/migrations/20261115000100-register-fsrs-six-config.js) trên database đích trước khi gọi reveal. Migration giữ nguyên cấu hình theo hash. Vé dùng khóa server hiện có với miền chữ ký riêng.
 - Tiếp theo: BE-025 dùng `verifyReviewTicket`, kiểm tra lại quyền/scope hiện hành, revision và version trước khi ghi review. Nghiệm thu luồng cấp khách và chọn bộ với BE-015/BE-022, quản lý bộ cá nhân với BE-035. Kiểm thử HTTP hiện dùng bản ghi MongoDB được chuẩn bị sẵn cho các luồng đó.
 
+### BE-015 — Danh tính khách qua mã mời
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã triển khai và self-test; chờ CI, review độc lập và nghiệm thu AT-03/AT-11. Chưa chuyển Done.
+- PR: Chưa có; branch `feature/BE-015-add-guest-trial-identity`, base `develop@e08def0`, chưa commit/push.
+- Đã làm:
+  - Thêm `POST /api/v1/guest-trials` công khai có CSRF: từ chối `ck_session` bằng `409 IDENTITY_CONFLICT`; mã sai/hết hạn/đã dùng trả `409 INVITATION_UNAVAILABLE`; giới hạn 20 lượt/5 phút theo IP và 120 lượt ghi/phút theo actor/IP. Mã mời được trim/chuyển chữ hoa, body chỉ nhận `{code}`.
+  - Cấp credential khách 32 byte base64url, chỉ lưu hash trong `guest_sessions`, đặt cookie `ck_guest` HttpOnly/SameSite=Lax/Path=/ (Secure theo cấu hình), không đặt Max-Age; deadline do server quyết định.
+  - Tạo mới trong một transaction gồm `guest_sessions`, `actor_states` (`requestingInvite`) và `invite_requests`; retry cùng cookie/key/code trả request cũ, khác code trả `IDEMPOTENCY_CONFLICT`, key mới khi còn giữ lượt trả `ACTOR_BUSY`; cookie không tồn tại/đã thu hồi trả `SESSION_EXPIRED`, hết hạn trả `GUEST_EXPIRED`.
+  - Siết `GET /auth/me` và mọi endpoint dùng danh tính khách: khách `waiting` chỉ còn quyền khi request còn pending và invitation còn open; `active`/`summary` phải có `practiceSessionId` và membership; `summary` phải còn `expiresAt`; `/auth/me` không gia hạn deadline. Media token kiểm tra đúng session, trạng thái và hạn của khách.
+  - Reject/cancel request, cancel/expire invitation và accept thua cuộc đều chuyển guest `waiting` sang `expired` và giải phóng reservation trong cùng transaction. Accept chỉ thành công khi guest guard cập nhật đúng một bản ghi.
+  - Cập nhật `docs/api/openapi.yaml` cho `/guest-trials` và `/auth/me`, thêm schema `GuestProjection`, `GuestTrial`, `AuthMe`; mở rộng test contract OpenAPI.
+  - Sửa fixture guest `active` trong các integration test cũ để có membership `practice_sessions` tương ứng, không nới lỏng guard production.
+- File liên quan: `server/modules/invitations/invitation-service.js`, `invitation-router.js`, `invitation-validation.js`, `server/modules/identity/identity-service.js`, `crypto.js`, `server/middleware/cookies.js`, `docs/api/openapi.yaml`, `tests/integration/guest-trials.integration.test.js`, `tests/server/guest-identity.test.js`, `tests/server/openapi-contract.test.js`.
+- Kiểm chứng: `npm test` 439/439; `npm run test:integration` 230/230 (13 ca BE-015) trên MongoDB 8.2.7 replica set tạm; `npm run openapi:check` 11/11; `npm run typecheck`, ESLint/Prettier trên toàn bộ file thay đổi và `npm run build` pass. `npm run check` chưa pass trọn gói vì bước `format:check`/`lint` toàn repo quét thư mục `storybook-static/` chưa được ignore (artifact có sẵn ngoài phạm vi task); các bước còn lại đã chạy riêng và pass.
+- Dependency: `assertPairCanEnterSession` của BE-008 đã được nối mặc định trong `server/app.js`; không còn blocker pair guard.
+- Giới hạn: Chưa chạy CI, chưa nghiệm thu LiveKit/dịch vụ thật, chưa có reviewer khác owner; AT-03/AT-11 mới có bằng chứng local. Plan triển khai ghi response guest-trial không có `actorKey`, nhưng `07-api-specification.md` và OpenAPI `Partner` hiện yêu cầu `actorKey`; giữ DTO hiện có và chờ quyết định contract.
+- Tiếp theo: Xử lý artifact `storybook-static/` ngoài diff, chạy CI, push/mở PR về `develop`, nhờ reviewer độc lập và chốt mâu thuẫn `actorKey` trước khi đóng task.
+
 ### DATA-002 — Script seed idempotent và fixtures kiểm thử
 
 - Ngày cập nhật: 2026-11-15
