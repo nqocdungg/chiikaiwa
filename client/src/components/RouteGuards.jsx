@@ -31,9 +31,14 @@ function AccountLockedNotice() {
  *
  * @param {Object} props
  * @param {Array<'U' | 'G' | 'A'>} [props.allowedRoles]
+ * @param {boolean} [props.learnerOnly] Restrict the U role to learners for learner-specific routes.
  * @param {import('react').ReactNode} [props.children]
  */
-export function ProtectedRoute({ allowedRoles = ['U'], children }) {
+export function ProtectedRoute({
+  allowedRoles = ['U'],
+  learnerOnly = false,
+  children,
+}) {
   const { kind, role, status, isLoading } = useAuth();
   const location = useLocation();
 
@@ -67,7 +72,10 @@ export function ProtectedRoute({ allowedRoles = ['U'], children }) {
   // Check role authorization
   let isAllowed = false;
   for (const allowed of allowedRoles) {
-    if (allowed === 'U' && (role === 'learner' || role === 'admin')) {
+    if (
+      allowed === 'U' &&
+      (role === 'learner' || (role === 'admin' && !learnerOnly))
+    ) {
       isAllowed = true;
       break;
     }

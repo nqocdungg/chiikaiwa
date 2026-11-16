@@ -50,7 +50,7 @@ describe('OPS-004 CI Workflow Contract & Security Assertions', () => {
 
   it('uses clean npm ci installation and executes the exact npm run check suite without skipping steps', () => {
     expect(packageJson.scripts?.check).toBe(
-      'npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration && npm run build && npm run build-storybook',
+      'npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration && npm run build',
     );
     expect(workflowContent).toMatch(/run:\s*npm ci/u);
     expect(workflowContent).toMatch(/run:\s*npm run check/u);

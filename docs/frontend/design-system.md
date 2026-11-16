@@ -358,7 +358,7 @@ src/
 
 ## 11. Kiểm tra và điều kiện hoàn thành
 
-1. Có trang xem thử component với states, chữ Việt/Japan và nhãn dài; Storybook chưa bắt buộc.
+1. Có trang xem thử component với states, chữ Việt/Nhật và nhãn dài.
 2. So sánh màn thật ở 1440×900 và 1366×768 với frame nguồn, không so ở canvas zoom nhỏ.
 3. Kiểm tra 390px cho form/modal/trang thường; ghi rõ Room mobile còn giới hạn nếu chưa hoàn thiện.
 4. Keyboard: tab order, focus-visible, modal trap/restore, Escape, password toggle và radio/tab.
