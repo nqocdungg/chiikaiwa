@@ -529,6 +529,73 @@ describe('AuthContext and Identity lifecycle', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it('keeps a login mutex in AuthContext until the in-flight request settles', async () => {
+    /** @type {(value: any) => void} */
+    let resolveLogin = () => {};
+    const postSpy = vi.spyOn(api, 'post').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveLogin = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => (
+        <AuthProvider skipInitialCheck>{children}</AuthProvider>
+      ),
+    });
+
+    /** @type {Promise<any>} */
+    let firstLogin;
+    act(() => {
+      firstLogin = result.current.login({
+        email: 'first@example.com',
+        password: 'password123',
+      });
+    });
+
+    expect(result.current.isLoginPending).toBe(true);
+
+    /** @type {ApiError | undefined} */
+    let overlappingError;
+    await act(async () => {
+      try {
+        await result.current.login({
+          email: 'second@example.com',
+          password: 'password456',
+        });
+      } catch (err) {
+        overlappingError = /** @type {ApiError} */ (err);
+      }
+    });
+
+    expect(overlappingError?.code).toBe('LOGIN_IN_PROGRESS');
+    expect(postSpy).toHaveBeenCalledTimes(1);
+    expect(result.current.isLoginPending).toBe(true);
+
+    await act(async () => {
+      resolveLogin({
+        data: {
+          user: {
+            id: 'u-first',
+            email: 'first@example.com',
+            displayName: 'First User',
+            role: 'learner',
+            status: 'active',
+            version: 1,
+          },
+          expiresAt: '2026-11-17T00:00:00.000Z',
+        },
+        meta: { requestId: 'login-first' },
+        epoch: getIdentityEpoch(),
+      });
+      await firstLogin;
+    });
+
+    expect(result.current.user?.id).toBe('u-first');
+    expect(result.current.isLoginPending).toBe(false);
+  });
+
   it('does not clear new user or cache when a slow logout finishes after a newer login succeeds', async () => {
     /** @type {(val: any) => void} */
     let resolveSlowLogout = () => {};

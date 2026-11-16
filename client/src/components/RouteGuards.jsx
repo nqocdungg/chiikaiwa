@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation, useParams } from 'react-router';
+import { resolvePostLoginRedirect } from '../features/auth/auth-validation.js';
 import { useAuth } from '../features/auth/use-auth.js';
 import { api } from '../services/api-client.js';
 import { getIdentityEpoch } from '../services/cache.js';
@@ -39,10 +40,10 @@ export function ProtectedRoute({
   learnerOnly = false,
   children,
 }) {
-  const { kind, role, status, isLoading } = useAuth();
+  const { kind, role, status, isLoading, isCheckingAuth } = useAuth();
   const location = useLocation();
 
-  if (isLoading) {
+  if (isCheckingAuth || isLoading) {
     return (
       <div
         className="flex min-h-[50vh] items-center justify-center"
@@ -115,7 +116,7 @@ export function ProtectedRoute({
  * @param {import('react').ReactNode} [props.children]
  */
 export function SessionMemberRoute({ children }) {
-  const { kind, role, status, guest, isLoading } = useAuth();
+  const { kind, role, status, guest, isLoading, isCheckingAuth } = useAuth();
   const { sessionId } = useParams();
   const location = useLocation();
   const [verification, setVerification] = useState(
@@ -125,8 +126,9 @@ export function SessionMemberRoute({ children }) {
     }),
   );
 
+  const isAuthBusy = isCheckingAuth || isLoading;
   const hasValidIdentity =
-    !isLoading &&
+    !isAuthBusy &&
     status === 'active' &&
     (role === 'learner' || role === 'admin' || role === 'guest');
   const isValidSessionId = Boolean(
@@ -179,7 +181,7 @@ export function SessionMemberRoute({ children }) {
     };
   }, [hasValidIdentity, isGuestSessionMismatch, isValidSessionId, sessionId]);
 
-  if (isLoading) {
+  if (isAuthBusy) {
     return (
       <div
         className="flex min-h-[50vh] items-center justify-center"
@@ -235,13 +237,6 @@ export function SessionMemberRoute({ children }) {
   return children ? <>{children}</> : <Outlet />;
 }
 
-const PUBLIC_ONLY_PATHS = new Set([
-  '/login',
-  '/register',
-  '/forgot-password',
-  '/reset-password',
-]);
-
 /**
  * Route guard that redirects already logged-in users away from guest/auth routes (e.g. login, register).
  *
@@ -249,10 +244,10 @@ const PUBLIC_ONLY_PATHS = new Set([
  * @param {import('react').ReactNode} [props.children]
  */
 export function PublicOnlyRoute({ children }) {
-  const { kind, role, status, isLoading } = useAuth();
+  const { kind, role, status, isCheckingAuth } = useAuth();
   const location = useLocation();
 
-  if (isLoading) {
+  if (isCheckingAuth) {
     return (
       <div
         className="flex min-h-[50vh] items-center justify-center"
@@ -273,21 +268,11 @@ export function PublicOnlyRoute({ children }) {
   }
 
   if (kind === 'user' && status !== 'locked') {
-    const rawFrom = /** @type {{from?: {pathname?: string}}} */ (location.state)
-      ?.from?.pathname;
-    const isSafeRedirectTarget =
-      typeof rawFrom === 'string' &&
-      rawFrom.startsWith('/') &&
-      !PUBLIC_ONLY_PATHS.has(rawFrom);
-    if (role === 'admin') {
-      const target =
-        isSafeRedirectTarget && rawFrom.startsWith('/admin')
-          ? rawFrom
-          : '/admin';
-      return <Navigate to={target} replace />;
-    }
-    const target =
-      isSafeRedirectTarget && !rawFrom.startsWith('/admin') ? rawFrom : '/home';
+    const rawFrom =
+      /** @type {{from?: string | {pathname?: string, search?: string, hash?: string}}} */ (
+        location.state
+      )?.from;
+    const target = resolvePostLoginRedirect(rawFrom, role);
     return <Navigate to={target} replace />;
   }
 
@@ -304,9 +289,9 @@ export function PublicOnlyRoute({ children }) {
  * @param {import('react').ReactNode} [props.children]
  */
 export function InvitationRoute({ children }) {
-  const { status, isLoading } = useAuth();
+  const { status, isLoading, isCheckingAuth } = useAuth();
 
-  if (isLoading) {
+  if (isCheckingAuth || isLoading) {
     return (
       <div
         className="flex min-h-[50vh] items-center justify-center"

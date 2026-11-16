@@ -51,6 +51,7 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
       updateUser: vi.fn(),
       refreshSession: vi.fn(),
       ...authState,
+      isLoginPending: authState.isLoginPending ?? false,
     };
 
     return {
@@ -517,6 +518,7 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
       role: /** @type {const} */ ('learner'),
       status: /** @type {const} */ ('active'),
       isLoading: false,
+      isLoginPending: false,
       error: null,
       checkAuth: vi.fn(),
       login: vi.fn(),
