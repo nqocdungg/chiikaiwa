@@ -34,7 +34,7 @@ export function createApp({
     onVerifiedPresence,
     afterCommit: finishWebhookEffects,
   }),
-  assertPairCanEnterSession,
+  assertPairCanEnterSession = defaultAssertPairCanEnterSession,
   sendPasswordResetEmail,
   waitUntil,
 } = {}) {
