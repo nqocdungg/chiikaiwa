@@ -1,12 +1,13 @@
 import '@testing-library/jest-dom/vitest';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
 } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../client/src/App.jsx';
 import {
@@ -22,6 +23,15 @@ import {
   setPrivateCache,
 } from '../../client/src/services/cache.js';
 import { ApiError } from '../../client/src/services/errors.js';
+
+function BackControl() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      Quay lại lịch sử
+    </button>
+  );
+}
 
 describe('FE-009 Auth Screens (/login, /register) & Logout Flow', () => {
   beforeEach(() => {
@@ -453,6 +463,114 @@ describe('FE-009 Auth Screens (/login, /register) & Logout Flow', () => {
         await screen.findByRole('heading', { name: 'Trang chính' }),
       ).toBeVisible();
     });
+
+    it('keeps the login lock after navigating to register and back while request A is pending', async () => {
+      /** @type {((value: import('../../client/src/services/api-client.js').ApiResponse) => void) | null} */
+      let resolveLogin = null;
+      const postSpy = vi.spyOn(api, 'post').mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveLogin = resolve;
+          }),
+      );
+
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <App skipInitialAuthCheck />
+        </MemoryRouter>,
+      );
+
+      fireEvent.change(screen.getByLabelText('Email'), {
+        target: { value: 'first@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText('Mật khẩu'), {
+        target: { value: 'password123' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+
+      fireEvent.click(screen.getByRole('link', { name: 'Đăng ký' }));
+      expect(
+        await screen.findByRole('heading', { name: 'Đăng ký' }),
+      ).toBeVisible();
+      fireEvent.click(screen.getByRole('link', { name: 'Đăng nhập' }));
+
+      const pendingButton = await screen.findByRole('button', {
+        name: 'Đang đăng nhập...',
+      });
+      expect(pendingButton).toBeDisabled();
+      const pendingForm = pendingButton.closest('form');
+      if (!pendingForm) {
+        throw new Error('Không tìm thấy form đăng nhập đang chờ.');
+      }
+      fireEvent.submit(pendingForm);
+      expect(postSpy).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        resolveLogin?.({
+          data: {
+            user: {
+              id: 'user-first',
+              email: 'first@example.com',
+              displayName: 'First User',
+              role: 'learner',
+              status: 'active',
+              version: 1,
+            },
+            expiresAt: '2026-12-01T00:00:00.000Z',
+          },
+          meta: {},
+          epoch: 0,
+        });
+      });
+
+      expect(postSpy).toHaveBeenCalledTimes(1);
+      expect(
+        await screen.findByRole('heading', { name: 'Trang chính' }),
+      ).toBeVisible();
+    });
+
+    it('shows API 422 field errors beside the matching input', async () => {
+      vi.spyOn(api, 'post').mockRejectedValueOnce(
+        new ApiError({
+          status: 422,
+          code: 'VALIDATION_FAILED',
+          message: 'Dữ liệu không hợp lệ.',
+          details: {
+            fields: [
+              {
+                path: 'email',
+                code: 'EMAIL_INVALID',
+                message: 'Email API không đúng định dạng.',
+              },
+            ],
+          },
+        }),
+      );
+
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <App skipInitialAuthCheck />
+        </MemoryRouter>,
+      );
+
+      const emailInput = screen.getByLabelText('Email');
+      fireEvent.change(emailInput, {
+        target: { value: 'valid-looking@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText('Mật khẩu'), {
+        target: { value: 'password123' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+
+      expect(
+        await screen.findByText('Email API không đúng định dạng.'),
+      ).toBeVisible();
+      expect(emailInput).toHaveAttribute('aria-invalid', 'true');
+      expect(emailInput).toHaveAttribute(
+        'aria-describedby',
+        'login-email-error',
+      );
+    });
   });
 
   describe('Logout Flow & Private Cache Isolation', () => {
@@ -515,22 +633,98 @@ describe('FE-009 Auth Screens (/login, /register) & Logout Flow', () => {
       expect(getPrivateCache('decks:list')).toEqual(['deck-private-user-a']);
 
       // First logout fails with 503 -> must surface error and stay on /home (not fake success)
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Menu tài khoản: User A' }),
+      );
       fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }));
       expect(await screen.findByRole('alert')).toHaveTextContent(
-        /Hệ thống đang tạm thời gián đoạn/i,
+        /Yêu cầu đăng xuất chưa hoàn tất\. Hãy thử lại\./i,
       );
       expect(
         screen.getByRole('heading', { name: 'Trang chính' }),
       ).toBeVisible();
 
       // Second logout succeeds with 204 -> clears user state & private cache and redirects to /login
-      fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }));
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Thử đăng xuất lại' }),
+      );
       expect(
         await screen.findByRole('heading', { name: 'Đăng nhập' }),
       ).toBeVisible();
       expect(getPrivateCache('decks:list')).toBeUndefined();
       expect(postSpy).toHaveBeenNthCalledWith(2, '/auth/logout', {});
       expect(postSpy).toHaveBeenNthCalledWith(3, '/auth/logout', {});
+    });
+
+    it('clears the session without redirecting when logout resolves after Back to a public page', async () => {
+      /** @type {((value: import('../../client/src/services/api-client.js').ApiResponse) => void) | null} */
+      let resolveLogout = null;
+      vi.spyOn(api, 'post')
+        .mockResolvedValueOnce({
+          data: {
+            user: {
+              id: 'late-logout-user',
+              email: 'late@example.com',
+              displayName: 'Late Logout User',
+              role: 'learner',
+              status: 'active',
+              version: 1,
+            },
+            expiresAt: '2026-12-01T00:00:00.000Z',
+          },
+          meta: {},
+          epoch: 0,
+        })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveLogout = resolve;
+            }),
+        );
+
+      render(
+        <MemoryRouter
+          initialEntries={[
+            '/',
+            {
+              pathname: '/login',
+              state: { from: { pathname: '/decks' } },
+            },
+          ]}
+          initialIndex={1}
+        >
+          <BackControl />
+          <App skipInitialAuthCheck />
+        </MemoryRouter>,
+      );
+
+      fireEvent.change(screen.getByLabelText('Email'), {
+        target: { value: 'late@example.com' },
+      });
+      fireEvent.change(screen.getByLabelText('Mật khẩu'), {
+        target: { value: 'password123' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+      expect(
+        await screen.findByRole('heading', { name: 'Bộ thẻ cá nhân' }),
+      ).toBeVisible();
+
+      setPrivateCache('late-logout-cache', 'private');
+      fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Quay lại lịch sử' }));
+      expect(
+        await screen.findByRole('heading', { name: 'Chiikaiwa' }),
+      ).toBeVisible();
+
+      await act(async () => {
+        resolveLogout?.({ data: null, meta: {}, epoch: 1 });
+      });
+
+      expect(getPrivateCache('late-logout-cache')).toBeUndefined();
+      expect(screen.getByRole('heading', { name: 'Chiikaiwa' })).toBeVisible();
+      expect(
+        screen.queryByRole('heading', { name: 'Đăng nhập' }),
+      ).not.toBeInTheDocument();
     });
   });
 });

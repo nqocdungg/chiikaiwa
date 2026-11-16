@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import usagi from '../../assets/mascots/usagi.png';
 import { Button } from '../../components/ui/controls.jsx';
@@ -12,7 +12,7 @@ import {
 import { useAuth } from './use-auth.js';
 
 export function LoginPage() {
-  const { login, authNotice, clearAuthNotice } = useAuth();
+  const { login, isLoginPending, authNotice, clearAuthNotice } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -39,7 +39,7 @@ export function LoginPage() {
     /** @type {string | null} */ (initialLocationNotice),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const submittingRef = useRef(false);
+  const isLoginBusy = isSubmitting || isLoginPending;
 
   const activeNotice = authNotice || localNotice;
 
@@ -54,7 +54,7 @@ export function LoginPage() {
     /** @type {import('react').FormEvent} */ event,
   ) => {
     event.preventDefault();
-    if (submittingRef.current || isSubmitting) {
+    if (isLoginBusy) {
       return;
     }
 
@@ -66,7 +66,6 @@ export function LoginPage() {
     }
 
     setFieldErrors({});
-    submittingRef.current = true;
     setIsSubmitting(true);
 
     try {
@@ -89,7 +88,6 @@ export function LoginPage() {
       setFieldErrors(mapped.fieldErrors);
       setBannerError(mapped.bannerMessage);
     } finally {
-      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -160,7 +158,7 @@ export function LoginPage() {
               setFieldErrors((prev) => ({ ...prev, email: '' }));
             }
           }}
-          disabled={isSubmitting}
+          disabled={isLoginBusy}
           error={fieldErrors.email || undefined}
         />
 
@@ -177,7 +175,7 @@ export function LoginPage() {
               setFieldErrors((prev) => ({ ...prev, password: '' }));
             }
           }}
-          disabled={isSubmitting}
+          disabled={isLoginBusy}
           error={fieldErrors.password || undefined}
         />
 
@@ -187,13 +185,8 @@ export function LoginPage() {
           </Link>
         </div>
 
-        <Button
-          type="submit"
-          variant="primary"
-          fullWidth
-          loading={isSubmitting}
-        >
-          {isSubmitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
+        <Button type="submit" variant="primary" fullWidth loading={isLoginBusy}>
+          {isLoginBusy ? 'Đang đăng nhập...' : 'Đăng nhập'}
         </Button>
       </form>
     </AuthSplitLayout>

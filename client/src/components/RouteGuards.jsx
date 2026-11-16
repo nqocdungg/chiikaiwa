@@ -32,13 +32,18 @@ function AccountLockedNotice() {
  *
  * @param {Object} props
  * @param {Array<'U' | 'G' | 'A'>} [props.allowedRoles]
+ * @param {boolean} [props.learnerOnly] Restrict the U role to learners for learner-specific routes.
  * @param {import('react').ReactNode} [props.children]
  */
-export function ProtectedRoute({ allowedRoles = ['U'], children }) {
+export function ProtectedRoute({
+  allowedRoles = ['U'],
+  learnerOnly = false,
+  children,
+}) {
   const { kind, role, status, isLoading, isCheckingAuth } = useAuth();
   const location = useLocation();
 
-  if (isCheckingAuth ?? isLoading) {
+  if (isCheckingAuth || isLoading) {
     return (
       <div
         className="flex min-h-[50vh] items-center justify-center"
@@ -68,7 +73,10 @@ export function ProtectedRoute({ allowedRoles = ['U'], children }) {
   // Check role authorization
   let isAllowed = false;
   for (const allowed of allowedRoles) {
-    if (allowed === 'U' && (role === 'learner' || role === 'admin')) {
+    if (
+      allowed === 'U' &&
+      (role === 'learner' || (role === 'admin' && !learnerOnly))
+    ) {
       isAllowed = true;
       break;
     }
@@ -118,7 +126,7 @@ export function SessionMemberRoute({ children }) {
     }),
   );
 
-  const isAuthBusy = isCheckingAuth ?? isLoading;
+  const isAuthBusy = isCheckingAuth || isLoading;
   const hasValidIdentity =
     !isAuthBusy &&
     status === 'active' &&
@@ -236,10 +244,10 @@ export function SessionMemberRoute({ children }) {
  * @param {import('react').ReactNode} [props.children]
  */
 export function PublicOnlyRoute({ children }) {
-  const { kind, role, status, isLoading, isCheckingAuth } = useAuth();
+  const { kind, role, status, isCheckingAuth } = useAuth();
   const location = useLocation();
 
-  if (isCheckingAuth ?? isLoading) {
+  if (isCheckingAuth) {
     return (
       <div
         className="flex min-h-[50vh] items-center justify-center"
@@ -249,6 +257,14 @@ export function PublicOnlyRoute({ children }) {
         <span className="text-muted">Đang tải...</span>
       </div>
     );
+  }
+
+  // Recovery links must remain usable even when a browser has an active session.
+  if (
+    location.pathname === '/forgot-password' ||
+    location.pathname === '/reset-password'
+  ) {
+    return children ? <>{children}</> : <Outlet />;
   }
 
   if (kind === 'user' && status !== 'locked') {
@@ -275,7 +291,7 @@ export function PublicOnlyRoute({ children }) {
 export function InvitationRoute({ children }) {
   const { status, isLoading, isCheckingAuth } = useAuth();
 
-  if (isCheckingAuth ?? isLoading) {
+  if (isCheckingAuth || isLoading) {
     return (
       <div
         className="flex min-h-[50vh] items-center justify-center"

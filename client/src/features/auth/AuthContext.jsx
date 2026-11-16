@@ -38,6 +38,8 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
     /** @type {string | null} */ (null),
   );
   const authRequestSeqRef = useRef(0);
+  const loginPendingRef = useRef(false);
+  const [isLoginPending, setIsLoginPending] = useState(false);
 
   const resetState = useCallback(() => {
     setUser(null);
@@ -203,6 +205,16 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
   const login = useCallback(
     /** @param {{email: string, password: string}} credentials */
     async (credentials) => {
+      if (loginPendingRef.current) {
+        throw new ApiError({
+          status: 409,
+          code: 'LOGIN_IN_PROGRESS',
+          message: 'Yêu cầu đăng nhập đang được xử lý.',
+        });
+      }
+
+      loginPendingRef.current = true;
+      setIsLoginPending(true);
       const requestSeq = ++authRequestSeqRef.current;
       setIsLoading(true);
       setError(null);
@@ -242,6 +254,8 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
         }
         throw apiErr;
       } finally {
+        loginPendingRef.current = false;
+        setIsLoginPending(false);
         if (requestSeq === authRequestSeqRef.current) {
           setIsLoading(false);
         }
@@ -342,6 +356,7 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
       status,
       isLoading,
       isCheckingAuth,
+      isLoginPending,
       error,
       authNotice,
       clearAuthNotice,
@@ -361,6 +376,7 @@ export function AuthProvider({ children, skipInitialCheck = false }) {
       status,
       isLoading,
       isCheckingAuth,
+      isLoginPending,
       error,
       authNotice,
       clearAuthNotice,

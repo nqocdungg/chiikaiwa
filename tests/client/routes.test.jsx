@@ -119,33 +119,40 @@ describe('Route protection, direct URL navigation and refresh', () => {
     ).toBeVisible();
   });
 
-  it('allows admin to access /admin', async () => {
-    vi.spyOn(api, 'get').mockImplementationOnce(async () => ({
-      data: {
-        kind: 'user',
-        user: {
-          id: 'admin1',
-          email: 'admin@test.com',
-          displayName: 'Admin',
-          role: 'admin',
-          status: 'active',
-          version: 1,
+  it.each(['/admin', '/home'])(
+    'shows the admin area to an admin opening %s',
+    async (path) => {
+      vi.spyOn(api, 'get').mockImplementationOnce(async () => ({
+        data: {
+          kind: 'user',
+          user: {
+            id: 'admin1',
+            email: 'admin@test.com',
+            displayName: 'Admin',
+            role: 'admin',
+            status: 'active',
+            version: 1,
+          },
         },
-      },
-      meta: {},
-      epoch: getIdentityEpoch(),
-    }));
+        meta: {},
+        epoch: getIdentityEpoch(),
+      }));
 
-    render(
-      <MemoryRouter initialEntries={['/admin']}>
-        <App />
-      </MemoryRouter>,
-    );
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <App />
+        </MemoryRouter>,
+      );
 
-    expect(
-      await screen.findByRole('heading', { name: 'Khu vực quản trị' }),
-    ).toBeVisible();
-  });
+      expect(
+        await screen.findByRole('heading', { name: 'Khu vực quản trị' }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole('button', { name: 'Tìm bạn luyện nói' }),
+      ).toBeNull();
+      expect(api.get).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('redirects logged-in user away from /login to /home', async () => {
     vi.spyOn(api, 'get').mockImplementationOnce(async () => ({

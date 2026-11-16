@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { Button } from '../../components/ui/controls.jsx';
 import { Avatar, Badge } from '../../components/ui/surfaces.jsx';
+import { activeLocationRef } from '../home/navigation-tracker.js';
 import { mapAuthApiError } from './auth-validation.js';
 import { useAuth } from './use-auth.js';
 
 export function LogoutActionBar() {
   const { kind, user, role, logout } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState(
@@ -30,10 +32,18 @@ export function LogoutActionBar() {
     pendingRef.current = true;
     setIsLoggingOut(true);
     setLogoutError(null);
+    const originKey = location.key;
+    const originPathname = location.pathname;
 
     try {
       await logout();
-      navigate('/login', { replace: true });
+      const currentLocation = activeLocationRef.current;
+      if (
+        currentLocation?.key === originKey &&
+        currentLocation.pathname === originPathname
+      ) {
+        navigate('/login', { replace: true });
+      }
     } catch (err) {
       const errCode = /** @type {{code?: string}} */ (err)?.code;
       if (errCode === 'AUTH_SUPERSEDED') {

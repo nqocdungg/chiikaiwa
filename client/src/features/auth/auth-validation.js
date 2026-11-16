@@ -1,3 +1,5 @@
+import { ApiError } from '../../services/errors.js';
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F]/;
@@ -296,29 +298,10 @@ export function resolvePostLoginRedirect(rawFrom, role = 'learner') {
  */
 export function mapAuthApiError(error, context = 'login') {
   const errObj =
-    /** @type {{ code?: string, status?: number, message?: string, retryAfter?: number, details?: Array<{ field?: string, code?: string, message?: string }> } | null} */ (
+    /** @type {{ code?: string, status?: number, message?: string, retryAfter?: number } | null} */ (
       error && typeof error === 'object' ? error : null
     );
-  const fieldErrors = /** @type {Record<string, string>} */ ({});
-
-  if (Array.isArray(errObj?.details)) {
-    for (const item of errObj.details) {
-      if (item && typeof item.field === 'string' && !fieldErrors[item.field]) {
-        if (item.field === 'email') {
-          fieldErrors.email = 'Địa chỉ email không đúng định dạng.';
-        } else if (item.field === 'displayName') {
-          fieldErrors.displayName = 'Tên hiển thị phải có từ 1 đến 100 ký tự.';
-        } else if (item.field === 'password') {
-          fieldErrors.password =
-            context === 'register'
-              ? 'Mật khẩu phải có từ 8 đến 128 ký tự.'
-              : 'Vui lòng kiểm tra lại mật khẩu.';
-        } else {
-          fieldErrors[item.field] = item.message || 'Giá trị không hợp lệ.';
-        }
-      }
-    }
-  }
+  const fieldErrors = error instanceof ApiError ? error.getFieldErrors() : {};
 
   const code = errObj?.code;
   const status = errObj?.status;

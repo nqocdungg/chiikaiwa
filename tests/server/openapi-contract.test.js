@@ -16,6 +16,9 @@ const expectedPaths = [
   '/invitation-requests',
   '/invitation-requests/{requestId}',
   '/invitation-requests/{requestId}/responses',
+  '/auth/password-change',
+  '/auth/password-reset-requests',
+  '/auth/password-resets',
   '/admin/content/{id}/publish',
   '/admin/content/{id}/hide',
   '/topics',
@@ -119,6 +122,23 @@ describe('OpenAPI contract', () => {
     }
   });
 
+  it('documents safety guard error responses (403, 409, 410, 503) on invitation request acceptance', () => {
+    const respondOp =
+      document.paths['/invitation-requests/{requestId}/responses'].post;
+    expect(Object.keys(respondOp.responses)).toEqual(
+      expect.arrayContaining([
+        '200',
+        '401',
+        '403',
+        '404',
+        '409',
+        '410',
+        '422',
+        '503',
+      ]),
+    );
+  });
+
   it('documents DELETE expectedVersion and keeps examples free of env secrets', () => {
     for (const path of [
       '/invitations/{invitationId}',
@@ -132,8 +152,36 @@ describe('OpenAPI contract', () => {
 
     const source = readFileSync(OPENAPI_SPEC_PATH, 'utf8');
     expect(source).not.toMatch(
-      /JWT_SECRET|MONGODB_URI|LIVEKIT_API_(KEY|SECRET)/u,
+      /JWT_SECRET|MONGODB_URI|LIVEKIT_API_(KEY|SECRET)|BREVO_API_KEY/u,
     );
+  });
+
+  it('documents BE-007 password change and reset endpoints without Idempotency-Key or auto-login cookies', () => {
+    const passwordChange = document.paths['/auth/password-change'].post;
+    const resetRequest = document.paths['/auth/password-reset-requests'].post;
+    const resetConfirm = document.paths['/auth/password-resets'].post;
+
+    expect(passwordChange.security).toEqual([
+      { sessionCookie: [], csrfToken: [] },
+    ]);
+    expect(resetRequest.security).toEqual([{ csrfToken: [] }]);
+    expect(resetConfirm.security).toEqual([{ csrfToken: [] }]);
+
+    for (const op of [passwordChange, resetRequest, resetConfirm]) {
+      expect(op.parameters ?? []).not.toContainEqual({
+        $ref: '#/components/parameters/IdempotencyKey',
+      });
+    }
+
+    expect(passwordChange.responses['204']).not.toHaveProperty('content');
+    expect(
+      resetRequest.responses['202'].content['application/json'].schema,
+    ).toEqual({
+      $ref: '#/components/schemas/PasswordResetRequestResponse',
+    });
+    expect(resetRequest.responses).toHaveProperty('503');
+    expect(resetConfirm.responses['204']).not.toHaveProperty('content');
+    expect(resetConfirm.responses).toHaveProperty('400');
   });
 
   it('serves Swagger UI and the raw YAML without requiring database access', async () => {
@@ -185,5 +233,38 @@ describe('OpenAPI contract', () => {
     expect(
       document.components.schemas.SessionSlot.properties,
     ).not.toHaveProperty('scenarioVersionId');
+  });
+
+  it('documents PATCH /me/profile with optional X-Expected-Actor header, 409 conflict, and safe Self projection', () => {
+    const patchProfile = document.paths['/me/profile'].patch;
+    expect(patchProfile.security).toEqual([
+      { sessionCookie: [], csrfToken: [] },
+    ]);
+    expect(patchProfile.parameters).toContainEqual({
+      $ref: '#/components/parameters/IdempotencyKey',
+    });
+    expect(patchProfile.parameters).toContainEqual({
+      $ref: '#/components/parameters/ExpectedActor',
+    });
+    expect(patchProfile.responses).toHaveProperty('409');
+    expect(document.components.parameters.ExpectedActor).toMatchObject({
+      name: 'X-Expected-Actor',
+      in: 'header',
+      required: false,
+      schema: {
+        type: 'string',
+        pattern: '^(user:)?[0-9a-fA-F]{24}$',
+      },
+    });
+    expect(document.components.schemas.Self.additionalProperties).toBe(false);
+    expect(document.components.schemas.Self.properties).not.toHaveProperty(
+      'passwordHash',
+    );
+    expect(document.components.schemas.Self.properties).not.toHaveProperty(
+      'authVersion',
+    );
+    expect(document.components.schemas.Self.properties).not.toHaveProperty(
+      'emailKey',
+    );
   });
 });

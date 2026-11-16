@@ -1,0 +1,29 @@
+name: Scan Git for secrets
+description: Scan Git history with a checksum-verified Gitleaks binary
+
+inputs:
+  revisions:
+    description: Git commit, range, or --all to scan
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install verified Gitleaks binary
+      shell: bash
+      env:
+        GITLEAKS_VERSION: 8.30.1
+        GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+      run: |
+        cd "$RUNNER_TEMP"
+        archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+        curl --fail --location --retry 3 \
+          "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive" \
+          --output "$archive"
+        printf '%s  %s\n' "$GITLEAKS_SHA256" "$archive" | sha256sum --check --strict
+        tar -xzf "$archive" gitleaks
+    - name: Scan Git history with redacted output
+      shell: bash
+      env:
+        GITLEAKS_REVISIONS: ${{ inputs.revisions }}
+      run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --log-opts="--diff-merges=remerge ${GITLEAKS_REVISIONS:?}"'

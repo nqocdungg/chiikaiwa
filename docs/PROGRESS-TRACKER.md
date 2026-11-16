@@ -23,6 +23,31 @@ File này giúp agent hoặc thành viên tiếp theo nắm nhanh task đã làm
 
 ## Sprint 1
 
+### FE-002 — Tích hợp Home có sẵn và bổ sung landing
+
+- Ngày cập nhật: 2026-11-15
+- Trạng thái: Đã hoàn thiện toàn diện vòng 3 theo review của Owner (A1–A5, B1–B3, C1, D1, E1); sẵn sàng cập nhật PR.
+- PR: PR #33; branch `feature/FE-002-home-landing`, base `develop`.
+- Đã làm: Bổ sung màn hình Landing công khai (`SC-01`) tại route `/` và Trang chính (`SC-03`) tại `/home`. Đồng bộ hoàn toàn với bản thiết kế Figma Make mới và Design System Foundation (`docs/frontend/design-system.md`): bọc `PageContainer`, nhúng logo vector `chii-logo.svg`, thanh điều hướng Floating Pill Bar 5 tab với mascot icon, Centered Hero với 2 linh vật Usagi & Hachiware (đã xử lý trong suốt 100%), nút chính FlowButton `Tìm bạn luyện nói →`, cặp nút `Tạo mã mời`/`Nhập mã` và 3 chip chủ đề nhanh. Nối dữ liệu người học thật qua `AuthContext` (`GET /auth/me`), gọi `GET /me/coordination` hiển thị banner điều phối chống tạo luồng kép (`FR-LRN-01`).
+- Sửa theo Reviewer PR #33 (Ngọc Dung & Owner):
+  - **A1–A5. Luồng đăng xuất lỗi hoàn thiện (Flash Message Pattern & Quản lý Focus)**: Đọc cờ lỗi vào state cục bộ `logoutNotice` rồi lập tức dọn sạch `history.state` qua `navigate({ pathname, search, hash }, { replace: true, state: null })`, giải quyết triệt để lỗi banner hiện lại khi người dùng Back/Forward đồng thời bảo toàn trọn vẹn query `search` và `hash` URL. Đổi tên nút hành động của banner thành `"Thử đăng xuất lại"` (Should fix) để phân biệt rõ ràng và triệt tiêu xung đột với nút `"Thử lại"` của banner điều phối khi cả hai cùng xuất hiện. Chống điều hướng cưỡng bức khi lỗi đến muộn: sử dụng `activeLocationRef` đồng bộ từ `App.jsx` để kiểm tra vị trí thực tế trước khi điều hướng; nếu người dùng đã rời khỏi Home (ví dụ bấm Back sang `/profile`) trong lúc API đang chờ thì bỏ qua điều hướng, giữ nguyên trang hiện tại của người dùng. Tối ưu test `AUTH_SUPERSEDED` với `waitFor` loading biến mất và `act` đảm bảo Home phục hồi render trước khi assert không có alert (khôi phục năng lực falsification 100%). Câu chữ thông báo trung tính chuẩn contract: _"Chưa đăng xuất được. Yêu cầu đăng xuất chưa hoàn tất. Hãy thử lại."_ (không khẳng định điều chưa biết khi gặp lỗi mạng/401). Bỏ `aria-live="polite"` mâu thuẫn trên `role="alert"`. Chuyển focus tự động vào nút "Thử đăng xuất lại" khi banner xuất hiện và trả focus về nút tài khoản khi bấm "Đóng" (WCAG 2.4.3 & 04 §8.3). Tách `await logout()` trong `try`, bỏ qua `AUTH_SUPERSEDED` (409) và đặt `navigate('/login')` ra ngoài `try`. Giữ cờ `logoutInFlight` làm lớp bảo vệ phụ chống click lặp.
+  - **B1. Triệt để tuân thủ Label in Name (WCAG 2.5.3)**: Gỡ bỏ `aria-label` ở 3 chip chủ đề để tên truy cập kế thừa nguyên chữ hiển thị (`カフェで Ở quán cà phê`...); ẩn cụm bong bóng thoại mascot với `aria-hidden="true"` (trang trí trực quan). Tên nút tài khoản chứa toàn bộ nhãn hiển thị: bổ sung `level` vào `aria-label` khi có profile level (`Menu tài khoản: Minh Hoàng N3`) và loại bỏ khoảng trắng thừa khi không có level (`Menu tài khoản: Minh Hoàng`).
+  - **B2. Rà soát biên dữ liệu `/me/coordination`**: Khai báo danh sách 6 mode hợp lệ theo contract API 07 §5; bắt buộc `resourceId` hợp lệ và encode an toàn qua `encodeURIComponent` khi `mode === 'inSession'`. Mọi phản hồi thiếu `mode`, mode lạ hoặc thiếu `resourceId` đều xử lý fail-closed thành `coordinationError = true` kèm nút "Thử lại".
+  - **B3. Chuẩn hóa ARIA menu tài khoản**: Bỏ `aria-label` trên thẻ `<div>` dropdown; gán `aria-controls` động chỉ khi menu mở. Lối vào "Danh sách chặn (SC-18)" được xác nhận ngoài phạm vi FE-002 (dù route `/blocks` đã có sẵn tại `App.jsx:106`) và không tạo lối vào chưa hoàn chỉnh trong PR này.
+  - **C1. Tách biệt CSS Hover & Focus theo Design System**: Tách riêng `:hover` (chỉ đổi màu nền/chữ) khỏi `:focus-visible` (viền 3px dùng token `--color-focus: #9b526e`, `outline-offset: -3px`), đảm bảo độ tương phản $\ge 3:1$ theo WCAG 1.4.11.
+  - **D1, L2. Tối ưu trải nghiệm Landing**: Bỏ `aria-current` trên các liên kết điều hướng chưa active; placeholder nav tàng hình khi auth loading tránh giật layout; nút CTA Hero "Bắt đầu ngay" (`/register`) luôn là link sẵn sàng tương tác, không bị disabled khi đang xác thực cookie ngầm, tuân thủ đúng cam kết không ép đăng nhập ở landing. Kiểm thử tích hợp stack thật xác nhận khi auth check lỗi 500 landing vẫn fallback hiển thị giao diện khách an toàn.
+  - **L4 & Responsive**: Chuẩn hóa CSS specificity cho thanh điều hướng và header; cấu hình Header cho phép wrap và thanh điều hướng 5 tab chuyển xuống dòng 2 căn giữa khi co màn hình ($\le 960px$ và $\le 650px$), hỗ trợ zoom 200%–400% theo WCAG 2.1 AA Reflow; gỡ bỏ nút nổi `?` thừa ngoài đặc tả.
+  - **Hạn chế đã biết ngoài phạm vi FE-002**: `AuthContext.logout()` bật `isLoading = true` toàn cục khiến toàn bộ khu vực đăng nhập bị thay bằng màn hình loading thay vì chỉ khóa hành động đang submit (chưa đạt tiêu chuẩn Pending write theo 04 §6). Điểm này kế thừa từ thiết kế FE-001, ghi nhận để refactor trong task riêng của Auth.
+- File liên quan: `client/src/features/landing/Landing.jsx`, `client/src/features/home/Home.jsx`, `client/src/components/layout/PageContainer.jsx`, `client/src/App.jsx`, `client/src/styles/ui.css`, `client/src/assets/mascots/hachiware.png`, `tests/client/landing.test.jsx`, `tests/client/home.test.jsx`, `tests/client/home-logout.test.jsx`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng:
+  - `npm run lint`: Pass 0 errors, 0 warnings.
+  - `npm run format:check`: Pass 100% (All matched files use Prettier code style).
+  - `npm run typecheck`: Pass 0 errors trên client, server và root jsconfig.
+  - `tests/client` suite: 8/8 files passed, 77/77 tests passed (gồm 17/17 tests home, 8/8 tests home-logout stack thật, 7/7 tests landing, 13/13 tests routes, 13/13 api-client, 12/12 auth-context, 5/5 frontend-foundation, 2/2 app).
+  - `npm run build`: Pass 100% (client Vite dist + syntax check server).
+  - `npm run build-storybook`: Pass 100% (Storybook build completed successfully).
+- Tiếp theo: Commit các thay đổi, merge `origin/develop` vào nhánh con và push cập nhật PR #33 để reviewer nghiệm thu.
+
 ### OPS-004 — Thiết lập CI cho pull request
 
 - Ngày cập nhật: 2026-11-08
@@ -209,6 +234,46 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Triển khai: Chạy [migration đăng ký FSRS-6](../server/persistence/migrations/20261115000100-register-fsrs-six-config.js) trên database đích trước khi gọi reveal. Migration giữ nguyên cấu hình theo hash. Vé dùng khóa server hiện có với miền chữ ký riêng.
 - Tiếp theo: BE-025 dùng `verifyReviewTicket`, kiểm tra lại quyền/scope hiện hành, revision và version trước khi ghi review. Nghiệm thu luồng cấp khách và chọn bộ với BE-015/BE-022, quản lý bộ cá nhân với BE-035. Kiểm thử HTTP hiện dùng bản ghi MongoDB được chuẩn bị sẵn cho các luồng đó.
 
+### DATA-002 — Script seed idempotent và fixtures kiểm thử
+
+- Ngày cập nhật: 2026-11-15
+- Trạng thái: Đã hoàn thiện, chờ mở PR
+- PR: Chưa có (branch `feature/DATA-002-idempotent-seed-script`, base `develop`)
+- Đã làm:
+  - **Idempotent seed script cho content & account fixtures (DB-T18)**: Triển khai toàn diện `seedAll`, `seedContentDataset`, `seedTestAccountFixtures` đảm bảo nạp lần đầu khởi tạo đầy đủ, nạp lại không sinh bản ghi trùng, không ghi đè mật khẩu user và bảo toàn lịch sử revision (06 §13.1, PB-31).
+  - **Bảo toàn bản nháp của Admin & Revision Guard**: Cập nhật `upsertContentItemAndVersion` để bảo toàn tuyệt đối `draftPayload` và `extraItemFields` (level, title của deck) khi Admin đang biên tập dở (06 §7.1). Toàn bộ dữ liệu nháp và thông tin khởi tạo chỉ gán qua `$setOnInsert`; nhánh update chỉ đồng bộ `status`, `latestRevision`, `publishedVersionId`. Nếu không có thay đổi con trỏ/trạng thái thì hoàn toàn không gọi `updateOne` (no-op, không cập nhật `updatedAt`).
+  - **Tự phục hồi liên kết content_items thiếu khi version đã tồn tại (Partial-failure healing)**: Khi version đã tồn tại nhưng bản ghi cha `content_items` bị thiếu hoặc mất con trỏ, tự động khôi phục item với hành động `recovered` hoặc `pointer_synced`. Đồng thời trong `seedTestAccountFixtures`, tự động bù đắp `actor_states` độc lập nếu tài khoản đã tồn tại từ trước nhưng bị gián đoạn giữa chừng.
+  - **Bảo vệ tính bất biến của revision & Race condition 11000**: Chủ động phát hiện xung đột `contentId + revision` khi đã tồn tại với `versionId` khác trong `content_versions`, ném thông báo nghiệp vụ rõ ràng tuân thủ 06 §13.1.5. Xử lý an toàn lỗi duplicate key (code 11000) tại `insertOne` của version và trong CAS retry loop của `content_items` khi chạy seed đồng thời.
+  - **Fail-closed database protection**: Kết hợp whitelist regex segment dev/demo/test cùng blacklist `FORBIDDEN_DATABASE_SEGMENT_PATTERN = /(^|_)(prod|production|live)(_|$)/u` để fail-closed tuyệt đối, chặn mọi hành vi seed ngoài ý muốn lên môi trường production trừ khi có cờ `forceProduction: true`.
+  - **Validation fail-fast liên dataset**: Kiểm tra tồn tại và validate schema toàn diện của toàn bộ dataset (`validateSeedDataset`) ở đầu `seedAll` trước khi thực hiện bất kỳ lệnh ghi nào vào cơ sở dữ liệu. Khi có dataset sai schema, `seedAll` trả về `success: false` (không throw) kèm danh sách lỗi có cấu trúc để CLI hiển thị rõ ràng.
+  - **Ràng buộc mật khẩu tối thiểu 8 ký tự & Fail-fast**: Áp dụng hàm chuẩn hóa `normalizeSeedPassword` kiểm tra chuỗi và độ dài tối thiểu 8 ký tự cho cả `SEED_ADMIN_PASSWORD` và `SEED_USER_PASSWORD`, fail-fast ngay từ đầu trước khi ghi.
+  - **CAS concurrency retry loop & Chuẩn hóa version: 0**: Triển khai Compare-and-Swap (CAS) tối đa 3 lần thử (`MAX_ITEM_SYNC_ATTEMPTS = 3`) với điều kiện lọc `{ _id, latestRevision, status, version }` kèm `$inc: { version: 1 }`. Xử lý chính xác trường hợp item cũ chưa có trường `version` bằng bộ lọc `{ $exists: false }`. Chuẩn hóa `version: 0` khi khởi tạo `content_items` khớp với convention Optimistic Concurrency Control toàn hệ thống.
+  - **Bảo mật mật khẩu, loại bỏ plaintext & Cảnh báo đúng ngữ cảnh**: Xóa bỏ hoàn toàn hằng số `DETERMINISTIC_PASSWORD_HASH` và comment chứa plaintext mật khẩu. Admin bắt buộc cung cấp qua `SEED_ADMIN_PASSWORD`; User fixtures sử dụng `SEED_USER_PASSWORD` (nếu có) hoặc sinh mật khẩu ngẫu nhiên an toàn qua `randomBytes(32).toString('hex')`. Cảnh báo mật khẩu ngẫu nhiên chỉ in đúng 1 lần sau vòng lặp; cảnh báo thiếu Admin chỉ bật khi chạy `--content-only` hoặc gọi `seedContentDataset` trực tiếp mà DB chưa có Admin. Thông báo các tài khoản đã tồn tại được gom thành 1 dòng duy nhất sau vòng lặp.
+  - **Chi tiết kết quả theo record & Bảng notable records**: Phân loại chính xác các hành động `inserted`, `recovered`, `pointer_synced`, `preserved`, `unchanged`. Bổ sung trường `versionInserted` để thống kê chính xác số version mới được chèn kể cả khi item được bảo toàn (preserved). Gom lỗi chi tiết theo từng record và hiển thị bảng tổng hợp notable records trong `scripts/seed.js` cả khi thành công lẫn khi gặp lỗi phân đoạn giữa chừng.
+  - **Test suite hoàn thiện & Siết chặt assert tham chiếu**:
+    - **38 ca unit tests** trong `tests/server/content-seed-idempotency.test.js` kiểm chứng toàn diện mọi nhánh bảo vệ, fail-fast schema, CAS retry, race condition 11000, cảnh báo ngữ cảnh, ràng buộc mật khẩu và partial-failure recovery.
+    - **7 ca integration tests** trong `tests/integration/seed-idempotency.integration.test.js` trên MongoDB replica set: kịch bản DB-T18 nạp lặp lại (bao gồm assert `item.version === 0` ngay sau lần nạp 1), negative test quét toàn bộ tham chiếu gãy giữa Deck -> Scenario -> Question -> Knowledge bằng helper `findBrokenReferences`, kiểm tra đăng nhập bằng mật khẩu động và bảo toàn dữ liệu nháp/ẩn.
+- File liên quan:
+  - `server/persistence/seed/seed-content.js`
+  - `server/persistence/seed/account-fixtures.js`
+  - `scripts/seed.js`
+  - `README.md`
+  - `.env.example`
+  - `tests/server/content-seed-idempotency.test.js`
+  - `tests/integration/seed-idempotency.integration.test.js`
+  - `docs/PROGRESS-TRACKER.md`
+- Kiểm chứng:
+  - `npm run format:check`: Pass (All matched files use Prettier code style).
+  - `npm run lint`: Pass (0 errors, 0 warnings).
+  - `npm run typecheck`: Pass (0 errors trên client, server và root jsconfig).
+  - `npm test`: **349/349 unit tests passed** (bao gồm 38/38 unit tests của `tests/server/content-seed-idempotency.test.js`).
+  - `npm run test:integration`: **176/176 integration tests passed** trên MongoDB replica set (bao gồm 7/7 integration tests của `tests/integration/seed-idempotency.integration.test.js`).
+  - `npm run openapi:check`: Pass 7/7 tests.
+  - `npm run build`: Pass (client vite production build & server app/index syntax check).
+  - `npm run build-storybook`: Pass (Storybook static build completed).
+  - `npm run check`: **Passed toàn diện cả 7/7 bước**.
+- Tiếp theo: Trình người dùng review và mở PR về `develop` để reviewer Minh Xuân rà soát.
+
 ### BE-016 — API lưu kiến thức và nguồn
 
 - Ngày cập nhật: 2026-11-15
@@ -219,6 +284,40 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Sửa sau review: Danh sách và phản hồi lưu/retry của khách dùng revision mới nhất có nguồn đã lưu trong bộ của lượt thử, kể cả sau khi học liệu được xuất bản lại.
 - Kiểm chứng: `npm run openapi:check` đạt 6/6. `npm run check` đạt 310 ca unit/HTTP/component, 165 ca integration và cả hai bản build. 7 ca HTTP BE-016 đạt khi chạy đảo thứ tự với seed 20261115 trên MongoDB 8.2.7 replica set tạm. DB-T08 giữ một mục với hai nguồn và giữ nguyên tiến độ khi bỏ rồi lưu lại. Ca xuất bản lại xác nhận revision ngoài lượt thử không xuất hiện trong danh sách hoặc phản hồi lưu/retry của khách. Storybook có cảnh báo kích thước chunk.
 - Tiếp theo: QA-008 chạy lại DB-T08 với lá được bốc qua API thật. FE-007 nối danh sách và thao tác lưu/bỏ lưu; BE-021 dùng nguồn trong tổng kết. Schema, index và cấu hình môi trường dùng nền hiện có.
+
+### BE-007 — Đổi mật khẩu và đặt lại mật khẩu qua Brevo
+
+- Ngày cập nhật: 2026-11-15
+- Trạng thái: Đã hoàn tất sửa review (phương án A dùng `@vercel/functions` `waitUntil`) và kiểm chứng local; chờ commit/push, review PR #40 và xác minh trên Vercel Preview.
+- PR: [PR #40](https://github.com/nqocdungg/chiikaiwa/pull/40), nhánh `feature/BE-007-password-reset` (HEAD local `c874056`, ref `origin/feature/BE-007-password-reset` trước đó ở `30130cb`, chưa push bản sửa mới).
+- Đã làm: Tách việc chờ Brevo khỏi phản hồi HTTP công khai của `POST /api/v1/auth/password-reset-requests` bằng `waitUntil` từ `@vercel/functions@3.11.3`: cả ba nhóm (`active`, không tồn tại, `locked`) đều nhận ngay HTTP `202` với payload trung tính (sau khi kiểm tra cấu hình Brevo chung đầu hàm để vẫn trả `503` nhất quán nếu thiếu cấu hình). Tác vụ hậu xử lý trong `waitUntil` bắt mọi lỗi để không phát sinh unhandled rejection, không log token/link/credentials, và kiểm tra lại nguyên tử `users.status === 'active'` cùng trạng thái token trong `withTransaction` trước khi vô hiệu các token cũ hơn (`issuedVersion`). Giới hạn `BREVO_TIMEOUT_MS` trong `500..20000` ms (mặc định `5000` ms) để vừa ngân sách `maxDuration: 30` trên Vercel.
+- File liên quan: `server/package.json`, `package-lock.json`, `server/config/env.js`, `server/app.js`, `server/modules/identity/auth-router.js`, `server/modules/identity/identity-service.js`, `server/jsconfig.json`, `server/types/ws.d.ts`, `tests/server/env.test.js`, `tests/integration/password-reset.integration.test.js`, `docs/api/openapi.yaml`.
+- Kiểm chứng: `npm run check` pass trên Node `v24.22.2` và `npm@11.21.1`: Prettier format check, ESLint 0 warnings, TypeScript typecheck 0 errors, `324/324` unit/HTTP/component tests (`tests/server/password-reset.test.js` 11/11, `tests/server/env.test.js` 11/11), `197/197` replica-set integration tests (`tests/integration/password-reset.integration.test.js` 21/21, gồm các ca deferred-promise `waitUntil` cho pending `202`, thành công/thất bại hậu phản hồi và race khóa tài khoản khi Brevo đang in-flight), build client và build Storybook pass. `npm run openapi:check` pass (`8/8`).
+- Kịch bản xác minh Vercel Preview: (1) Thiết lập env Preview riêng (`APP_ORIGIN`, `MONGODB_URI`, `MONGODB_DB_NAME` đã có index, `JWT_SECRET`, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`, `BREVO_TIMEOUT_MS=5000`). (2) Gửi `POST /api/v1/auth/password-reset-requests` với tài khoản test thuộc 3 nhóm (`active`, không tồn tại, `locked`), đối chiếu cả 3 đều trả `202` cùng payload trung tính ngay lập tức và kiểm tra hộp thư test nhận đúng 1 email hợp lệ cho tài khoản `active`. (3) Kiểm tra Vercel Function logs không log token/link/credentials và không có unhandled rejection. (4) Hoàn tất đổi mật khẩu bằng token nhận được qua `POST /api/v1/auth/password-resets` (`204`), xác nhận token không dùng lại được (`400 RESET_TOKEN_INVALID`) và phiên cũ bị thu hồi.
+- Lưu ý/blocker: `waitUntil` không phải durable queue và không tự động retry; nếu Vercel invocation bị ngắt bất thường trước khi tác vụ kết thúc, email có thể không được gửi và token vừa tạo chưa kịp gắn `invalidatedAt` sẽ tự hết hạn sau 15 phút. Bỏ chờ Brevo chỉ loại bỏ chênh lệch độ trễ do upstream Brevo, chưa loại bỏ mọi timing side-channel khác (ví dụ truy vấn/transaction DB cho tài khoản `active`).
+
+### BE-008 — Guard an toàn dùng chung
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã triển khai và hoàn tất `npm run check` trên Node `v24.22.1` (`npm@11.21.1`); chờ LiveKit Cloud thật, CI và review của Yến Nhi.
+- PR: [#45](https://github.com/nqocdungg/chiikaiwa/pull/45), branch `feature/BE-008-shared-safety-guard`; bản sửa review đang ở working tree, chưa commit/push.
+- Đã làm:
+  - Triển khai `assertPairCanEnterSession` tại `server/modules/safety/safety-service.js`: kiểm tra `actor_states` (bận/expectedStates), tự ghép (`IDENTITY_CONFLICT`), chặn hai chiều (`PAIR_BLOCKED`), tài khoản khóa (`ACCOUNT_LOCKED`), khách hết hạn/thu hồi (`GUEST_EXPIRED`), và ghi tăng `actor_states.version` theo thứ tự `actorKey` cố định để tham gia tranh chấp ghi.
+  - Triển khai TX-05 `createPairBlock` và `lockUserAccount` tại `server/modules/safety/safety-service.js`: ghi `blocks` hoặc khóa `users` + tăng `authVersion` + thu hồi `auth_sessions`, đồng thời tranh chấp trên `actor_states`, hủy proposal/invite request/search liên quan (không hủy invitation hoặc request không liên quan khi block một cặp), kết thúc phiên đang hoạt động (`endReason: 'blocked'` / `'account_locked'`, `mediaCleanup.state: 'pending'`) và gọi `finishSessionEffects` sau commit.
+  - Nối mặc định `assertPairCanEnterSession` vào `createApp` tại `server/app.js` và truyền `expectedStates` từ `server/modules/invitations/invitation-service.js` (giữ fail-closed 503 khi guard không được truyền).
+  - Bổ sung `docs/api/openapi.yaml` (thêm response `403` `ACCOUNT_LOCKED`/`FORBIDDEN`/`CSRF_INVALID`, `410` `GUEST_EXPIRED` và mô tả `PAIR_BLOCKED` trong `409 Conflict` cho `POST /invitation-requests/{requestId}/responses`) và test contract tại `tests/server/openapi-contract.test.js`.
+  - Bổ sung `tests/integration/safety-guard.integration.test.js` (8 ca): actor busy/self-pair/block/lock/guest expired, HTTP `POST /api/v1/invitation-requests/:id/responses` (`409 PAIR_BLOCKED`, `403 ACCOUNT_LOCKED`, `410 GUEST_EXPIRED`), DB-T04 (race `respondToInviteRequest` và `assertPairCanEnterSession` trực tiếp với `createPairBlock`/`lockUserAccount`), không hủy tài nguyên không liên quan, thu hồi `inviting`/`searching` + token cũ bị từ chối, retry cleanup LiveKit qua adapter mock + kiểm tra lại sau `sign()`, và rollback transaction.
+- File liên quan: `server/modules/safety/safety-service.js`, `server/app.js`, `server/modules/invitations/invitation-router.js`, `server/modules/invitations/invitation-service.js`, `docs/api/openapi.yaml`, `tests/server/openapi-contract.test.js`, `tests/integration/safety-guard.integration.test.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng: `corepack npm run check` **Pass 100%** trên Node `v24.22.1` + `npm@11.21.1`: `format:check`, `lint` (0 warnings), `typecheck` (0 errors), `npm test` (24 files, 311/311 server+client tests), `npm run test:integration` (16 files, 184/184 tests trên MongoDB 8.2.7 replica set tạm, gồm 8/8 ca BE-008 và 8/8 ca BE-009), `npm run build` và `npm run build-storybook` (cảnh báo chunk lớn, không chặn build). Adapter LiveKit dùng mock; chưa kiểm chứng LiveKit Cloud thật hoặc Atlas.
+- Tiếp theo: Mở PR về `develop`, chạy CI trên Node 24 (`npm run check`, `dependency-audit`, `secret-scan`) và nhờ Yến Nhi review. BE-019 sẽ gắn các REST endpoints chặn/khóa tài khoản vào `createPairBlock`/`lockUserAccount` và bổ sung OpenAPI; BE-009/matching sẽ gọi `assertPairCanEnterSession` khi tạo phiên từ proposal.
+- Lưu ý/blocker: Không sửa thiết kế 01–07, không tự cập nhật Sheets hay đánh dấu Done.
+
+- Sửa review PR #45:
+  - Nhập mã kiểm tra block hai chiều trước khi giữ chỗ hoặc mở lại request; ghi hai `actor_states` theo thứ tự cố định trong cùng transaction để tranh chấp với thao tác block.
+  - Chấp nhận lấy giờ server mới trong mỗi lần execute của transaction; cùng mốc mới được dùng kiểm tra hạn invitation, request và guest. Tham số `now` tường minh vẫn phục vụ fixture thời gian cố định.
+  - Bổ sung 4 ca hồi quy: gửi lại mã với key mới sau block ở cả hai chiều, block commit sau snapshot nhập mã, retry chấp nhận đúng hạn mã. Bốn ca đều fail với invitation service gốc tại `96bd9af`, pass với bản sửa; nhóm safety integration đạt 12/12 trên MongoDB replica set tạm.
+  - Review độc lập bản sửa chưa phát hiện Must fix/Should fix; vẫn cần approval của reviewer PR. Không truy cập được Project Tracker/Task Handoff trên Google Sheets nên chưa xác minh lại phân công/AC trên bảng; không cập nhật bảng.
+  - Kiểm chứng bản sửa trên Node `v24.19.0`, npm `11.21.1`: `npm run check` pass (350 unit/HTTP/component tests, 195 integration tests, build và Storybook); `npm run openapi:check` pass 8/8; `git diff --check` pass. Storybook còn cảnh báo chunk lớn và thời gian plugin, không chặn build. Chưa chạy CI hoặc LiveKit Cloud thật.
 
 ## Sprint 2
 
