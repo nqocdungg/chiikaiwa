@@ -168,12 +168,11 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
 
     renderHome();
 
-    // 3 mục góc học tập: Kho chủ đề (/topics), Đã lưu (/saved), Lịch sử (/history) - L1 text trực quan
     expect(screen.getByRole('link', { name: 'Kho chủ đề' })).toHaveAttribute(
       'href',
       '/topics',
     );
-    expect(screen.getByRole('link', { name: 'Đã lưu' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Ôn cá nhân' })).toHaveAttribute(
       'href',
       '/saved',
     );

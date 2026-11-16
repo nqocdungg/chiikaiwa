@@ -252,7 +252,7 @@ export function Home() {
             Kho chủ đề
           </Link>
           <Link to="/saved" className="ck-nav-tab-link">
-            Đã lưu
+            Ôn cá nhân
           </Link>
           <Link to="/history" className="ck-nav-tab-link">
             Lịch sử

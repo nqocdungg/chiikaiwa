@@ -2,6 +2,10 @@
 
 import { lazy, Suspense, useEffect } from 'react';
 import { Link, Route, Routes, useLocation } from 'react-router';
+import { LibraryLayout } from './features/library/LibraryLayout.jsx';
+import { SavedPage } from './features/library/SavedPage.jsx';
+import { TopicDetailPage } from './features/library/TopicDetailPage.jsx';
+import { TopicsPage } from './features/library/TopicsPage.jsx';
 import {
   InvitationRoute,
   ProtectedRoute,
@@ -68,7 +72,8 @@ export function App({ skipInitialAuthCheck = false } = {}) {
   const isFullBleedRoute =
     hasPageLandmark ||
     pathname === '/forgot-password' ||
-    pathname === '/reset-password';
+    pathname === '/reset-password' ||
+    /^\/(?:topics|saved)(?:\/|$)/u.test(pathname);
   const RouteContainer = hasPageLandmark ? 'div' : 'main';
 
   return (
@@ -129,16 +134,14 @@ export function App({ skipInitialAuthCheck = false } = {}) {
 
             {/* SC-11, SC-12, SC-14, SC-15: Learner or Guest routes (U / G) */}
             <Route element={<ProtectedRoute allowedRoles={['U', 'G']} />}>
-              <Route
-                path="/topics"
-                element={<RouteShell screenId="SC-11" title="Kho chủ đề" />}
-              />
-              <Route
-                path="/saved"
-                element={
-                  <RouteShell screenId="SC-12" title="Kiến thức đã lưu" />
-                }
-              />
+              <Route element={<LibraryLayout />}>
+                <Route path="/topics" element={<TopicsPage />} />
+                <Route
+                  path="/topics/:topicVersionId"
+                  element={<TopicDetailPage />}
+                />
+                <Route path="/saved" element={<SavedPage />} />
+              </Route>
               <Route
                 path="/study"
                 element={

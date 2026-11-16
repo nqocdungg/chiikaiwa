@@ -319,6 +319,18 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
   - Review độc lập bản sửa chưa phát hiện Must fix/Should fix; vẫn cần approval của reviewer PR. Không truy cập được Project Tracker/Task Handoff trên Google Sheets nên chưa xác minh lại phân công/AC trên bảng; không cập nhật bảng.
   - Kiểm chứng bản sửa trên Node `v24.19.0`, npm `11.21.1`: `npm run check` pass (350 unit/HTTP/component tests, 195 integration tests, build và Storybook); `npm run openapi:check` pass 8/8; `git diff --check` pass. Storybook còn cảnh báo chunk lớn và thời gian plugin, không chặn build. Chưa chạy CI hoặc LiveKit Cloud thật.
 
+### FE-007 — Giao diện kho, nguồn và kiến thức đã lưu
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã triển khai SC-11/12; chờ kiểm chứng bản tích hợp và review.
+- PR: Chưa có. Nhánh `feature/FE-007-learning-library` từ `develop@93f1593`.
+- Đã làm: Nối danh sách theo trình độ/cursor, chi tiết học liệu đúng revision, danh sách đã lưu, lưu/bỏ lưu từng mục và hộp thoại nguồn có phân trang. Khách đọc bộ của lượt thử. Lối vào học chuyển phạm vi qua `/study?scope=topic&topicVersionId=…&mode=all`, `/study?scope=saved&mode=all` và `/quiz?deckVersionId=…`.
+- File liên quan: `client/src/features/library/`, `client/src/App.jsx`, `tests/client/library.test.jsx`.
+- Điều hướng: Header mở Kho chủ đề tại `/topics` và Ôn cá nhân tại `/saved`. Ôn cá nhân mở thẳng danh sách Kiến thức đã lưu. Khi danh sách rỗng, người học có thể quay lại Kho chủ đề.
+- Tích hợp: Đồng bộ `develop@7250727`, giữ routing đăng nhập/đăng ký FE-009 cùng bàn giao backend và QA-006. Lỗi mạng/503 khi đọc thông tin nguồn có thông báo và nút thử lại; nguồn 403/404 vẫn hiện với thông báo không khả dụng.
+- Kiểm chứng: `npm ci` và `npm run check` đạt format, lint, typecheck, 438 ca unit/HTTP/component, 217 ca integration trên MongoDB replica set tạm và build Vite. Chín ca FE-007 kiểm bộ lọc, khách, retry ghi, xung đột phiên bản, phân trang nguồn, thử lại lỗi mạng/503 và nguồn 403/404. Edge với dữ liệu thử đã đạt ở 1440×900, 1366×768, 390×844 và 683×384 trong lần triển khai trước; đã kiểm nút nguồn, Escape, trả focus và tràn ngang. Sau đồng bộ QA-006, kiểm lại format/lint/typecheck cho fixture và tài liệu mới.
+- Tiếp theo: Nhờ Minh Xuân review, kiểm phần lưu của AT-08 trên bản tích hợp và nối các lối vào học với FE-017/FE-018. FE-017 chịu trách nhiệm nối chế độ đến hạn qua API study. API catalog hiện chỉ lọc theo trình độ; thao tác lưu cả bộ và CRUD bộ cá nhân thuộc phạm vi khác.
+
 ## Sprint 2
 
 ### QA-006 — Rà soát contract chọn bộ và manifest
