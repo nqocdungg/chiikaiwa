@@ -8,6 +8,14 @@ describe('OPS-004 CI Workflow Contract & Security Assertions', () => {
   const nvmrcPath = resolve(process.cwd(), '.nvmrc');
 
   const workflowContent = readFileSync(workflowPath, 'utf8');
+  const secretAction = readFileSync(
+    resolve(process.cwd(), '.github/actions/scan-secrets/action.yml'),
+    'utf8',
+  );
+  const secretAuditWorkflow = readFileSync(
+    resolve(process.cwd(), '.github/workflows/secret-audit.yml'),
+    'utf8',
+  );
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
   const nvmrc = readFileSync(nvmrcPath, 'utf8').trim();
 
@@ -19,10 +27,10 @@ describe('OPS-004 CI Workflow Contract & Security Assertions', () => {
     expect(workflowContent).toMatch(/workflow_dispatch:/u);
   });
 
-  it('enforces read-only permissions and safely cancels redundant concurrent runs', () => {
+  it('enforces read-only permissions and gives each push its own concurrency group', () => {
     expect(workflowContent).toMatch(/permissions:\s*\n\s*contents:\s*read/u);
     expect(workflowContent).toContain(
-      'group: ci-${{ github.workflow }}-${{ github.ref }}',
+      "group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.run_id || github.event_name }}",
     );
     expect(workflowContent).toContain('cancel-in-progress: true');
     expect(workflowContent).not.toMatch(/permissions:[\s\S]*write/u);
@@ -42,7 +50,7 @@ describe('OPS-004 CI Workflow Contract & Security Assertions', () => {
 
   it('uses clean npm ci installation and executes the exact npm run check suite without skipping steps', () => {
     expect(packageJson.scripts?.check).toBe(
-      'npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration && npm run build && npm run build-storybook',
+      'npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration && npm run build',
     );
     expect(workflowContent).toMatch(/run:\s*npm ci/u);
     expect(workflowContent).toMatch(/run:\s*npm run check/u);
@@ -55,13 +63,36 @@ describe('OPS-004 CI Workflow Contract & Security Assertions', () => {
 
     // Secret scan job
     expect(workflowContent).toMatch(/name:\s*Secret scan/u);
-    expect(workflowContent).toContain('GITLEAKS_VERSION: 8.30.1');
-    expect(workflowContent).toContain(
+    expect(secretAction).toContain('GITLEAKS_VERSION: 8.30.1');
+    expect(secretAction).toContain(
       'GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb',
     );
-    expect(workflowContent).toMatch(
-      /run:\s*'"\$RUNNER_TEMP\/gitleaks" git --redact --no-banner --log-opts="--all"'/u,
+    expect(secretAction).toContain('sha256sum --check --strict');
+    expect(secretAction).toContain('--redact --no-banner');
+    expect(secretAction).toContain('${{ inputs.revisions }}');
+    expect(secretAction).toContain(' ${GITLEAKS_REVISIONS:?}"');
+  });
+
+  it('scopes CI secret scans to the event and runs full history audits manually', () => {
+    const scanAction = 'uses: ./.github/actions/scan-secrets';
+    expect(workflowContent).toContain(scanAction);
+    expect(workflowContent).toContain(
+      'BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}',
     );
+    expect(workflowContent).toContain(
+      'HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}',
+    );
+    expect(workflowContent).toContain('revisions="$BASE_SHA..$HEAD_SHA"');
+    expect(workflowContent).toContain(
+      'revisions: ${{ steps.revisions.outputs.range }}',
+    );
+    expect(workflowContent).not.toContain('--all');
+
+    expect(secretAuditWorkflow).toMatch(
+      /^on:\s*\n\s*workflow_dispatch:\s*\n\s*permissions:/mu,
+    );
+    expect(secretAuditWorkflow).toContain(scanAction);
+    expect(secretAuditWorkflow).toContain('revisions: --all');
   });
 
   it('strictly isolates tests by not referencing secrets or deployment steps', () => {

@@ -821,4 +821,89 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
       code: 'ACCOUNT_LOCKED',
     });
   });
+
+  it('rejects PATCH /me/profile with 409 IDENTITY_CONFLICT when X-Expected-Actor does not match the current session user, keeping the current user profile intact even at the same version', async () => {
+    const accountA = await registerAndLogin({
+      email: 'account.a@example.com',
+      displayName: 'Tài khoản A',
+    });
+    const accountB = await registerAndLogin({
+      email: 'account.b@example.com',
+      displayName: 'Tài khoản B',
+    });
+
+    expect(accountA.user.version).toBe(0);
+    expect(accountB.user.version).toBe(0);
+
+    // Tab 1 opened form as A (version 0), but browser session cookie is now B (also version 0)
+    const staleTabSaveRes = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', accountB.combinedCookie)
+      .set('X-CSRF-Token', accountB.csrfToken)
+      .set('Idempotency-Key', randomUUID())
+      .set('X-Expected-Actor', accountA.user.id)
+      .send({
+        expectedVersion: 0,
+        displayName: 'Bản nháp của A ghi đè B',
+        profile: {
+          countryCode: 'JP',
+        },
+      })
+      .expect(409);
+
+    expect(staleTabSaveRes.body.error.code).toBe('IDENTITY_CONFLICT');
+
+    // Verify account B in MongoDB is completely untouched
+    const dbUserB = await db
+      .collection('users')
+      .findOne({ _id: new ObjectId(accountB.user.id) });
+    expect(dbUserB?.displayName).toBe('Tài khoản B');
+    expect(dbUserB?.version).toBe(0);
+    expect(dbUserB?.profile?.countryCode).toBeUndefined();
+
+    // Empty/whitespace X-Expected-Actor header is also rejected with 409 IDENTITY_CONFLICT
+    const emptyHeaderRes = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', accountB.combinedCookie)
+      .set('X-CSRF-Token', accountB.csrfToken)
+      .set('Idempotency-Key', randomUUID())
+      .set('X-Expected-Actor', '   ')
+      .send({
+        expectedVersion: 0,
+        displayName: 'Should Fail',
+      })
+      .expect(409);
+    expect(emptyHeaderRes.body.error.code).toBe('IDENTITY_CONFLICT');
+
+    // Matching X-Expected-Actor with <userId> (v0 -> v1) and user:<userId> (v1 -> v2) both succeed
+    const matchIdRes = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', accountB.combinedCookie)
+      .set('X-CSRF-Token', accountB.csrfToken)
+      .set('Idempotency-Key', randomUUID())
+      .set('X-Expected-Actor', accountB.user.id)
+      .send({
+        expectedVersion: 0,
+        displayName: 'Tài khoản B v1',
+      })
+      .expect(200);
+    expect(matchIdRes.body.data.version).toBe(1);
+
+    const matchActorKeyRes = await request(app)
+      .patch('/api/v1/me/profile')
+      .set('Origin', DEFAULT_ORIGIN)
+      .set('Cookie', accountB.combinedCookie)
+      .set('X-CSRF-Token', accountB.csrfToken)
+      .set('Idempotency-Key', randomUUID())
+      .set('X-Expected-Actor', `user:${accountB.user.id}`)
+      .send({
+        expectedVersion: 1,
+        displayName: 'Tài khoản B v2',
+      })
+      .expect(200);
+    expect(matchActorKeyRes.body.data.version).toBe(2);
+  });
 });

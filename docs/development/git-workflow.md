@@ -110,7 +110,7 @@ Merge khi CI và kiểm tra liên quan pass, có ít nhất một người khác
 
 [Dependabot](../../.github/dependabot.yml) theo dõi npm workspaces và GitHub Actions hằng tuần, thứ Hai 09:00 giờ Việt Nam. Minor/patch npm gom theo runtime/development, Actions gom riêng; major tạo PR riêng. Giới hạn PR version updates đang mở: npm 3, Actions 2. Giữ tiêu đề/branch bot tạo, không cần task hình thức cho mỗi đề xuất.
 
-Đọc release notes và diff manifest/lockfile, kiểm tra runtime và peer dependencies. Review các package liên quan cùng nhau, như React/React DOM/typings hoặc Storybook/addons. Giữ phiên bản chính xác. `@types/node` theo runtime Node 24; bot bỏ qua major của package này. Khi nâng major Node, cập nhật typings và xem lại ngoại lệ cùng task. Node, npm trong `packageManager` và MongoDB binary cần được rà soát riêng.
+Đọc release notes và diff manifest/lockfile, kiểm tra runtime và peer dependencies. Review các package liên quan cùng nhau, như React, React DOM và typings. Giữ phiên bản chính xác. `@types/node` theo runtime Node 24; bot bỏ qua major của package này. Khi nâng major Node, cập nhật typings và xem lại ngoại lệ cùng task. Node, npm trong `packageManager` và MongoDB binary cần được rà soát riêng.
 
 PR bot có cùng yêu cầu CI và review, không auto-merge. Ưu tiên bản vá bảo mật, đánh giá ảnh hưởng rồi đưa qua luồng release/hotfix phù hợp và đồng bộ về `develop`.
 
