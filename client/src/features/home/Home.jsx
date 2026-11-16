@@ -29,14 +29,11 @@ function focusLogoutRetry(button) {
  * SC-03: Trang chính (Home) dành cho Người học sau đăng nhập (04 §5.1, §3.2, docs/frontend/design-system.md).
  * Tái cấu trúc theo bản thiết kế mới Figma Make: Centered Hero với 2 linh vật Usagi & Hachiware.
  * Nối dữ liệu người học thật qua auth/me và trạng thái điều phối me/coordination (chống tạo luồng kép).
- *
- * @param {{ onStart?: () => void }} [props] - Hỗ trợ prop onStart cho Storybook & KaiwaDemo
  */
-export function Home({ onStart } = {}) {
+export function Home() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const isDemo = typeof onStart === 'function';
 
   const [prevLocationState, setPrevLocationState] = useState(location.state);
   const [logoutNotice, setLogoutNotice] = useState(
@@ -59,7 +56,7 @@ export function Home({ onStart } = {}) {
   const [coordination, setCoordination] = useState(
     /** @type {{ mode: string, resourceId?: string } | null} */ (null),
   );
-  const [coordinationLoading, setCoordinationLoading] = useState(!isDemo);
+  const [coordinationLoading, setCoordinationLoading] = useState(true);
   const [coordinationError, setCoordinationError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
@@ -161,8 +158,6 @@ export function Home({ onStart } = {}) {
   };
 
   useEffect(() => {
-    if (isDemo) return;
-
     let isMounted = true;
 
     api
@@ -202,19 +197,12 @@ export function Home({ onStart } = {}) {
     return () => {
       isMounted = false;
     };
-  }, [isDemo, retryKey]);
+  }, [retryKey]);
 
-  const handleStart = () => {
-    if (typeof onStart === 'function') {
-      onStart();
-    } else {
-      navigate('/match');
-    }
-  };
+  const handleStart = () => navigate('/match');
 
   const isBusy = Boolean(coordination && coordination.mode !== 'idle');
-  const isStartDisabled =
-    !isDemo && (coordinationLoading || coordinationError || isBusy);
+  const isStartDisabled = coordinationLoading || coordinationError || isBusy;
 
   const displayName = user?.displayName || 'Người học';
   const level = user?.profile?.level;
@@ -467,7 +455,7 @@ export function Home({ onStart } = {}) {
               >
                 Tìm bạn luyện nói
               </Button>
-              {!isDemo && coordinationLoading && (
+              {coordinationLoading && (
                 <p className="mt-2 text-sm text-muted" role="status">
                   Đang kiểm tra trạng thái điều phối…
                 </p>

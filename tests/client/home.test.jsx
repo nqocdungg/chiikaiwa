@@ -24,14 +24,9 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
    * Helper render Home với AuthContext tùy chỉnh và Routes điều hướng
    * @param {Object} [options]
    * @param {Partial<import('../../client/src/features/auth/auth-context.js').AuthState>} [options.authState]
-   * @param {() => void} [options.onStart]
    * @param {string[]} [options.initialEntries]
    */
-  function renderHome({
-    authState = {},
-    onStart,
-    initialEntries = ['/home'],
-  } = {}) {
+  function renderHome({ authState = {}, initialEntries = ['/home'] } = {}) {
     const defaultAuth = {
       user: {
         id: 'u-456',
@@ -63,7 +58,7 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
         <AuthContext.Provider value={defaultAuth}>
           <MemoryRouter initialEntries={initialEntries}>
             <Routes>
-              <Route path="/home" element={<Home onStart={onStart} />} />
+              <Route path="/home" element={<Home />} />
               <Route path="/login" element={<div>Trang đăng nhập</div>} />
             </Routes>
           </MemoryRouter>
@@ -414,24 +409,6 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
       'href',
       `/room/${encodeURIComponent('session/456?filter=1&test=true')}`,
     );
-  });
-
-  it('starts the Storybook demo without calling the coordination API', () => {
-    const coordinationRequest = vi.spyOn(api, 'get');
-
-    const onStartMock = vi.fn();
-    renderHome({ onStart: onStartMock });
-
-    const startBtn = screen.getByRole('button', {
-      name: /Tìm bạn luyện nói/i,
-    });
-    fireEvent.click(startBtn);
-
-    expect(onStartMock).toHaveBeenCalledTimes(1);
-    expect(coordinationRequest).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText(/Đang kiểm tra trạng thái điều phối/i),
-    ).toBeNull();
   });
 
   it('navigates to /login on successful logout (R1 Test A)', async () => {
