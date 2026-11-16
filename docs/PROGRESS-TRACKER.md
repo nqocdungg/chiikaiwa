@@ -329,7 +329,7 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
     - Replay nộp bài không ghi: đọc `attempt` trước, nếu đã `submitted` thì gọi `guestAccess(..., write = false)` (vẫn chặn 410 nếu hết hạn nhưng không tăng version).
     - Thống nhất kiểm tra khách cho các route đọc `getQuiz` và `listQuizzes` qua `guestAccess(..., write = false)`.
     - Loại bỏ trạng thái chết `'summary'` khỏi điều kiện kiểm tra phiên nguồn (`sessionDoc.status !== 'ended'`).
-    - Bổ sung kiểm thử: thu hồi quyền khách giữa chừng lúc tạo lượt (410, 0 attempt, 0 receipt); thu hồi khách giữa chừng lúc submit (410, attempt inProgress, giữ nguyên version và submittedQuizCount); kiểm tra DB chỉ có 1 attempt và 1 receipt khi tạo quiz đồng thời; từ chối 422 khi `sourceSessionId` active; từ chối 410 khi replay sau khi khách hết hạn.
+    - Bổ sung kiểm thử: thu hồi quyền khách giữa chừng lúc tạo lượt (410, 0 attempt, 0 receipt); thu hồi khách giữa chừng lúc submit (410, attempt inProgress, giữ nguyên version và submittedQuizCount); kiểm tra DB chỉ có 1 attempt và 1 receipt khi tạo quiz đồng thời; từ chối 422 khi `sourceSessionId` active; từ chối 410 khi replay sau khi khách hết hạn; làm lại quiz (retake - FR-QIZ-05, AT-10, BE-030) tạo attempt mới độc lập, giữ nguyên kết quả cũ và không đổi FSRS/saved_items.
 - File liên quan:
   - `server/modules/quiz/quiz-model.js`
   - `server/modules/quiz/quiz-repository.js`
@@ -346,10 +346,10 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
   - `npm run format:check`: Pass 100% (All matched files use Prettier code style).
   - `npm run lint`: Pass 100% (0 errors, 0 warnings).
   - `npm run typecheck`: Pass 100% (0 errors trên client, server và root jsconfig).
-  - `npm test`: **422/422 tests pass** trên 30 test suites (bao gồm 20/20 quiz-service unit tests).
-  - `npm run openapi:check`: **9/9 tests pass** (kiểm chứng tag `Quizzes`, security, schemas `QuizPublic`, `QuizResult`, `QuizResultItem`, headers).
-  - `tests/integration/quiz-api.integration.test.js`: **41/41 tests pass** trên môi trường MongoDB 8.2.7 replica set tạm (`MongoMemoryReplSet`); chưa chạy trên cụm MongoDB/Atlas thật.
-  - `npm run test:integration`: **225/225 integration tests pass** trên replica set tạm.
+  - `npm test`: **450/450 tests pass** trên 32 test suites (bao gồm 20/20 quiz-service unit tests).
+  - `npm run openapi:check`: **11/11 tests pass** (kiểm chứng tag `Quizzes`, security, schemas `QuizPublic`, `QuizResult`, `QuizResultItem`, headers).
+  - `tests/integration/quiz-api.integration.test.js`: **42/42 tests pass** trên môi trường MongoDB 8.2.7 replica set tạm (`MongoMemoryReplSet`); chưa chạy trên cụm MongoDB/Atlas thật.
+  - `npm run test:integration`: **260/260 integration tests pass** trên replica set tạm.
   - `npm run build`: Pass 100% (client vite production build & server app/index syntax check).
 - Giới hạn và ghi chú PR:
   - Chưa kiểm chứng integration test trên MongoDB/Atlas thật do phụ thuộc môi trường chạy replica set.

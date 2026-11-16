@@ -1424,6 +1424,93 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       const getRes = await api('get', `/api/v1/quizzes/${quizId}`).expect(200);
       expect(getRes.body.data.status).toBe('submitted');
     });
+
+    it('cho phép làm lại quiz (retake): tạo attempt mới độc lập, giữ nguyên kết quả lượt cũ và không đổi FSRS (FR-QIZ-05, AT-10, BE-030)', async () => {
+      // 1. Seed FSRS card_progress và saved_items của learnerA để kiểm tra tính độc lập
+      const cardProgressId = new ObjectId();
+      await db.collection('card_progress').insertOne({
+        _id: cardProgressId,
+        ownerKey: `user:${FIXTURE_USER_IDS.learnerA}`,
+        state: 2,
+        reps: 5,
+      });
+      const savedItemId = new ObjectId();
+      await db.collection('saved_items').insertOne({
+        _id: savedItemId,
+        ownerKey: `user:${FIXTURE_USER_IDS.learnerA}`,
+        status: 'active',
+      });
+      const beforeProgress = await db
+        .collection('card_progress')
+        .findOne({ _id: cardProgressId });
+      const beforeSaved = await db
+        .collection('saved_items')
+        .findOne({ _id: savedItemId });
+
+      // 2. Tạo lượt quiz đầu tiên và nộp bài
+      const key1 = createTestIdempotencyKey();
+      const createRes1 = await api('post', '/api/v1/quizzes', { key: key1 })
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(201);
+      const quizId1 = createRes1.body.data.id;
+
+      const subKey1 = createTestIdempotencyKey();
+      const submitRes1 = await api(
+        'post',
+        `/api/v1/quizzes/${quizId1}/submission`,
+        { key: subKey1 },
+      )
+        .send({
+          expectedVersion: 0,
+          answers: [
+            { questionVersionId: q1VersionId.toHexString(), optionId: 'opt_a' },
+            { questionVersionId: q2VersionId.toHexString(), text: 'たべて' },
+          ],
+        })
+        .expect(200);
+
+      const quiz1Result = submitRes1.body.data;
+      expect(quiz1Result.status).toBe('submitted');
+      expect(quiz1Result.score).toBe(2);
+
+      // 3. Người học làm lại quiz (retake): gọi POST /quizzes với Idempotency-Key mới
+      const key2 = createTestIdempotencyKey();
+      const createRes2 = await api('post', '/api/v1/quizzes', { key: key2 })
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(201);
+      const quizId2 = createRes2.body.data.id;
+
+      // Xác nhận lượt 2 là một attempt mới hoàn toàn
+      expect(quizId2).not.toBe(quizId1);
+      expect(createRes2.body.data.status).toBe('inProgress');
+      expect(createRes2.body.data.version).toBe(0);
+
+      // 4. Kiểm tra lượt quiz 1 cũ vẫn giữ nguyên kết quả
+      const getRes1 = await api('get', `/api/v1/quizzes/${quizId1}`).expect(
+        200,
+      );
+      expect(getRes1.body.data).toEqual(quiz1Result);
+
+      // 5. Kiểm tra GET /me/quizzes: hiển thị cả hai lượt (lượt 2 mới nhất xếp trước)
+      const listRes = await api('get', '/api/v1/me/quizzes').expect(200);
+      const items = listRes.body.data.items;
+      expect(items.length).toBeGreaterThanOrEqual(2);
+      expect(items[0].id).toBe(quizId2);
+      expect(items[0].status).toBe('inProgress');
+      expect(items[1].id).toBe(quizId1);
+      expect(items[1].status).toBe('submitted');
+      expect(items[1].score).toBe(2);
+
+      // 6. Xác nhận FSRS card_progress và saved_items không hề bị thay đổi
+      const afterProgress = await db
+        .collection('card_progress')
+        .findOne({ _id: cardProgressId });
+      const afterSaved = await db
+        .collection('saved_items')
+        .findOne({ _id: savedItemId });
+      expect(afterProgress).toEqual(beforeProgress);
+      expect(afterSaved).toEqual(beforeSaved);
+    });
   });
 
   describe('4. Quyền khách & Hạn dùng (Guest Trial - B6 & B10.6)', () => {
