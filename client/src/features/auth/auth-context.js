@@ -38,6 +38,8 @@ import { createContext } from 'react';
  * @property {'learner' | 'admin' | 'guest' | 'anonymous'} role
  * @property {'active' | 'locked' | 'expired' | null} status
  * @property {boolean} isLoading
+ * @property {boolean} [isCheckingAuth]
+ * @property {boolean} isLoginPending
  * @property {import('../../services/errors.js').ApiError | null} error
  * @property {() => Promise<void>} checkAuth
  * @property {(credentials: {email: string, password: string}) => Promise<SelfUser>} login
