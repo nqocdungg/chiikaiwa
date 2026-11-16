@@ -40,6 +40,7 @@ describe('FE-002: SC-01 Public Landing Page', () => {
       updateUser: vi.fn(),
       refreshSession: vi.fn(),
       ...authState,
+      isLoginPending: authState.isLoginPending ?? false,
     };
 
     return render(
@@ -145,6 +146,7 @@ describe('FE-002: SC-01 Public Landing Page', () => {
           role: 'anonymous',
           status: null,
           isLoading: false,
+          isLoginPending: false,
           error: null,
           checkAuth: vi.fn(),
           login: vi.fn(),
@@ -222,6 +224,7 @@ describe('FE-002: SC-01 Public Landing Page', () => {
           role: 'learner',
           status: 'active',
           isLoading: false,
+          isLoginPending: false,
           error: null,
           checkAuth: vi.fn(),
           login: vi.fn(),
