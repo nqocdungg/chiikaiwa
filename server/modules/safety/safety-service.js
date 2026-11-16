@@ -141,6 +141,42 @@ async function releaseActorToIdle(
   return result.modifiedCount === 1;
 }
 
+/** @param {{db: import('mongoose').mongo.Db, session: import('mongoose').ClientSession, firstActorKey: string, secondActorKey: string, now: Date}} input */
+export async function assertPairNotBlocked({
+  db,
+  session,
+  firstActorKey,
+  secondActorKey,
+  now,
+}) {
+  for (const actorKey of [firstActorKey, secondActorKey].sort()) {
+    const state = await actorStates(db).findOne({ _id: actorKey }, { session });
+    await touchActorState(db, actorKey, now, session, state);
+  }
+  await checkPairBlock(db, session, firstActorKey, secondActorKey);
+}
+
+/** @param {import('mongoose').mongo.Db} db @param {import('mongoose').ClientSession} session @param {string} firstActorKey @param {string} secondActorKey */
+async function checkPairBlock(db, session, firstActorKey, secondActorKey) {
+  // Check two-way block (BR-28 / FR-SAF-01).
+  const blocked = await db.collection('blocks').findOne(
+    {
+      $or: [
+        { blockerKey: firstActorKey, blockedKey: secondActorKey },
+        { blockerKey: secondActorKey, blockedKey: firstActorKey },
+      ],
+    },
+    { session, projection: { _id: 1 } },
+  );
+  if (blocked) {
+    throw new AppError({
+      status: 409,
+      code: 'PAIR_BLOCKED',
+      message: 'Hai người dùng không thể vào phiên do đang chặn nhau.',
+    });
+  }
+}
+
 /**
  * Shared safety guard for session entry (invitations and matching).
  * Checks actor busyness, two-way pair blocks, and account lock / guest expiry
@@ -204,23 +240,7 @@ export async function assertPairCanEnterSession({
     await touchActorState(db, actorKey, now, session, state);
   }
 
-  // 2. Check two-way block (BR-28 / FR-SAF-01).
-  const blocked = await db.collection('blocks').findOne(
-    {
-      $or: [
-        { blockerKey: firstActorKey, blockedKey: secondActorKey },
-        { blockerKey: secondActorKey, blockedKey: firstActorKey },
-      ],
-    },
-    { session, projection: { _id: 1 } },
-  );
-  if (blocked) {
-    throw new AppError({
-      status: 409,
-      code: 'PAIR_BLOCKED',
-      message: 'Hai người dùng không thể vào phiên do đang chặn nhau.',
-    });
-  }
+  await checkPairBlock(db, session, firstActorKey, secondActorKey);
 
   // 3. Check account lock / guest validity (FR-ADM-01 / 06 §4.3).
   for (const actorKey of orderedKeys) {

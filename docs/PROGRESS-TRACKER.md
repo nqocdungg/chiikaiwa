@@ -262,9 +262,9 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ### BE-008 — Guard an toàn dùng chung
 
-- Ngày cập nhật: 2026-11-15
+- Ngày cập nhật: 2026-11-16
 - Trạng thái: Đã triển khai và hoàn tất `npm run check` trên Node `v24.22.1` (`npm@11.21.1`); chờ LiveKit Cloud thật, CI và review của Yến Nhi.
-- PR: Chưa có; branch `feature/BE-008-shared-safety-guard`, base `develop@962f411`, chưa commit/push.
+- PR: [#45](https://github.com/nqocdungg/chiikaiwa/pull/45), branch `feature/BE-008-shared-safety-guard`; bản sửa review đang ở working tree, chưa commit/push.
 - Đã làm:
   - Triển khai `assertPairCanEnterSession` tại `server/modules/safety/safety-service.js`: kiểm tra `actor_states` (bận/expectedStates), tự ghép (`IDENTITY_CONFLICT`), chặn hai chiều (`PAIR_BLOCKED`), tài khoản khóa (`ACCOUNT_LOCKED`), khách hết hạn/thu hồi (`GUEST_EXPIRED`), và ghi tăng `actor_states.version` theo thứ tự `actorKey` cố định để tham gia tranh chấp ghi.
   - Triển khai TX-05 `createPairBlock` và `lockUserAccount` tại `server/modules/safety/safety-service.js`: ghi `blocks` hoặc khóa `users` + tăng `authVersion` + thu hồi `auth_sessions`, đồng thời tranh chấp trên `actor_states`, hủy proposal/invite request/search liên quan (không hủy invitation hoặc request không liên quan khi block một cặp), kết thúc phiên đang hoạt động (`endReason: 'blocked'` / `'account_locked'`, `mediaCleanup.state: 'pending'`) và gọi `finishSessionEffects` sau commit.
@@ -275,6 +275,13 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Kiểm chứng: `corepack npm run check` **Pass 100%** trên Node `v24.22.1` + `npm@11.21.1`: `format:check`, `lint` (0 warnings), `typecheck` (0 errors), `npm test` (24 files, 311/311 server+client tests), `npm run test:integration` (16 files, 184/184 tests trên MongoDB 8.2.7 replica set tạm, gồm 8/8 ca BE-008 và 8/8 ca BE-009), `npm run build` và `npm run build-storybook` (cảnh báo chunk lớn, không chặn build). Adapter LiveKit dùng mock; chưa kiểm chứng LiveKit Cloud thật hoặc Atlas.
 - Tiếp theo: Mở PR về `develop`, chạy CI trên Node 24 (`npm run check`, `dependency-audit`, `secret-scan`) và nhờ Yến Nhi review. BE-019 sẽ gắn các REST endpoints chặn/khóa tài khoản vào `createPairBlock`/`lockUserAccount` và bổ sung OpenAPI; BE-009/matching sẽ gọi `assertPairCanEnterSession` khi tạo phiên từ proposal.
 - Lưu ý/blocker: Không sửa thiết kế 01–07, không tự cập nhật Sheets hay đánh dấu Done.
+
+- Sửa review PR #45:
+  - Nhập mã kiểm tra block hai chiều trước khi giữ chỗ hoặc mở lại request; ghi hai `actor_states` theo thứ tự cố định trong cùng transaction để tranh chấp với thao tác block.
+  - Chấp nhận lấy giờ server mới trong mỗi lần execute của transaction; cùng mốc mới được dùng kiểm tra hạn invitation, request và guest. Tham số `now` tường minh vẫn phục vụ fixture thời gian cố định.
+  - Bổ sung 4 ca hồi quy: gửi lại mã với key mới sau block ở cả hai chiều, block commit sau snapshot nhập mã, retry chấp nhận đúng hạn mã. Bốn ca đều fail với invitation service gốc tại `96bd9af`, pass với bản sửa; nhóm safety integration đạt 12/12 trên MongoDB replica set tạm.
+  - Review độc lập bản sửa chưa phát hiện Must fix/Should fix; vẫn cần approval của reviewer PR. Không truy cập được Project Tracker/Task Handoff trên Google Sheets nên chưa xác minh lại phân công/AC trên bảng; không cập nhật bảng.
+  - Kiểm chứng bản sửa trên Node `v24.19.0`, npm `11.21.1`: `npm run check` pass (350 unit/HTTP/component tests, 195 integration tests, build và Storybook); `npm run openapi:check` pass 8/8; `git diff --check` pass. Storybook còn cảnh báo chunk lớn và thời gian plugin, không chặn build. Chưa chạy CI hoặc LiveKit Cloud thật.
 
 ## Sprint 2
 

@@ -371,6 +371,7 @@ paths:
       tags: [Invitation Requests]
       operationId: createInvitationRequest
       summary: Người học gửi request bằng mã mời
+      description: Checks two-way pair blocks in the transaction before reserving the requester or reopening a request; returns 409 PAIR_BLOCKED for a blocked pair.
       security:
         - sessionCookie: []
           csrfToken: []

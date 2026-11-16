@@ -255,6 +255,198 @@ describe('BE-008 shared safety guard integration', () => {
     ).rejects.toMatchObject({ status: 410, code: 'GUEST_EXPIRED' });
   });
 
+  it.each(['host', 'requester'])(
+    'rejects a fresh code submission after %s blocks the pair',
+    async (blocker) => {
+      const now = new Date();
+      const hostId = new ObjectId();
+      const requesterId = new ObjectId();
+      const otherId = new ObjectId();
+      await seedUser(hostId, 'Host');
+      await seedUser(requesterId, 'Requester');
+      await seedUser(otherId, 'Other');
+      const host = userIdentity(hostId);
+      const requester = userIdentity(requesterId);
+      const auth = await seedAuthSession(requesterId, now);
+      const invitation = await createInvitation({
+        identity: host,
+        operationId: randomUUID(),
+        now,
+      });
+      const original = await createInviteRequest({
+        identity: requester,
+        code: invitation.code,
+        operationId: randomUUID(),
+        now,
+      });
+      const other = await createInviteRequest({
+        identity: userIdentity(otherId),
+        code: invitation.code,
+        operationId: randomUUID(),
+        now,
+      });
+      await createPairBlock({
+        blockerKey: blocker === 'host' ? host.actorKey : requester.actorKey,
+        blockedKey: blocker === 'host' ? requester.actorKey : host.actorKey,
+        now,
+      });
+      const csrf = await request(app).get('/api/v1/auth/csrf');
+      const response = await request(app)
+        .post('/api/v1/invitation-requests')
+        .set('Origin', 'https://chiikaiwa.example.test')
+        .set('Cookie', [
+          `ck_session=${auth.jwt}`,
+          csrf.headers['set-cookie'][0].split(';')[0],
+        ])
+        .set('X-CSRF-Token', csrf.body.data.csrfToken)
+        .set('Idempotency-Key', randomUUID())
+        .send({ code: invitation.code });
+      expect(response.status).toBe(409);
+      expect(response.body.error.code).toBe('PAIR_BLOCKED');
+      expect(
+        await db
+          .collection('invite_requests')
+          .findOne({ _id: new ObjectId(original.id) }),
+      ).toMatchObject({ status: 'rejected' });
+      expect(
+        await db
+          .collection('actor_states')
+          .findOne(/** @type {any} */ ({ _id: requester.actorKey })),
+      ).toMatchObject({ mode: 'idle' });
+      const accepted = await respondToInviteRequest({
+        requestId: other.id,
+        hostKey: host.actorKey,
+        expectedVersion: other.version,
+        decision: 'accept',
+        operationId: randomUUID(),
+        assertPairCanEnterSession,
+        now,
+      });
+      expect(accepted.status).toBe('accepted');
+    },
+  );
+
+  it('retries code submission against a block committed after its snapshot', async () => {
+    const now = new Date();
+    const hostId = new ObjectId();
+    const requesterId = new ObjectId();
+    await seedUser(hostId, 'Host');
+    await seedUser(requesterId, 'Requester');
+    const host = userIdentity(hostId);
+    const requester = userIdentity(requesterId);
+    const invitation = await createInvitation({
+      identity: host,
+      operationId: randomUUID(),
+      now,
+    });
+    const originalFind = mongoose.mongo.Collection.prototype.findOne;
+    let snapshots = 0;
+    const spy = vi
+      .spyOn(mongoose.mongo.Collection.prototype, 'findOne')
+      .mockImplementation(
+        /** @this {import('mongoose').mongo.Collection} */ async function (
+          ...args
+        ) {
+          const result = await originalFind.apply(this, args);
+          if (
+            this.collectionName === 'invitations' &&
+            args[0]?.code === invitation.code &&
+            args[1]?.session
+          ) {
+            snapshots += 1;
+            // The first lookup is the preflight reconciliation transaction.
+            if (snapshots === 2) {
+              await createPairBlock({
+                blockerKey: host.actorKey,
+                blockedKey: requester.actorKey,
+                now,
+              });
+            }
+          }
+          return result;
+        },
+      );
+    try {
+      await expect(
+        createInviteRequest({
+          identity: requester,
+          code: invitation.code,
+          operationId: randomUUID(),
+          now,
+        }),
+      ).rejects.toMatchObject({ status: 409, code: 'PAIR_BLOCKED' });
+      expect(snapshots).toBeGreaterThanOrEqual(3);
+      expect(await db.collection('invite_requests').countDocuments()).toBe(0);
+      expect(
+        await db
+          .collection('actor_states')
+          .findOne(/** @type {any} */ ({ _id: requester.actorKey })),
+      ).toMatchObject({ mode: 'idle' });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('rechecks invitation expiry after a transient transaction conflict through HTTP', async () => {
+    const now = new Date();
+    const hostId = new ObjectId();
+    const requesterId = new ObjectId();
+    await seedUser(hostId, 'Host');
+    await seedUser(requesterId, 'Requester');
+    const host = userIdentity(hostId);
+    const auth = await seedAuthSession(hostId, now);
+    const invitation = await createInvitation({
+      identity: host,
+      operationId: randomUUID(),
+      now,
+    });
+    const pending = await createInviteRequest({
+      identity: userIdentity(requesterId),
+      code: invitation.code,
+      operationId: randomUUID(),
+      now,
+    });
+    const guard = vi.fn(async (input) => {
+      await assertPairCanEnterSession(input);
+      if (guard.mock.calls.length === 1) {
+        vi.setSystemTime(new Date(invitation.expiresAt));
+        const conflict = new mongoose.mongo.MongoServerError({
+          message: 'Write conflict',
+          code: 112,
+        });
+        conflict.addErrorLabel('TransientTransactionError');
+        throw conflict;
+      }
+    });
+    const retryApp = createApp({ assertPairCanEnterSession: guard });
+    const csrf = await request(retryApp).get('/api/v1/auth/csrf');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(now);
+    try {
+      const response = await request(retryApp)
+        .post(`/api/v1/invitation-requests/${pending.id}/responses`)
+        .set('Origin', 'https://chiikaiwa.example.test')
+        .set('Cookie', [
+          `ck_session=${auth.jwt}`,
+          csrf.headers['set-cookie'][0].split(';')[0],
+        ])
+        .set('X-CSRF-Token', csrf.body.data.csrfToken)
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: pending.version, decision: 'accept' });
+      expect(response.status).toBe(409);
+      expect(response.body.error.code).toBe('INVITATION_UNAVAILABLE');
+      expect(guard).toHaveBeenCalledOnce();
+      expect(await db.collection('practice_sessions').countDocuments()).toBe(0);
+      expect(
+        await db
+          .collection('invite_requests')
+          .findOne({ _id: new ObjectId(pending.id) }),
+      ).toMatchObject({ status: 'pending' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('wires BE-008 guard into HTTP invitation acceptance and rejects blocked pairs', async () => {
     const now = new Date();
     const hostId = new ObjectId();
