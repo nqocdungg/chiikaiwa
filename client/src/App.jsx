@@ -74,16 +74,17 @@ export function App({ skipInitialAuthCheck = false } = {}) {
     );
   }
 
+  const hasPageLandmark = pathname === '/' || pathname === '/home';
   const isFullBleedRoute =
-    pathname === '/' ||
-    pathname === '/home' ||
+    hasPageLandmark ||
     pathname === '/forgot-password' ||
     pathname === '/reset-password';
+  const RouteContainer = hasPageLandmark ? 'div' : 'main';
 
   return (
     <AuthProvider skipInitialCheck={skipInitialAuthCheck}>
       <div className="ck-app">
-        <main
+        <RouteContainer
           className={isFullBleedRoute ? 'w-full' : 'ck-page-container py-10'}
         >
           <Routes>
@@ -211,7 +212,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
               }
             />
           </Routes>
-        </main>
+        </RouteContainer>
       </div>
     </AuthProvider>
   );

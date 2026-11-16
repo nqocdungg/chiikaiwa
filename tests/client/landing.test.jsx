@@ -193,6 +193,7 @@ describe('FE-002: SC-01 Public Landing Page', () => {
     const heroBtn = screen.getByRole('link', { name: /Bắt đầu ngay/i });
     expect(heroBtn).toHaveAttribute('href', '/register');
     expect(heroBtn).toBeVisible();
+    expect(screen.getByRole('main')).toContainElement(heroBtn);
   });
 
   it('updates hero CTA to entry when user is confirmed authenticated after loading (D1)', () => {

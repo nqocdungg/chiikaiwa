@@ -20,6 +20,11 @@ const VALID_COORDINATION_MODES = [
   'inSession',
 ];
 
+/** @param {HTMLButtonElement | null} button */
+function focusLogoutRetry(button) {
+  button?.focus();
+}
+
 /**
  * SC-03: Trang chính (Home) dành cho Người học sau đăng nhập (04 §5.1, §3.2, docs/frontend/design-system.md).
  * Tái cấu trúc theo bản thiết kế mới Figma Make: Centered Hero với 2 linh vật Usagi & Hachiware.
@@ -48,7 +53,6 @@ export function Home({ onStart } = {}) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const triggerRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
-  const retryRef = useRef(/** @type {HTMLButtonElement | null} */ (null));
   const menuId = 'ck-account-menu';
 
   const [coordination, setCoordination] = useState(
@@ -82,12 +86,6 @@ export function Home({ onStart } = {}) {
     location.state,
     navigate,
   ]);
-
-  useEffect(() => {
-    if (logoutNotice) {
-      retryRef.current?.focus();
-    }
-  }, [logoutNotice]);
 
   useEffect(() => {
     if (!isDropdownOpen) return;
@@ -326,7 +324,7 @@ export function Home({ onStart } = {}) {
               </div>
               <div className="flex gap-2">
                 <button
-                  ref={retryRef}
+                  ref={focusLogoutRetry}
                   type="button"
                   className="ck-button ck-button--primary"
                   onClick={handleLogout}
