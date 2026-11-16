@@ -373,6 +373,7 @@ paths:
       tags: [Invitation Requests]
       operationId: createInvitationRequest
       summary: Người học gửi request bằng mã mời
+      description: Checks two-way pair blocks in the transaction before reserving the requester or reopening a request; returns 409 PAIR_BLOCKED for a blocked pair.
       security:
         - sessionCookie: []
           csrfToken: []
@@ -494,10 +495,14 @@ paths:
                 $ref: '#/components/schemas/InviteRequestResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '503':
@@ -2111,6 +2116,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Không có quyền, sai CSRF/Origin hoặc tài khoản đã bị khóa (FORBIDDEN, CSRF_INVALID, ACCOUNT_LOCKED)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     NotFound:
       description: Tài nguyên không tồn tại hoặc ngoài phạm vi truy cập
       content:
@@ -2122,6 +2133,12 @@ components:
         Xung đột trạng thái hoặc danh tính (`VERSION_CONFLICT`,
         `IDEMPOTENCY_CONFLICT`, `IDENTITY_CONFLICT`, `ACTOR_BUSY`,
         `INVITATION_UNAVAILABLE`, ...)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: Quyền truy cập tạm của khách đã hết hạn hoặc bị thu hồi (GUEST_EXPIRED)
       content:
         application/json:
           schema:

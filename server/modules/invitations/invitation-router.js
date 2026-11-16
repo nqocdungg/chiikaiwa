@@ -50,7 +50,7 @@ async function applyWriteLimit(request, response) {
 }
 
 /**
- * @param {{assertPairCanEnterSession?: (input: Record<string, any>) => Promise<void>}} [options]
+ * @param {{assertPairCanEnterSession?: (input: any) => Promise<void>}} [options]
  */
 export function createInvitationRouter({ assertPairCanEnterSession } = {}) {
   const router = express.Router();
