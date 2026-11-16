@@ -1,4 +1,5 @@
 import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
+import mongoose from 'mongoose';
 import request from 'supertest';
 import {
   afterAll,
@@ -16,6 +17,7 @@ import {
 } from '../../server/persistence/database.js';
 import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 import {
+  FIXTURE_GUEST_IDS,
   FIXTURE_PRACTICE_SESSION_ID,
   FIXTURE_USER_IDS,
   RAW_GUEST_TOKENS,
@@ -31,6 +33,7 @@ import {
 let replicaSet;
 /** @type {import('mongoose').mongo.Db} */
 let db;
+const { ObjectId } = mongoose.Types;
 
 beforeAll(async () => {
   replicaSet = await MongoMemoryReplSet.create({
@@ -151,6 +154,25 @@ describe('QA-001 Database Contract Fixtures & ACID Integration Suite', () => {
   });
 
   it('authenticates guest session via ck_guest cookie containing RAW_GUEST_TOKENS.active and rejects expired guest', async () => {
+    await db.collection('practice_sessions').insertOne({
+      _id: new ObjectId(FIXTURE_PRACTICE_SESSION_ID),
+      originKind: 'invite',
+      originId: new ObjectId(),
+      roomName: 'guest-auth-fixture',
+      status: 'active',
+      version: 0,
+      members: [
+        {
+          actorKey: `guest:${FIXTURE_GUEST_IDS.active}`,
+          kind: 'guest',
+        },
+        {
+          actorKey: `user:${FIXTURE_USER_IDS.learnerA}`,
+          kind: 'user',
+        },
+      ],
+    });
+
     // 1. Authenticate with active raw guest token
     const activeRes = await request(app)
       .get('/api/v1/auth/me')

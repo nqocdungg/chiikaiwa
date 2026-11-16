@@ -1,5 +1,5 @@
-import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
+import mongoose from 'mongoose';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createApp } from '../../server/app.js';
@@ -10,6 +10,9 @@ import {
 import { up as applyIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 import {
   createFixtureJwt,
+  DEFAULT_JWT_AUDIENCE,
+  DEFAULT_JWT_ISSUER,
+  DEFAULT_JWT_SECRET,
   FIXTURE_GUEST_IDS,
   FIXTURE_PRACTICE_SESSION_ID,
   FIXTURE_SESSION_IDS,
@@ -59,6 +62,9 @@ beforeAll(async () => {
     binary: { version: '8.2.7' },
     replSet: { count: 1, storageEngine: 'wiredTiger' },
   });
+  vi.stubEnv('JWT_SECRET', DEFAULT_JWT_SECRET);
+  vi.stubEnv('JWT_ISSUER', DEFAULT_JWT_ISSUER);
+  vi.stubEnv('JWT_AUDIENCE', DEFAULT_JWT_AUDIENCE);
   vi.stubEnv('MONGODB_URI', replicaSet.getUri());
   vi.stubEnv('MONGODB_DB_NAME', 'chiikaiwa_saved_item_api_test');
   vi.stubEnv('APP_ORIGIN', origin);

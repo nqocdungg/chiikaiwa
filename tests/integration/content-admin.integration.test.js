@@ -144,14 +144,29 @@ beforeEach(async () => {
   ]);
 
   // Seed valid guest session
+  const guestSessionId = new ObjectId();
+  const guestPracticeSessionId = new ObjectId();
   await db.collection('guest_sessions').insertOne({
-    _id: new ObjectId(),
+    _id: guestSessionId,
     credentialHash: hashGuestCredential(RAW_GUEST_TOKEN),
+    practiceSessionId: guestPracticeSessionId,
     status: 'active',
     version: 0,
     issuedAt: now,
     expiresAt,
     purgeAt: expiresAt,
+  });
+  await db.collection('practice_sessions').insertOne({
+    _id: guestPracticeSessionId,
+    originKind: 'invite',
+    originId: new ObjectId(),
+    roomName: `room-${guestPracticeSessionId.toHexString()}`,
+    status: 'active',
+    version: 0,
+    members: [
+      { actorKey: `guest:${guestSessionId.toHexString()}`, kind: 'guest' },
+      { actorKey: `user:${new ObjectId().toHexString()}`, kind: 'user' },
+    ],
   });
 
   // Seed sample immutable content_versions

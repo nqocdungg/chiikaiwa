@@ -497,15 +497,29 @@ describe('BE-002 Profile & Catalogs replica-set integration tests', () => {
 
     // 2. Guest caller -> 403 FORBIDDEN
     const rawGuestToken = 'guest-token-cannot-edit-profile';
+    const guestId = new ObjectId();
+    const guestPracticeSessionId = new ObjectId();
     await db.collection('guest_sessions').insertOne({
-      _id: new ObjectId(),
+      _id: guestId,
       credentialHash: hashGuestCredential(rawGuestToken),
       invitationId: new ObjectId(),
-      practiceSessionId: new ObjectId(),
+      practiceSessionId: guestPracticeSessionId,
       status: 'active',
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
       version: 0,
       cleanupState: 'pending',
+    });
+    await db.collection('practice_sessions').insertOne({
+      _id: guestPracticeSessionId,
+      originKind: 'invite',
+      originId: new ObjectId(),
+      roomName: `room-${guestPracticeSessionId.toHexString()}`,
+      status: 'active',
+      version: 0,
+      members: [
+        { actorKey: `guest:${guestId.toHexString()}`, kind: 'guest' },
+        { actorKey: `user:${new ObjectId().toHexString()}`, kind: 'user' },
+      ],
     });
 
     const guestRes = await request(app)
