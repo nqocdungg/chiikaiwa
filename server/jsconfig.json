@@ -3,8 +3,11 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "ws": ["./types/ws.d.ts"]
+    }
   },
-  "include": ["**/*.js", "../api/**/*.js"],
+  "include": ["**/*.js", "**/*.d.ts", "../api/**/*.js"],
   "exclude": ["node_modules", "dist"]
 }

@@ -1,3 +1,4 @@
+import { waitUntil as vercelWaitUntil } from '@vercel/functions';
 import mongoose from 'mongoose';
 import { readAuthEnv } from '../../config/env.js';
 import { AppError } from '../../middleware/http-error.js';
@@ -6,10 +7,16 @@ import {
   connectDatabase,
   withTransaction,
 } from '../../persistence/database.js';
+import {
+  assertBrevoReady,
+  sendPasswordResetEmail,
+} from '../../integrations/brevo.js';
 import { runIdempotentOperation } from '../coordination/coordination-service.js';
 import {
+  generatePasswordResetToken,
   hashGuestCredential,
   hashPassword,
+  hashPasswordResetToken,
   signJwt,
   verifyDummyPassword,
   verifyJwt,
@@ -21,11 +28,18 @@ import {
   validateEmptyObjectInput,
   validateIdempotencyKey,
   validateLoginInput,
+  validatePasswordChangeInput,
+  validatePasswordResetInput,
+  validatePasswordResetRequestInput,
   validateProfileUpdateInput,
   validateRegisterInput,
 } from './validation.js';
 
 const { ObjectId } = mongoose.Types;
+
+export const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+export const NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE =
+  'Nếu email hợp lệ, hướng dẫn đặt lại mật khẩu sẽ được gửi.';
 
 /**
  * Registers a new learner account in transaction TX-01 (users, actor_states, statistics.registeredAccounts).
@@ -610,4 +624,444 @@ export async function updateUserProfile({
   });
 
   return /** @type {ReturnType<typeof toSelfDto>} */ (result);
+}
+
+/**
+ * Changes the password of an authenticated active user in transaction TX-02 (06 §4.2, 06 §11.2, 07 §4).
+ * Verifies `currentPassword` (401 INVALID_CREDENTIALS on mismatch), updates `passwordHash`,
+ * increments `authVersion` and `version`, revokes all active `auth_sessions` of the user,
+ * and invalidates any unused `password_reset_tokens` of the user.
+ *
+ * @param {{ userId: import('mongoose').Types.ObjectId | string, rawBody: unknown }} params
+ * @param {{ now?: Date, beforeCommit?: (session: import('mongoose').ClientSession) => Promise<void> }} [options]
+ * @returns {Promise<void>}
+ */
+export async function changeUserPassword(
+  { userId, rawBody },
+  { now = new Date(), beforeCommit } = {},
+) {
+  const { currentPassword, newPassword } = validatePasswordChangeInput(rawBody);
+  const db = await connectDatabase();
+  const userObjectId =
+    typeof userId === 'string' ? new ObjectId(userId) : userId;
+
+  const userDoc = await db.collection('users').findOne({ _id: userObjectId });
+  if (!userDoc || typeof userDoc.passwordHash !== 'string') {
+    await verifyDummyPassword(currentPassword);
+    throw new AppError({
+      status: 401,
+      code: 'SESSION_EXPIRED',
+      message:
+        'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
+    });
+  }
+
+  if (userDoc.status === 'locked') {
+    throw new AppError({
+      status: 403,
+      code: 'ACCOUNT_LOCKED',
+      message: 'Tài khoản của bạn đã bị khóa.',
+    });
+  }
+
+  const isCurrentValid = await verifyPassword(
+    currentPassword,
+    userDoc.passwordHash,
+  );
+  if (!isCurrentValid) {
+    throw new AppError({
+      status: 401,
+      code: 'INVALID_CREDENTIALS',
+      message: 'Mật khẩu hiện tại không đúng.',
+    });
+  }
+
+  const newPasswordHash = await hashPassword(newPassword);
+
+  await withTransaction(async (session) => {
+    const updateRes = await db.collection('users').updateOne(
+      {
+        _id: userDoc._id,
+        status: 'active',
+        passwordHash: userDoc.passwordHash,
+      },
+      {
+        $set: {
+          passwordHash: newPasswordHash,
+          updatedAt: now,
+        },
+        $inc: {
+          authVersion: 1,
+          version: 1,
+        },
+      },
+      { session },
+    );
+
+    if (updateRes.matchedCount === 0) {
+      const latestUser = await db
+        .collection('users')
+        .findOne({ _id: userDoc._id }, { session });
+      if (latestUser?.status === 'locked') {
+        throw new AppError({
+          status: 403,
+          code: 'ACCOUNT_LOCKED',
+          message: 'Tài khoản của bạn đã bị khóa.',
+        });
+      }
+      throw new AppError({
+        status: 401,
+        code: 'SESSION_EXPIRED',
+        message:
+          'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.',
+      });
+    }
+
+    await db.collection('auth_sessions').updateMany(
+      {
+        userId: userDoc._id,
+        revokedAt: { $exists: false },
+      },
+      {
+        $set: { revokedAt: now },
+      },
+      { session },
+    );
+
+    await db.collection('password_reset_tokens').updateMany(
+      {
+        userId: userDoc._id,
+        usedAt: { $exists: false },
+        invalidatedAt: { $exists: false },
+      },
+      {
+        $set: { invalidatedAt: now },
+      },
+      { session },
+    );
+
+    if (beforeCommit) {
+      await beforeCommit(session);
+    }
+  });
+}
+
+/**
+ * Issues a one-time 15-minute password reset token (storing only SHA-256 `tokenHash`)
+ * for an active account and registers Brevo email dispatch + post-dispatch token housekeeping
+ * with `waitUntil` outside the DB transaction so the public 202 response does not wait on Brevo
+ * (05 §6.4, 06 §4.2, 07 §4). Always returns a neutral 202 payload without revealing whether the
+ * email is registered or locked (503 is only thrown for global email service misconfiguration
+ * before looking up any account). If post-response email dispatch fails or times out, invalidates
+ * only the newly issued undelivered token, preserves any earlier valid token, and leaves the
+ * password untouched.
+ *
+ * @param {unknown} rawBody
+ * @param {{
+ *   now?: Date,
+ *   envSource?: NodeJS.ProcessEnv,
+ *   sendResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>,
+ *   waitUntil?: (promise: Promise<unknown>) => void
+ * }} [options]
+ * @returns {Promise<{ message: string }>}
+ */
+export async function requestPasswordReset(
+  rawBody,
+  {
+    now = new Date(),
+    envSource = process.env,
+    sendResetEmail,
+    waitUntil = vercelWaitUntil,
+  } = {},
+) {
+  const { emailKey } = validatePasswordResetRequestInput(rawBody);
+
+  // Verify email service configuration upfront so missing config returns 503 consistently
+  // regardless of whether the target email exists in the database.
+  if (!sendResetEmail) {
+    assertBrevoReady(envSource);
+  }
+
+  const rawToken = generatePasswordResetToken();
+  const tokenHash = hashPasswordResetToken(rawToken);
+  const expiresAt = new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS);
+
+  const db = await connectDatabase();
+  const userDoc = await db.collection('users').findOne({ emailKey });
+
+  if (!userDoc || userDoc.status !== 'active') {
+    return { message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE };
+  }
+
+  const tokenId = new ObjectId();
+  /** @type {number | undefined} */
+  let issuedVersion;
+
+  await withTransaction(async (session) => {
+    const updatedUser = await db.collection('users').findOneAndUpdate(
+      { _id: userDoc._id, status: 'active' },
+      {
+        $inc: { version: 1 },
+        $set: { updatedAt: now },
+      },
+      { session, returnDocument: 'after', projection: { version: 1 } },
+    );
+    if (!updatedUser || typeof updatedUser.version !== 'number') {
+      return;
+    }
+
+    issuedVersion = updatedUser.version;
+    await db.collection('password_reset_tokens').insertOne(
+      {
+        _id: tokenId,
+        userId: userDoc._id,
+        tokenHash,
+        issuedVersion,
+        expiresAt,
+        purgeAt: expiresAt,
+      },
+      { session },
+    );
+  });
+
+  if (issuedVersion === undefined) {
+    return { message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE };
+  }
+
+  const dispatchEmail =
+    sendResetEmail ??
+    ((params) => sendPasswordResetEmail(params, { env: envSource }));
+
+  // Register the entire email dispatch and DB housekeeping promise with Vercel waitUntil
+  // before returning 202 so active accounts do not block on Brevo while background work
+  // continues past response completion.
+  const postResponseTask = (async () => {
+    try {
+      await dispatchEmail({
+        toEmail: String(userDoc.email),
+        displayName:
+          typeof userDoc.displayName === 'string'
+            ? userDoc.displayName
+            : undefined,
+        resetToken: rawToken,
+      });
+    } catch {
+      // Invalidate only the newly created undelivered token; keep any earlier valid link intact.
+      try {
+        await db.collection('password_reset_tokens').updateOne(
+          {
+            _id: tokenId,
+            usedAt: { $exists: false },
+            invalidatedAt: { $exists: false },
+          },
+          {
+            $set: { invalidatedAt: new Date() },
+          },
+        );
+      } catch {
+        // Contain background DB errors to avoid unhandled rejections or leaking reset secrets.
+      }
+      return;
+    }
+
+    // Re-verify account and token state atomically inside a transaction after Brevo returns
+    // so concurrent resetPasswordWithToken, password-change, or account locking cannot race
+    // with invalidating older tokens.
+    try {
+      await withTransaction(async (session) => {
+        const attemptNow = new Date();
+        const currentUser = await db
+          .collection('users')
+          .findOne(
+            { _id: userDoc._id },
+            { session, projection: { status: 1 } },
+          );
+
+        if (!currentUser || currentUser.status !== 'active') {
+          await db.collection('password_reset_tokens').updateOne(
+            {
+              _id: tokenId,
+              usedAt: { $exists: false },
+              invalidatedAt: { $exists: false },
+            },
+            {
+              $set: { invalidatedAt: attemptNow },
+            },
+            { session },
+          );
+          return;
+        }
+
+        const currentToken = await db
+          .collection('password_reset_tokens')
+          .findOne(
+            {
+              _id: tokenId,
+              usedAt: { $exists: false },
+              invalidatedAt: { $exists: false },
+              expiresAt: { $gt: attemptNow },
+            },
+            { session, projection: { _id: 1 } },
+          );
+
+        if (!currentToken) {
+          return;
+        }
+
+        // Only supersede tokens issued strictly before this token (`issuedVersion < this.issuedVersion`)
+        // so concurrent reset requests never mutually invalidate each other regardless of email order.
+        await db.collection('password_reset_tokens').updateMany(
+          {
+            userId: userDoc._id,
+            _id: { $ne: tokenId },
+            usedAt: { $exists: false },
+            invalidatedAt: { $exists: false },
+            $or: [
+              { issuedVersion: { $lt: issuedVersion } },
+              { issuedVersion: { $exists: false } },
+            ],
+          },
+          {
+            $set: { invalidatedAt: attemptNow },
+          },
+          { session },
+        );
+      });
+    } catch {
+      // Contain background DB errors to avoid unhandled rejections or leaking reset secrets.
+    }
+  })();
+
+  waitUntil(postResponseTask);
+
+  return { message: NEUTRAL_PASSWORD_RESET_REQUEST_MESSAGE };
+}
+
+/**
+ * Resets a user's password using a one-time reset token in transaction TX-02 (06 §4.2, 06 §11.2, 06 §14.2 DB-T02, 07 §4).
+ * Atomically consumes the unused, non-expired token (`usedAt`), updates `passwordHash`,
+ * increments `authVersion` and `version`, invalidates any other unused reset tokens of the user,
+ * and revokes all active `auth_sessions` of the user. Does NOT auto-login.
+ * Invalid, expired, invalidated, or already-used tokens all throw 400 RESET_TOKEN_INVALID.
+ *
+ * @param {unknown} rawBody
+ * @param {{ now?: Date, beforeCommit?: (session: import('mongoose').ClientSession) => Promise<void> }} [options]
+ * @returns {Promise<void>}
+ */
+export async function resetPasswordWithToken(
+  rawBody,
+  { now, beforeCommit } = {},
+) {
+  const { token, newPassword } = validatePasswordResetInput(rawBody);
+  const tokenHash = hashPasswordResetToken(token);
+  const newPasswordHash = await hashPassword(newPassword);
+  const db = await connectDatabase();
+
+  try {
+    await withTransaction(async (session) => {
+      // Evaluate current server time on every transaction attempt so a token that expires
+      // during password hashing or before a transaction retry cannot be consumed.
+      const attemptNow = now ?? new Date();
+      const tokenDoc = await db
+        .collection('password_reset_tokens')
+        .findOneAndUpdate(
+          {
+            tokenHash,
+            usedAt: { $exists: false },
+            invalidatedAt: { $exists: false },
+            expiresAt: { $gt: attemptNow },
+          },
+          {
+            $set: { usedAt: attemptNow },
+          },
+          {
+            session,
+            returnDocument: 'after',
+          },
+        );
+
+      if (!tokenDoc || !tokenDoc.userId) {
+        throw new AppError({
+          status: 400,
+          code: 'RESET_TOKEN_INVALID',
+          message: 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.',
+        });
+      }
+
+      const userUpdate = await db.collection('users').updateOne(
+        {
+          _id: tokenDoc.userId,
+          status: 'active',
+        },
+        {
+          $set: {
+            passwordHash: newPasswordHash,
+            updatedAt: attemptNow,
+          },
+          $inc: {
+            authVersion: 1,
+            version: 1,
+          },
+        },
+        { session },
+      );
+
+      if (userUpdate.matchedCount === 0) {
+        throw new AppError({
+          status: 400,
+          code: 'RESET_TOKEN_INVALID',
+          message: 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.',
+        });
+      }
+
+      await db.collection('password_reset_tokens').updateMany(
+        {
+          userId: tokenDoc.userId,
+          _id: { $ne: tokenDoc._id },
+          usedAt: { $exists: false },
+          invalidatedAt: { $exists: false },
+        },
+        {
+          $set: { invalidatedAt: attemptNow },
+        },
+        { session },
+      );
+
+      await db.collection('auth_sessions').updateMany(
+        {
+          userId: tokenDoc.userId,
+          revokedAt: { $exists: false },
+        },
+        {
+          $set: { revokedAt: attemptNow },
+        },
+        { session },
+      );
+
+      if (beforeCommit) {
+        await beforeCommit(session);
+      }
+    });
+  } catch (err) {
+    if (err instanceof AppError) {
+      throw err;
+    }
+    if (/** @type {{ code?: number }} */ (err)?.code === 112) {
+      const existingToken = await db
+        .collection('password_reset_tokens')
+        .findOne({ tokenHash });
+      if (
+        !existingToken ||
+        existingToken.usedAt ||
+        existingToken.invalidatedAt
+      ) {
+        throw new AppError({
+          status: 400,
+          code: 'RESET_TOKEN_INVALID',
+          message: 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.',
+        });
+      }
+    }
+    throw err;
+  }
 }

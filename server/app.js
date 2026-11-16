@@ -25,7 +25,14 @@ import { createOpenApiRouter } from './openapi.js';
 import { checkDatabase } from './persistence/database.js';
 
 /**
- * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler, onVerifiedPresence?: import('./modules/sessions/livekit-webhook-service.js').PresenceConsumer, assertPairCanEnterSession?: typeof defaultAssertPairCanEnterSession}} [options]
+ * @param {{
+ *   checkHealth?: () => Promise<void>,
+ *   handleLivekitWebhook?: import('express').RequestHandler,
+ *   onVerifiedPresence?: import('./modules/sessions/livekit-webhook-service.js').PresenceConsumer,
+ *   assertPairCanEnterSession?: typeof defaultAssertPairCanEnterSession,
+ *   sendPasswordResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>,
+ *   waitUntil?: (promise: Promise<unknown>) => void
+ * }} [options]
  */
 export function createApp({
   checkHealth = checkDatabase,
@@ -35,6 +42,8 @@ export function createApp({
     afterCommit: finishWebhookEffects,
   }),
   assertPairCanEnterSession = defaultAssertPairCanEnterSession,
+  sendPasswordResetEmail,
+  waitUntil,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -132,7 +141,10 @@ export function createApp({
     }),
   );
 
-  app.use('/api/v1/auth', createAuthRouter());
+  app.use(
+    '/api/v1/auth',
+    createAuthRouter({ sendPasswordResetEmail, waitUntil }),
+  );
   app.use('/api/v1', createProfileRouter());
   app.use('/api/v1', createCoordinationRouter());
   app.use('/api/v1', createInvitationRouter({ assertPairCanEnterSession }));
