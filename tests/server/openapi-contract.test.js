@@ -203,4 +203,37 @@ describe('OpenAPI contract', () => {
       document.components.schemas.SessionSlot.properties,
     ).not.toHaveProperty('scenarioVersionId');
   });
+
+  it('documents PATCH /me/profile with optional X-Expected-Actor header, 409 conflict, and safe Self projection', () => {
+    const patchProfile = document.paths['/me/profile'].patch;
+    expect(patchProfile.security).toEqual([
+      { sessionCookie: [], csrfToken: [] },
+    ]);
+    expect(patchProfile.parameters).toContainEqual({
+      $ref: '#/components/parameters/IdempotencyKey',
+    });
+    expect(patchProfile.parameters).toContainEqual({
+      $ref: '#/components/parameters/ExpectedActor',
+    });
+    expect(patchProfile.responses).toHaveProperty('409');
+    expect(document.components.parameters.ExpectedActor).toMatchObject({
+      name: 'X-Expected-Actor',
+      in: 'header',
+      required: false,
+      schema: {
+        type: 'string',
+        pattern: '^(user:)?[0-9a-fA-F]{24}$',
+      },
+    });
+    expect(document.components.schemas.Self.additionalProperties).toBe(false);
+    expect(document.components.schemas.Self.properties).not.toHaveProperty(
+      'passwordHash',
+    );
+    expect(document.components.schemas.Self.properties).not.toHaveProperty(
+      'authVersion',
+    );
+    expect(document.components.schemas.Self.properties).not.toHaveProperty(
+      'emailKey',
+    );
+  });
 });

@@ -14,6 +14,7 @@ servers:
 tags:
   - name: Sessions
   - name: System
+  - name: Profile
   - name: Invitations
   - name: Invitation Requests
   - name: Content Admin
@@ -916,6 +917,69 @@ paths:
         '410': *savedExpired
         '422': *savedInvalid
 
+  /me/profile:
+    patch:
+      tags: [Profile]
+      operationId: updateMyProfile
+      summary: Cập nhật hồ sơ người dùng hiện tại
+      description: >-
+        Cập nhật một phần hồ sơ theo cơ chế CAS (`expectedVersion`) và
+        idempotency (`Idempotency-Key`). Các trường không gửi giữ nguyên; các
+        trường tùy chọn trong `profile` gửi `null` để xóa. Header tùy chọn
+        `X-Expected-Actor` gắn yêu cầu với tài khoản đã mở biểu mẫu; nếu khác
+        phiên đăng nhập hiện tại sẽ trả `409 IDENTITY_CONFLICT` trước khi ghi.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ExpectedActor'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfilePatchRequest'
+      responses:
+        '200':
+          description: Hồ sơ người dùng sau cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfResponse'
+        '400':
+          description: Yêu cầu không hợp lệ (MALFORMED_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Thiếu/sai CSRF hoặc tài khoản bị khóa (CSRF_INVALID, ACCOUNT_LOCKED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          description: Payload vượt giới hạn kích thước (PAYLOAD_TOO_LARGE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Định dạng nén không được hỗ trợ (UNSUPPORTED_MEDIA_TYPE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /study/cards/query:
     post:
       tags: [Flashcards]
@@ -1075,6 +1139,19 @@ components:
       schema:
         type: string
         format: uuid
+    ExpectedActor:
+      name: X-Expected-Actor
+      in: header
+      required: false
+      description: >-
+        Tùy chọn. Gắn yêu cầu ghi với tài khoản đã mở biểu mẫu, nhận ObjectId
+        24 ký tự hex hoặc chuỗi dạng `user:<ObjectId>`. Khi bỏ qua, server xử lý
+        theo phiên hiện tại. Khi được gửi (kể cả chuỗi rỗng) và khác
+        `identity.userId` hoặc `identity.actorKey` của phiên hiện tại, server từ
+        chối trước khi ghi với `409 IDENTITY_CONFLICT`.
+      schema:
+        type: string
+        pattern: '^(user:)?[0-9a-fA-F]{24}$'
 
   schemas:
     SavedItem:
@@ -1770,6 +1847,112 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
       additionalProperties: false
+    UserProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        level:
+          type: string
+          enum: [N5, N4, N3, N2, N1]
+        nativeLanguageCode:
+          type: string
+        goal:
+          type: string
+          enum:
+            - dailyCommunication
+            - travel
+            - studyAndWork
+            - examPreparation
+            - culturalExchange
+        interests:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items:
+            type: string
+        countryCode:
+          type: string
+        ageGroup:
+          type: string
+          enum: [under18, 18to22, 23to30, over30]
+        gender:
+          type: string
+          enum: [male, female, other]
+    Self:
+      type: object
+      additionalProperties: false
+      required: [id, email, displayName, avatarKey, role, profile, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        avatarKey:
+          type: string
+        role:
+          type: string
+          enum: [learner, admin]
+        profile:
+          $ref: '#/components/schemas/UserProfile'
+        version:
+          type: integer
+          minimum: 0
+    SelfResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Self'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ProfilePatchRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+        displayName:
+          type: string
+        avatarKey:
+          type: string
+        profile:
+          type: object
+          additionalProperties: false
+          properties:
+            level:
+              type: [string, 'null']
+              enum: [N5, N4, N3, N2, N1, null]
+            nativeLanguageCode:
+              type: [string, 'null']
+            goal:
+              type: [string, 'null']
+              enum:
+                - dailyCommunication
+                - travel
+                - studyAndWork
+                - examPreparation
+                - culturalExchange
+                - null
+            interests:
+              type: array
+              maxItems: 3
+              uniqueItems: true
+              items:
+                type: string
+            countryCode:
+              type: [string, 'null']
+            ageGroup:
+              type: [string, 'null']
+              enum: [under18, 18to22, 23to30, over30, null]
+            gender:
+              type: [string, 'null']
+              enum: [male, female, other, null]
 
   responses:
     Unauthorized:
@@ -1791,7 +1974,10 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: Version conflict, actor busy, pair blocked hoặc invitation không khả dụng
+      description: >-
+        Xung đột trạng thái hoặc danh tính (`VERSION_CONFLICT`,
+        `IDEMPOTENCY_CONFLICT`, `IDENTITY_CONFLICT`, `ACTOR_BUSY`,
+        `INVITATION_UNAVAILABLE`, ...)
       content:
         application/json:
           schema:
