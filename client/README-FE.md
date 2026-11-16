@@ -35,7 +35,6 @@ Từ thư mục gốc repository:
 ```sh
 npm exec -- vitest run --project client
 npm run build --workspace client
-npm run build-storybook
 npm run check
 ```
 
