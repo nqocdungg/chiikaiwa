@@ -119,11 +119,7 @@ function HostWaitingView({ flow }) {
           {copyState}
         </p>
       ) : null}
-      <div
-        className="ck-invitation-waiting"
-        role="status"
-        aria-live="polite"
-      >
+      <div className="ck-invitation-waiting" role="status" aria-live="polite">
         <span className="ck-invitation-waiting__indicator" aria-hidden="true">
           <span />
         </span>
