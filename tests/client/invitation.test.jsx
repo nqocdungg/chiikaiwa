@@ -165,7 +165,7 @@ describe('FE-008 invitation and guest dialog', () => {
     renderInvitation({ path: '/invitation?mode=create' });
 
     expect(await screen.findByText('ABCD234567')).toBeVisible();
-    expect(screen.getByText('Đang chờ người nhập mã')).toBeVisible();
+    expect(screen.getByText('Đang chờ yêu cầu tham gia')).toBeVisible();
     expect(screen.getByRole('timer')).toHaveTextContent(/^Còn/);
     expect(post).toHaveBeenCalledWith(
       '/invitations',
