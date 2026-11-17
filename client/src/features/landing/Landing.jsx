@@ -4,7 +4,7 @@ import { Icon } from '../../components/ui/controls.jsx';
 import { useAuth } from '../auth/use-auth.js';
 import chiiLogo from '../../assets/brand/chii-logo.svg';
 import usagiImg from '../../assets/mascots/bouncing-usagi.gif';
-import hachiwareImg from '../../assets/mascots/hachiware.png';
+import hachiwareImg from '../../assets/mascots/waving-hachiware.gif';
 
 /**
  * SC-01: Landing Page công khai của Chiikaiwa (04 §5.1, §3.2, docs/frontend/design-system.md).

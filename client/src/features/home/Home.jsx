@@ -2,7 +2,7 @@ import { Link, useNavigate, useOutletContext } from 'react-router';
 import { Button, Icon } from '../../components/ui/controls.jsx';
 import { Card } from '../../components/ui/surfaces.jsx';
 import usagiImg from '../../assets/mascots/bouncing-usagi.gif';
-import hachiwareImg from '../../assets/mascots/hachiware.png';
+import hachiwareImg from '../../assets/mascots/waving-hachiware.gif';
 
 export function Home() {
   const navigate = useNavigate();
