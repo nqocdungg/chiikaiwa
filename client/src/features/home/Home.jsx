@@ -6,7 +6,7 @@ import { Avatar, Badge, Card } from '../../components/ui/surfaces.jsx';
 import { useAuth } from '../auth/use-auth.js';
 import { api } from '../../services/api-client.js';
 import chiiLogo from '../../assets/brand/chii-logo.svg';
-import usagiImg from '../../assets/mascots/usagi.png';
+import usagiImg from '../../assets/mascots/bouncing-usagi.gif';
 import hachiwareImg from '../../assets/mascots/hachiware.png';
 import waitingMascotImg from '../../assets/mascots/Waiting mascot.png';
 import { activeLocationRef } from './navigation-tracker.js';

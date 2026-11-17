@@ -3,7 +3,7 @@ import { PageContainer } from '../../components/layout/PageContainer.jsx';
 import { Icon } from '../../components/ui/controls.jsx';
 import { useAuth } from '../auth/use-auth.js';
 import chiiLogo from '../../assets/brand/chii-logo.svg';
-import usagiImg from '../../assets/mascots/usagi.png';
+import usagiImg from '../../assets/mascots/bouncing-usagi.gif';
 import hachiwareImg from '../../assets/mascots/hachiware.png';
 
 /**

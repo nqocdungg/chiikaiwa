@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import usagi from '../../assets/mascots/usagi.png';
+import usagi from '../../assets/mascots/bouncing-usagi.gif';
 import { AuthLayout } from '../../components/layout/AuthLayout.jsx';
 import { Button } from '../../components/ui/controls.jsx';
 import { Input } from '../../components/ui/forms.jsx';
