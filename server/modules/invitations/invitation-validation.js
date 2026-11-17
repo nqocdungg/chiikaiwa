@@ -226,3 +226,14 @@ export function validateInviteRequestListQuery(query) {
   }
   return { status, limit, cursor: query.cursor };
 }
+
+/**
+ * Validates POST /guest-trials request body.
+ * Same schema as POST /invitation-requests: accepts only {code}.
+ * Reuses validateCreateInviteRequestInput so regex and normalize logic are not duplicated.
+ * @param {unknown} body
+ * @returns {{ code: string }}
+ */
+export function validateCreateGuestTrialInput(body) {
+  return validateCreateInviteRequestInput(body);
+}

@@ -16,6 +16,8 @@ const expectedPaths = [
   '/invitation-requests',
   '/invitation-requests/{requestId}',
   '/invitation-requests/{requestId}/responses',
+  '/guest-trials',
+  '/auth/me',
   '/auth/password-change',
   '/auth/password-reset-requests',
   '/auth/password-resets',
@@ -38,6 +40,7 @@ const writeOperations = [
   ['/invitation-requests', 'post'],
   ['/invitation-requests/{requestId}', 'delete'],
   ['/invitation-requests/{requestId}/responses', 'post'],
+  ['/guest-trials', 'post'],
   ['/admin/content/{id}/publish', 'post'],
   ['/admin/content/{id}/hide', 'post'],
   ['/me/saved-items', 'post'],
@@ -182,6 +185,63 @@ describe('OpenAPI contract', () => {
     expect(resetRequest.responses).toHaveProperty('503');
     expect(resetConfirm.responses['204']).not.toHaveProperty('content');
     expect(resetConfirm.responses).toHaveProperty('400');
+  });
+
+  it('documents POST /guest-trials and GET /auth/me without leaking guest internals', () => {
+    const guestTrial = document.paths['/guest-trials'].post;
+    expect(guestTrial.security).toEqual([{ csrfToken: [] }]);
+    expect(guestTrial.parameters).toContainEqual({
+      $ref: '#/components/parameters/IdempotencyKey',
+    });
+    expect(
+      guestTrial.requestBody.content['application/json'].schema,
+    ).toMatchObject({
+      type: 'object',
+      additionalProperties: false,
+      required: ['code'],
+    });
+    expect(Object.keys(guestTrial.responses)).toEqual(
+      expect.arrayContaining([
+        '201',
+        '400',
+        '401',
+        '403',
+        '409',
+        '410',
+        '422',
+        '429',
+      ]),
+    );
+    expect(
+      guestTrial.responses['201'].content['application/json'].schema,
+    ).toEqual({ $ref: '#/components/schemas/GuestTrialResponse' });
+    expect(guestTrial.responses['201'].headers).toHaveProperty('Set-Cookie');
+
+    const authMe = document.paths['/auth/me'].get;
+    expect(authMe.security).toEqual([
+      { sessionCookie: [] },
+      { guestCookie: [] },
+    ]);
+    expect(authMe.responses['200'].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AuthMeResponse',
+    });
+
+    const schemas = document.components.schemas;
+    expect(schemas.GuestTrial.required).toEqual(
+      expect.arrayContaining(['request', 'guest']),
+    );
+    expect(schemas.GuestProjection.required).toEqual(['status']);
+    expect(schemas.AuthMe.oneOf[1].properties.guest).toEqual({
+      $ref: '#/components/schemas/GuestProjection',
+    });
+    for (const field of ['credentialHash', 'emailKey', 'authVersion']) {
+      expect(schemas.GuestProjection.properties).not.toHaveProperty(field);
+      expect(schemas.AuthMe.oneOf[1].properties).not.toHaveProperty(field);
+    }
+    expect(schemas.AuthMe.oneOf[0].properties.kind).toEqual({ const: 'user' });
+    expect(schemas.AuthMe.oneOf[1].properties.kind).toEqual({
+      const: 'guest',
+    });
   });
 
   it('serves Swagger UI and the raw YAML without requiring database access', async () => {

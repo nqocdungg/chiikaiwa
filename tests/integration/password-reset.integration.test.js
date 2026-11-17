@@ -346,15 +346,29 @@ describe('BE-007 Password change & Brevo password reset replica-set integration 
       const { csrfToken, csrfCookie } = await getCsrfContext();
       const rawGuestToken = 'guest-secret-credential-for-password-change-test';
       const now = new Date();
+      const guestId = new ObjectId();
+      const guestPracticeSessionId = new ObjectId();
       await db.collection('guest_sessions').insertOne({
-        _id: new ObjectId(),
+        _id: guestId,
         credentialHash: hashGuestCredential(rawGuestToken),
-        status: 'waiting',
+        practiceSessionId: guestPracticeSessionId,
+        status: 'active',
         version: 0,
         expiresAt: new Date(now.getTime() + 10 * 60 * 1000),
-        purgeAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
         createdAt: now,
         updatedAt: now,
+      });
+      await db.collection('practice_sessions').insertOne({
+        _id: guestPracticeSessionId,
+        originKind: 'invite',
+        originId: new ObjectId(),
+        roomName: `room-${guestPracticeSessionId.toHexString()}`,
+        status: 'active',
+        version: 0,
+        members: [
+          { actorKey: `guest:${guestId.toHexString()}`, kind: 'guest' },
+          { actorKey: `user:${new ObjectId().toHexString()}`, kind: 'user' },
+        ],
       });
 
       const res = await request(app)

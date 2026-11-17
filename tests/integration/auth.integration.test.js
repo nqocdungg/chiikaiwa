@@ -359,6 +359,18 @@ describe('BE-001 Authentication replica-set integration tests', () => {
       version: 0,
       cleanupState: 'pending',
     });
+    await db.collection('practice_sessions').insertOne({
+      _id: practiceSessionId,
+      originKind: 'invite',
+      originId: new ObjectId(),
+      roomName: `room-${practiceSessionId.toHexString()}`,
+      status: 'active',
+      version: 0,
+      members: [
+        { actorKey: `guest:${guestId.toHexString()}`, kind: 'guest' },
+        { actorKey: `user:${new ObjectId().toHexString()}`, kind: 'user' },
+      ],
+    });
 
     const guestMe = await request(app)
       .get('/api/v1/auth/me')
@@ -603,6 +615,18 @@ describe('BE-001 Authentication replica-set integration tests', () => {
       expiresAt: futureExpiry,
       version: 0,
       cleanupState: 'pending',
+    });
+    await db.collection('practice_sessions').insertOne({
+      _id: practiceSessionId,
+      originKind: 'invite',
+      originId: new ObjectId(),
+      roomName: `room-${practiceSessionId.toHexString()}`,
+      status: 'active',
+      version: 0,
+      members: [
+        { actorKey: `guest:${guestId.toHexString()}`, kind: 'guest' },
+        { actorKey: `user:${new ObjectId().toHexString()}`, kind: 'user' },
+      ],
     });
 
     // 2. Register and log in a user account
