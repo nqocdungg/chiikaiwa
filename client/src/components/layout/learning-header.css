@@ -85,7 +85,7 @@
 }
 
 @media (hover: hover) {
-  .ck-nav-tab-link:not(:disabled):hover {
+  .ck-nav-tab-link:not(:disabled, [aria-current='page']):hover {
     background-color: color-mix(
       in srgb,
       var(--color-selected) 50%,
@@ -296,9 +296,14 @@
     height: 26px;
   }
 
-  .ck-profile-name,
-  .ck-nav-tab-mascot {
+  .ck-profile-name {
     display: none;
+  }
+
+  .ck-nav-tab-mascot {
+    top: -14px;
+    width: 22px;
+    height: 22px;
   }
 }
 

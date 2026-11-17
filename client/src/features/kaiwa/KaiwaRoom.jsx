@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Button, Icon, IconButton } from '../../components/ui/controls.jsx';
+import { PillMotion } from '../../components/ui/PillMotion.jsx';
 import { CardTable } from './components/CardTable.jsx';
 import { ConsentBanner } from './components/ConsentBanner.jsx';
 import { DeckPicker } from './components/DeckPicker.jsx';
@@ -130,7 +131,8 @@ export function KaiwaRoom({
     changeStage('ended');
   }
   const toolButtons = (
-    <div className="ck-tools" aria-label="Công cụ riêng">
+    <div className="ck-tools ck-motion-group" aria-label="Công cụ riêng">
+      <PillMotion />
       {
         /** @type {[Panel,string,string][]} */ ([
           ['hints', 'Gợi ý', 'book'],

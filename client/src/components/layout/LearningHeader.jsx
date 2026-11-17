@@ -4,6 +4,7 @@ import chiiLogo from '../../assets/brand/chii-logo.svg';
 import tabMascot from '../../assets/mascots/header-chiikawa.png';
 import wavingMascot from '../../assets/mascots/waving-chiikawa.gif';
 import { useAuth } from '../../features/auth/use-auth.js';
+import { PillMotion } from '../ui/PillMotion.jsx';
 import { Avatar, Badge } from '../ui/surfaces.jsx';
 import './learning-header.css';
 
@@ -15,6 +16,7 @@ function LearningLink({ to, children }) {
         src={tabMascot}
         alt=""
         className="ck-nav-tab-mascot"
+        data-pill-icon=""
         width="28"
         height="28"
       />
@@ -119,7 +121,11 @@ export function LearningHeader({
           />
         </Link>
 
-        <nav aria-label="Điều hướng chính" className="ck-nav-pill-bar">
+        <nav
+          aria-label="Điều hướng chính"
+          className="ck-nav-pill-bar ck-motion-group"
+        >
+          <PillMotion />
           {!guestView && <LearningLink to="/home">Trang chủ</LearningLink>}
           {isHome ? (
             <button
