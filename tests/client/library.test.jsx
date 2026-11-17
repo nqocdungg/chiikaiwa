@@ -109,6 +109,69 @@ it('switches the catalog filter without reusing the previous cursor', async () =
   ).toHaveAttribute('href', '/topics/deck-version');
 });
 
+it('keeps one learner header mounted when navigating from home to library and history', async () => {
+  vi.spyOn(api, 'get').mockImplementation(async (path) => {
+    if (path === '/auth/me') {
+      return response({
+        ...user,
+        user: { ...user.user, profile: { level: 'N5' } },
+      });
+    }
+    if (path === '/me/coordination') return response({ mode: 'idle' });
+    if (path === '/topics') return response({ items: [topic] });
+    if (path === '/me/saved-items') return response({ items: [] });
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  open('/home');
+  const nav = await screen.findByRole('navigation', {
+    name: 'Điều hướng chính',
+  });
+  const main = screen.getByRole('main');
+  const account = screen.getByRole('button', {
+    name: 'Menu tài khoản: Minh Anh',
+  });
+  const level = screen.getByText('N5', { exact: true });
+  expect(account).not.toContainElement(level);
+  expect(
+    level.compareDocumentPosition(account) &
+      globalThis.Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+
+  expect(within(nav).getByRole('link', { name: 'Trang chủ' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  fireEvent.click(within(nav).getByRole('link', { name: 'Kho chủ đề' }));
+  expect(
+    await screen.findByRole('heading', { name: topic.title }),
+  ).toBeVisible();
+  expect(screen.getByRole('navigation', { name: 'Điều hướng chính' })).toBe(
+    nav,
+  );
+  expect(screen.getByRole('main')).toBe(main);
+  expect(within(nav).getByRole('link', { name: 'Kho chủ đề' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  fireEvent.click(within(nav).getByRole('link', { name: 'Ôn cá nhân' }));
+  expect(
+    await screen.findByText('Bạn chưa lưu mục kiến thức nào.'),
+  ).toBeVisible();
+  expect(screen.getByRole('navigation', { name: 'Điều hướng chính' })).toBe(
+    nav,
+  );
+
+  fireEvent.click(within(nav).getByRole('link', { name: 'Lịch sử' }));
+  expect(
+    await screen.findByRole('heading', { name: 'Lịch sử luyện tập' }),
+  ).toBeVisible();
+  expect(screen.getByRole('navigation', { name: 'Điều hướng chính' })).toBe(
+    nav,
+  );
+});
+
 it('opens only the deck of the guest trial from the catalog', async () => {
   const get = vi.spyOn(api, 'get').mockImplementation(async (path) => {
     if (path === '/auth/me')

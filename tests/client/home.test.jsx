@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { LearningLayout } from '../../client/src/components/layout/LearningLayout.jsx';
 import { Home } from '../../client/src/features/home/Home.jsx';
 import { activeLocationRef } from '../../client/src/features/home/navigation-tracker.js';
 import { AuthContext } from '../../client/src/features/auth/auth-context.js';
@@ -59,7 +60,9 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
         <AuthContext.Provider value={defaultAuth}>
           <MemoryRouter initialEntries={initialEntries}>
             <Routes>
-              <Route path="/home" element={<Home />} />
+              <Route element={<LearningLayout />}>
+                <Route path="/home" element={<Home />} />
+              </Route>
               <Route path="/login" element={<div>Trang đăng nhập</div>} />
             </Routes>
           </MemoryRouter>
@@ -103,12 +106,12 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
 
     // Nút mở dropdown menu tài khoản (Disclosure pattern R2, B3, WCAG 2.5.3 Label in Name)
     const accountBtn = screen.getByRole('button', {
-      name: 'Menu tài khoản: Minh Hoàng N3',
+      name: 'Menu tài khoản: Minh Hoàng',
     });
     expect(accountBtn).toBeVisible();
     expect(accountBtn).toHaveAttribute(
       'aria-label',
-      'Menu tài khoản: Minh Hoàng N3',
+      'Menu tài khoản: Minh Hoàng',
     );
     expect(accountBtn).toHaveAttribute('aria-expanded', 'false');
     expect(accountBtn).not.toHaveAttribute('aria-controls');
@@ -117,10 +120,13 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
     // Click mở menu
     fireEvent.click(accountBtn);
     expect(accountBtn).toHaveAttribute('aria-expanded', 'true');
-    expect(accountBtn).toHaveAttribute('aria-controls', 'ck-account-menu');
+    expect(accountBtn).toHaveAttribute('aria-controls');
 
     // Dropdown panel không có aria-label thừa trên thẻ div (B3)
-    const dropdownPanel = globalThis.document.getElementById('ck-account-menu');
+    const dropdownPanel = globalThis.document.getElementById(
+      accountBtn.getAttribute('aria-controls') ?? '',
+    );
+    expect(dropdownPanel).toBeVisible();
     expect(dropdownPanel).not.toHaveAttribute('aria-label');
 
     // Link đến hồ sơ cá nhân /profile (Mục 1 trong dropdown - link thường theo R2)
@@ -531,7 +537,9 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
       <AuthContext.Provider value={defaultAuth}>
         <MemoryRouter initialEntries={['/home']}>
           <Routes>
-            <Route path="/home" element={<Gate />} />
+            <Route element={<LearningLayout />}>
+              <Route path="/home" element={<Gate />} />
+            </Route>
             <Route path="/login" element={<div>Trang đăng nhập</div>} />
           </Routes>
         </MemoryRouter>
