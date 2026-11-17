@@ -204,6 +204,10 @@ export class ApiClient {
           : controller.signal,
       });
     } catch (err) {
+      if (options.signal?.aborted) {
+        if (err instanceof DOMException && err.name === 'AbortError') throw err;
+        throw new DOMException('The operation was aborted', 'AbortError');
+      }
       if (controller.signal.aborted) {
         throw new ApiError({
           status: 408,

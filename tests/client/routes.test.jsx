@@ -46,7 +46,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Phòng mời' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Nhập mã mời' })).toBeVisible();
   });
 
   it('allows anonymous visitor to stay on /invitation after /auth/me returns 401', async () => {
@@ -59,7 +59,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Phòng mời' }),
+      await screen.findByRole('heading', { name: 'Nhập mã mời' }),
     ).toBeVisible();
   });
 
@@ -230,7 +230,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Phòng mời' }),
+      await screen.findByRole('heading', { name: 'Nhập mã mời' }),
     ).toBeVisible();
   });
 

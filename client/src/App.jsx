@@ -21,6 +21,7 @@ import { RegisterPage } from './features/auth/RegisterPage.jsx';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage.jsx';
 import { useAuth } from './features/auth/use-auth.js';
 import { Home } from './features/home/Home.jsx';
+import { InvitationDialog } from './features/invitation/InvitationDialog.jsx';
 import { activeLocationRef } from './features/home/navigation-tracker.js';
 import { Landing } from './features/landing/Landing.jsx';
 import { ProfilePage } from './features/profile/ProfilePage.jsx';
@@ -149,10 +150,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
 
             {/* SC-06: Invitation room — accessible to anonymous visitors (for POST /guest-trials), learners (U), and guests (G) */}
             <Route element={<InvitationRoute />}>
-              <Route
-                path="/invitation"
-                element={<RouteShell screenId="SC-06" title="Phòng mời" />}
-              />
+              <Route path="/invitation" element={<InvitationDialog />} />
             </Route>
 
             {/* SC-11, SC-12, SC-14, SC-15: Learner or Guest routes (U / G) */}

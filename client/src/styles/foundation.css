@@ -525,6 +525,22 @@
   flex: 1;
 }
 
+.ck-dialog__eyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--color-accent);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 0.9375rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.ck-dialog__heading-adornment {
+  display: flex;
+  justify-content: inherit;
+  margin-bottom: var(--space-3);
+}
+
 .ck-dialog__title {
   margin: 0;
   font-size: var(--font-size-section);
@@ -558,6 +574,15 @@
   padding: var(--space-4) var(--space-6) var(--space-6);
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
+}
+
+.ck-dialog--centered .ck-dialog__header {
+  justify-content: center;
+  text-align: center;
+}
+
+.ck-dialog--centered .ck-dialog__heading {
+  padding-inline: var(--control-height-compact);
 }
 
 @media (max-width: 767px) {

@@ -95,10 +95,13 @@ export function Landing() {
               Không gian luyện nói <br /> tiếng Nhật 1-1
             </h2>
             <p className="ck-hero-subtitle">
-              Một câu chào, một câu chuyện mới.
-              <br />
-              Luyện hội thoại tiếng Nhật 1-1 cùng bạn học qua các tình huống{' '}
-              <span className="whitespace-nowrap">thực tế.</span>
+              <span className="ck-hero-subtitle__lead">
+                Một câu chào, một câu chuyện mới.
+              </span>
+              <span className="ck-hero-subtitle__detail">
+                Luyện hội thoại tiếng Nhật 1-1 cùng bạn học qua các tình huống{' '}
+                <span className="whitespace-nowrap">thực tế.</span>
+              </span>
             </p>
 
             <div className="ck-hero-primary-action">
@@ -121,7 +124,7 @@ export function Landing() {
 
             <div className="ck-hero-secondary-actions">
               <Link
-                to="/invitation"
+                to="/invitation?mode=join"
                 className="ck-button ck-button--secondary ck-hero-btn-pill"
               >
                 <Icon name="cards" size={16} />
