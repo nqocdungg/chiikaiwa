@@ -44,7 +44,8 @@ Chạy kiểm tra mục tiêu khi phát triển, rồi `npm run check` trước 
 
 Hai job bảo mật chạy độc lập với `check`:
 
-- `Dependency audit`: cài dependency theo lockfile rồi chạy `npm audit --audit-level=high`, chặn advisory high/critical cho cả runtime và development tools. Lỗi truy cập registry cũng làm job thất bại; không tự dùng `audit fix` hoặc bỏ qua lỗi để làm xanh CI.
+- `Dependency audit`: cài dependency theo lockfile rồi chạy `npm run audit:ci`. Lệnh in báo cáo đầy đủ của `npm audit --audit-level=high --include=dev --json` và chặn lỗi registry, báo cáo lỗi và các phát hiện high/critical.
+  - Ngoại lệ tạm thời áp dụng riêng cho [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) trên `picomatch@4.0.7` và các package bị báo high do advisory này, khi tất cả node liên quan thuộc cây dev trong lockfile. Ngoại lệ hết hiệu lực lúc 00:00 ngày 03/12/2026 (UTC+7). Khi có bản vá, cập nhật lockfile và bỏ ngoại lệ.
 - `Secret scan`: Gitleaks quét các commit trong `base..head` của pull request hoặc `before..after` của lần push. Khi chạy CI thủ công, tạo nhánh hoặc thiếu commit `before` sau force-push, job quét lịch sử của nhánh được chọn. Mỗi lần push có lượt chạy riêng để giữ đủ các khoảng commit cần quét.
 
 [Repository secret audit](../../.github/workflows/secret-audit.yml) chạy thủ công từ tab Actions khi workflow đã có trên nhánh mặc định. Workflow này quét với `--all` để kiểm tra lịch sử của các nhánh và tag đã tải. Cả hai lượt quét đều che giá trị trong log và dùng cùng [action cài Gitleaks](../../.github/actions/scan-secrets/action.yml) với phiên bản và SHA-256 đã ghim.
