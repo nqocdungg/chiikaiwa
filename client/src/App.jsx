@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { lazy, Suspense, useEffect } from 'react';
+import { SessionRoom } from './features/kaiwa/SessionRoom.jsx';
 import { Link, Outlet, Route, Routes, useLocation } from 'react-router';
 import { LearningLayout } from './components/layout/LearningLayout.jsx';
 import { LibraryLayout } from './features/library/LibraryLayout.jsx';
@@ -30,6 +31,14 @@ const ComponentPreview = import.meta.env.DEV
   ? lazy(() =>
       import('./demo/ComponentPreview.jsx').then((module) => ({
         default: module.ComponentPreview,
+      })),
+    )
+  : null;
+
+const RoomPreview = import.meta.env.DEV
+  ? lazy(() =>
+      import('./demo/RoomPreview.jsx').then((module) => ({
+        default: module.RoomPreview,
       })),
     )
   : null;
@@ -71,6 +80,15 @@ export function App({ skipInitialAuthCheck = false } = {}) {
   }, [location]);
   const { pathname } = location;
 
+  const isRoom = /^\/room\//u.test(pathname);
+  if (RoomPreview && pathname === '/__dev/room') {
+    return (
+      <Suspense fallback={null}>
+        <RoomPreview />
+      </Suspense>
+    );
+  }
+
   if (ComponentPreview && pathname === '/__dev/components') {
     return (
       <div className="ck-app">
@@ -83,7 +101,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
 
   return (
     <AuthProvider skipInitialCheck={skipInitialAuthCheck}>
-      <div className="ck-app">
+      <div className={`ck-app ${isRoom ? 'ck-app--room ck-room-view' : ''}`}>
         <Routes>
           {/* SC-01: Public Landing */}
           <Route path="/" element={<Landing />} />
@@ -110,6 +128,17 @@ export function App({ skipInitialAuthCheck = false } = {}) {
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
             </Route>
+          </Route>
+
+          <Route element={<SessionMemberRoute />}>
+            <Route
+              path="/room/:sessionId"
+              element={
+                <div className="ck-room-route">
+                  <SessionRoom />
+                </div>
+              }
+            />
           </Route>
 
           <Route element={<LearningLayout />}>
@@ -177,12 +206,6 @@ export function App({ skipInitialAuthCheck = false } = {}) {
 
             {/* SC-07, SC-08, SC-10: Session Member routes (M) — verified with backend */}
             <Route element={<SessionMemberRoute />}>
-              <Route
-                path="/room/:sessionId"
-                element={
-                  <RouteShell screenId="SC-07" title="Phòng hội thoại" />
-                }
-              />
               <Route
                 path="/sessions/:sessionId/summary"
                 element={<RouteShell screenId="SC-10" title="Tổng kết phiên" />}

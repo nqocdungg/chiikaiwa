@@ -11,6 +11,14 @@ import {
   it,
   vi,
 } from 'vitest';
+import { TokenVerifier } from 'livekit-server-sdk';
+import { api } from '../../client/src/services/api-client.js';
+import {
+  getSession,
+  getMediaToken,
+  leaveSession,
+} from '../../client/src/features/kaiwa/session-api.js';
+import * as roomService from '../../server/integrations/livekit/room-service.js';
 import { createApp } from '../../server/app.js';
 import { readAuthEnv } from '../../server/config/env.js';
 import { signJwt } from '../../server/modules/identity/crypto.js';
@@ -444,6 +452,134 @@ describe('BE-008 shared safety guard integration', () => {
       ).toMatchObject({ status: 'pending' });
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('connects FE-004 API calls to BE-008 admission, signed media grants and revocation', async () => {
+    const now = new Date();
+    const hostId = new ObjectId();
+    const requesterId = new ObjectId();
+    const outsiderId = new ObjectId();
+    await seedUser(hostId, 'Host');
+    await seedUser(requesterId, 'Requester');
+    await seedUser(outsiderId, 'Outsider');
+    const host = await seedAuthSession(hostId, now);
+    const requester = await seedAuthSession(requesterId, now);
+    const outsider = await seedAuthSession(outsiderId, now);
+    const cookies = new Map([['ck_session', host.jwt]]);
+    // Supply browser cookie/Origin behavior while routing the real Fetch client
+    // into Express. Only the external LiveKit cleanup adapter is mocked.
+    vi.stubGlobal(
+      'fetch',
+      /** @type {typeof fetch} */ (
+        async (input, init) => {
+          const path = String(input);
+          const method = /** @type {'get'|'post'} */ (
+            (init?.method ?? 'GET').toLowerCase()
+          );
+          let pending = request(app)[method](path);
+          new Headers(init?.headers).forEach((value, key) => {
+            pending = pending.set(key, value);
+          });
+          pending = pending
+            .set('Origin', 'https://chiikaiwa.example.test')
+            .set(
+              'Cookie',
+              [...cookies].map(([key, value]) => `${key}=${value}`).join('; '),
+            );
+          if (typeof init?.body === 'string')
+            pending = pending.send(JSON.parse(init.body));
+          const response = await pending;
+          for (const value of response.headers['set-cookie'] ?? []) {
+            const pair = value.split(';')[0];
+            const separator = pair.indexOf('=');
+            cookies.set(pair.slice(0, separator), pair.slice(separator + 1));
+          }
+          return new Response(response.text, {
+            status: response.status,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      ),
+    );
+    const remove = vi
+      .spyOn(roomService, 'removeMediaParticipant')
+      .mockResolvedValue(undefined);
+    vi.spyOn(roomService, 'closeMediaRoom').mockResolvedValue(undefined);
+    vi.spyOn(roomService, 'notifyMediaSession').mockResolvedValue(undefined);
+    api.setCsrfToken(null);
+    try {
+      const invitation = /** @type {any} */ (
+        (await api.post('/invitations', {})).data
+      );
+      cookies.set('ck_session', requester.jwt);
+      const pending = /** @type {any} */ (
+        (await api.post('/invitation-requests', { code: invitation.code })).data
+      );
+      cookies.set('ck_session', host.jwt);
+      const accepted = /** @type {any} */ (
+        (
+          await api.post(`/invitation-requests/${pending.id}/responses`, {
+            expectedVersion: pending.version,
+            decision: 'accept',
+          })
+        ).data
+      );
+      expect(accepted.status).toBe('accepted');
+      const sessionId = accepted.sessionId;
+      expect((await getSession(sessionId)).data).toMatchObject({
+        id: sessionId,
+        status: 'preparing',
+      });
+      const verifier = new TokenVerifier(
+        process.env.LIVEKIT_API_KEY ?? '',
+        process.env.LIVEKIT_API_SECRET ?? '',
+      );
+      for (const { id, auth } of [
+        { id: hostId, auth: host },
+        { id: requesterId, auth: requester },
+      ]) {
+        cookies.set('ck_session', auth.jwt);
+        const credential = (await getMediaToken(sessionId)).data;
+        const claims = await verifier.verify(credential.token);
+        expect(claims.sub).toBe(`user:${id.toHexString()}`);
+        expect(claims.video).toMatchObject({
+          room: `session-${sessionId}`,
+          roomJoin: true,
+          canPublishData: true,
+          roomAdmin: false,
+        });
+        expect(credential.url).toBe(process.env.LIVEKIT_URL);
+      }
+      cookies.set('ck_session', outsider.jwt);
+      await expect(getMediaToken(sessionId)).rejects.toMatchObject({
+        status: 404,
+      });
+      cookies.set('ck_session', host.jwt);
+      await createPairBlock({
+        blockerKey: `user:${hostId.toHexString()}`,
+        blockedKey: `user:${requesterId.toHexString()}`,
+      });
+      expect(remove).toHaveBeenCalledWith(
+        `session-${sessionId}`,
+        `user:${hostId.toHexString()}`,
+      );
+      expect(remove).toHaveBeenCalledWith(
+        `session-${sessionId}`,
+        `user:${requesterId.toHexString()}`,
+      );
+      expect((await getSession(sessionId)).data.status).toBe('ended');
+      await expect(getMediaToken(sessionId)).rejects.toMatchObject({
+        status: 409,
+        code: 'SESSION_ENDED',
+      });
+      expect((await leaveSession(sessionId, randomUUID())).data.status).toBe(
+        'ended',
+      );
+    } finally {
+      api.setCsrfToken(null);
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
     }
   });
 

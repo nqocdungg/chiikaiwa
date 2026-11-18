@@ -1,7 +1,6 @@
 import { randomInt } from 'node:crypto';
 import mongoose from 'mongoose';
 import { connectDatabase } from '../../persistence/database.js';
-import { AppError } from '../../middleware/http-error.js';
 import { sessionVersionConflict } from './sessions-errors.js';
 import {
   sessionClocks,
@@ -132,7 +131,14 @@ export function createSessionPresenceConsumer({
     const losingConnection =
       roomEmpty ||
       (presenceChanged &&
-        after.presence.some((/** @type {any} */ p) => !p.connected));
+        after.presence.some(
+          (/** @type {any} */ p) =>
+            !p.connected &&
+            before.presence.some(
+              (/** @type {any} */ previous) =>
+                previous.actorKey === p.actorKey && previous.connected,
+            ),
+        ));
     const transitionAt = losingConnection ? observedAt : checkedAt;
     const reconciled = await reconcileSessionDeadline(
       { ...after, presence: before.presence },
@@ -171,18 +177,14 @@ export function createSessionPresenceConsumer({
     const bothConnected =
       after.presence.length === 2 &&
       after.presence.every((/** @type {any} */ p) => p.connected);
-    if (before.startedAt && before.status === 'reconnecting' && bothConnected) {
-      throw new AppError({
-        status: 503,
-        code: 'SERVICE_UNAVAILABLE',
-        message: 'Khôi phục phiên chưa sẵn sàng. Vui lòng thử lại.',
-      });
-    }
     /** @type {Record<string, any>} */
     const set = { updatedAt: transitionAt, presence: after.presence };
     /** @type {Record<string, string>} */
     const unset = {};
-    if (!before.startedAt && bothConnected) {
+    if (
+      bothConnected &&
+      (!before.startedAt || before.status === 'reconnecting')
+    ) {
       for (const member of after.members) {
         if (member.kind === 'user') {
           const user = await db
@@ -244,29 +246,33 @@ export function createSessionPresenceConsumer({
         );
         if (guard.modifiedCount !== 1) throw sessionVersionConflict();
       }
-      const index = pickController(2);
-      if (index !== 0 && index !== 1)
-        throw new RangeError('Invalid controller index');
-      Object.assign(set, {
-        status: 'active',
-        startedAt: checkedAt,
-        controllerKey: after.members[index].actorKey,
-        activeSince: checkedAt,
-        selectionRunningSince: checkedAt,
-      });
-      await db.collection('statistics').updateOne(
-        /** @type {any} */ ({ _id: 'lifetime' }),
-        {
-          $inc: { startedSessions: 1 },
-          $set: { updatedAt: observedAt },
-          $setOnInsert: {
-            registeredAccounts: 0,
-            reviewCount: 0,
-            submittedQuizCount: 0,
+      Object.assign(set, { status: 'active', activeSince: checkedAt });
+      if (!after.deckVersionId) set.selectionRunningSince = checkedAt;
+      else unset.selectionRunningSince = '';
+      // Only first admission chooses a controller and counts a started session.
+      // Recovery opens a new active interval using the persisted paused clocks.
+      if (!before.startedAt) {
+        const index = pickController(2);
+        if (index !== 0 && index !== 1)
+          throw new RangeError('Invalid controller index');
+        Object.assign(set, {
+          startedAt: checkedAt,
+          controllerKey: after.members[index].actorKey,
+        });
+        await db.collection('statistics').updateOne(
+          /** @type {any} */ ({ _id: 'lifetime' }),
+          {
+            $inc: { startedSessions: 1 },
+            $set: { updatedAt: observedAt },
+            $setOnInsert: {
+              registeredAccounts: 0,
+              reviewCount: 0,
+              submittedQuizCount: 0,
+            },
           },
-        },
-        { upsert: true, session },
-      );
+          { upsert: true, session },
+        );
+      }
     } else if (!bothConnected) {
       Object.assign(set, sessionClocks(before, observedAt));
       if (before.startedAt) set.status = 'reconnecting';
