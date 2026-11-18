@@ -58,8 +58,12 @@ describe('OPS-004 CI Workflow Contract & Security Assertions', () => {
 
   it('configures independent security jobs for dependency audit and verified secret scanning', () => {
     // Dependency audit job
-    expect(workflowContent).toMatch(/name:\s*Dependency audit/u);
-    expect(workflowContent).toMatch(/run:\s*npm audit --audit-level=high/u);
+    expect(workflowContent).toMatch(
+      /name:\s*Dependency audit[\s\S]*?- run: npm ci\s*- run: npm run audit:ci/u,
+    );
+    expect(packageJson.scripts?.['audit:ci']).toBe(
+      'node scripts/dependency-audit.js',
+    );
 
     // Secret scan job
     expect(workflowContent).toMatch(/name:\s*Secret scan/u);
