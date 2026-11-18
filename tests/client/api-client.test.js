@@ -395,6 +395,25 @@ describe('ApiClient and cache isolation', () => {
     });
   });
 
+  it('preserves a caller AbortError instead of reporting it as a network failure', async () => {
+    const caller = new AbortController();
+    const fetchMock = vi.fn().mockImplementation((_url, init) => {
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted', 'AbortError'));
+        });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const request = client.get('/me/coordination', {
+      signal: caller.signal,
+    });
+    caller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('clears private cache on identity change and prevents stale in-flight GET responses from populating cache', async () => {
     setIdentityKey('user-A');
     setPrivateCache(

@@ -149,7 +149,7 @@ export function Home() {
             <button
               type="button"
               className="ck-button ck-button--secondary ck-hero-btn-pill"
-              onClick={() => navigate('/invitation')}
+              onClick={() => navigate('/invitation?mode=create')}
               disabled={isStartDisabled}
             >
               <Icon name="note" size={16} />
@@ -158,7 +158,7 @@ export function Home() {
             <button
               type="button"
               className="ck-button ck-button--secondary ck-hero-btn-pill"
-              onClick={() => navigate('/invitation')}
+              onClick={() => navigate('/invitation?mode=join')}
               disabled={isStartDisabled}
             >
               <Icon name="cards" size={16} />
