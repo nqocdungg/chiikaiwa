@@ -710,6 +710,11 @@ describe('FE-009 Auth Screens (/login, /register) & Logout Flow', () => {
       ).toBeVisible();
 
       setPrivateCache('late-logout-cache', 'private');
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Menu tài khoản: Late Logout User',
+        }),
+      );
       fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }));
       fireEvent.click(screen.getByRole('button', { name: 'Quay lại lịch sử' }));
       expect(

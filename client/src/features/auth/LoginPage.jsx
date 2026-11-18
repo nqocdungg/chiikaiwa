@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import usagi from '../../assets/mascots/usagi.png';
+import usagi from '../../assets/mascots/bouncing-usagi.gif';
 import { Button } from '../../components/ui/controls.jsx';
 import { Input, PasswordInput } from '../../components/ui/forms.jsx';
 import { AuthSplitLayout } from './AuthSplitLayout.jsx';

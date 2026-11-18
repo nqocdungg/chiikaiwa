@@ -234,6 +234,25 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Triển khai: Chạy [migration đăng ký FSRS-6](../server/persistence/migrations/20261115000100-register-fsrs-six-config.js) trên database đích trước khi gọi reveal. Migration giữ nguyên cấu hình theo hash. Vé dùng khóa server hiện có với miền chữ ký riêng.
 - Tiếp theo: BE-025 dùng `verifyReviewTicket`, kiểm tra lại quyền/scope hiện hành, revision và version trước khi ghi review. Nghiệm thu luồng cấp khách và chọn bộ với BE-015/BE-022, quản lý bộ cá nhân với BE-035. Kiểm thử HTTP hiện dùng bản ghi MongoDB được chuẩn bị sẵn cho các luồng đó.
 
+### BE-015 — Danh tính khách qua mã mời
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã triển khai và self-test; chờ CI, review độc lập và nghiệm thu AT-03/AT-11. Chưa chuyển Done.
+- PR: Chưa có; branch `feature/BE-015-add-guest-trial-identity`, base `develop@e08def0`, chưa commit/push.
+- Đã làm:
+  - Thêm `POST /api/v1/guest-trials` công khai có CSRF: từ chối `ck_session` bằng `409 IDENTITY_CONFLICT`; mã sai/hết hạn/đã dùng trả `409 INVITATION_UNAVAILABLE`; giới hạn 20 lượt/5 phút theo IP và 120 lượt ghi/phút theo actor/IP. Mã mời được trim/chuyển chữ hoa, body chỉ nhận `{code}`.
+  - Cấp credential khách 32 byte base64url, chỉ lưu hash trong `guest_sessions`, đặt cookie `ck_guest` HttpOnly/SameSite=Lax/Path=/ (Secure theo cấu hình), không đặt Max-Age; deadline do server quyết định.
+  - Tạo mới trong một transaction gồm `guest_sessions`, `actor_states` (`requestingInvite`) và `invite_requests`; retry cùng cookie/key/code trả request cũ, khác code trả `IDEMPOTENCY_CONFLICT`, key mới khi còn giữ lượt trả `ACTOR_BUSY`; cookie không tồn tại/đã thu hồi trả `SESSION_EXPIRED`, hết hạn trả `GUEST_EXPIRED`.
+  - Siết `GET /auth/me` và mọi endpoint dùng danh tính khách: khách `waiting` chỉ còn quyền khi request còn pending và invitation còn open; `active`/`summary` phải có `practiceSessionId` và membership; `summary` phải còn `expiresAt`; `/auth/me` không gia hạn deadline. Media token kiểm tra đúng session, trạng thái và hạn của khách.
+  - Reject/cancel request, cancel/expire invitation và accept thua cuộc đều chuyển guest `waiting` sang `expired` và giải phóng reservation trong cùng transaction. Accept chỉ thành công khi guest guard cập nhật đúng một bản ghi.
+  - Cập nhật `docs/api/openapi.yaml` cho `/guest-trials` và `/auth/me`, thêm schema `GuestProjection`, `GuestTrial`, `AuthMe`; mở rộng test contract OpenAPI.
+  - Sửa fixture guest `active` trong các integration test cũ để có membership `practice_sessions` tương ứng, không nới lỏng guard production.
+- File liên quan: `server/modules/invitations/invitation-service.js`, `invitation-router.js`, `invitation-validation.js`, `server/modules/identity/identity-service.js`, `crypto.js`, `server/middleware/cookies.js`, `docs/api/openapi.yaml`, `tests/integration/guest-trials.integration.test.js`, `tests/server/guest-identity.test.js`, `tests/server/openapi-contract.test.js`.
+- Kiểm chứng: `npm test` 439/439; `npm run test:integration` 230/230 (13 ca BE-015) trên MongoDB 8.2.7 replica set tạm; `npm run openapi:check` 11/11; `npm run typecheck`, ESLint/Prettier trên toàn bộ file thay đổi và `npm run build` pass. `npm run check` chưa pass trọn gói vì bước `format:check`/`lint` toàn repo quét thư mục `storybook-static/` chưa được ignore (artifact có sẵn ngoài phạm vi task); các bước còn lại đã chạy riêng và pass.
+- Dependency: `assertPairCanEnterSession` của BE-008 đã được nối mặc định trong `server/app.js`; không còn blocker pair guard.
+- Giới hạn: Chưa chạy CI, chưa nghiệm thu LiveKit/dịch vụ thật, chưa có reviewer khác owner; AT-03/AT-11 mới có bằng chứng local. Plan triển khai ghi response guest-trial không có `actorKey`, nhưng `07-api-specification.md` và OpenAPI `Partner` hiện yêu cầu `actorKey`; giữ DTO hiện có và chờ quyết định contract.
+- Tiếp theo: Xử lý artifact `storybook-static/` ngoài diff, chạy CI, push/mở PR về `develop`, nhờ reviewer độc lập và chốt mâu thuẫn `actorKey` trước khi đóng task.
+
 ### DATA-002 — Script seed idempotent và fixtures kiểm thử
 
 - Ngày cập nhật: 2026-11-15
@@ -390,6 +409,18 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
   - Bổ sung 4 ca hồi quy: gửi lại mã với key mới sau block ở cả hai chiều, block commit sau snapshot nhập mã, retry chấp nhận đúng hạn mã. Bốn ca đều fail với invitation service gốc tại `96bd9af`, pass với bản sửa; nhóm safety integration đạt 12/12 trên MongoDB replica set tạm.
   - Review độc lập bản sửa chưa phát hiện Must fix/Should fix; vẫn cần approval của reviewer PR. Không truy cập được Project Tracker/Task Handoff trên Google Sheets nên chưa xác minh lại phân công/AC trên bảng; không cập nhật bảng.
   - Kiểm chứng bản sửa trên Node `v24.19.0`, npm `11.21.1`: `npm run check` pass (350 unit/HTTP/component tests, 195 integration tests, build và Storybook); `npm run openapi:check` pass 8/8; `git diff --check` pass. Storybook còn cảnh báo chunk lớn và thời gian plugin, không chặn build. Chưa chạy CI hoặc LiveKit Cloud thật.
+
+### FE-007 — Giao diện kho, nguồn và kiến thức đã lưu
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã triển khai SC-11/12; chờ kiểm chứng bản tích hợp và review.
+- PR: Chưa có. Nhánh `feature/FE-007-learning-library` từ `develop@93f1593`.
+- Đã làm: Nối danh sách theo trình độ/cursor, chi tiết học liệu đúng revision, danh sách đã lưu, lưu/bỏ lưu từng mục và hộp thoại nguồn có phân trang. Khách đọc bộ của lượt thử. Lối vào học chuyển phạm vi qua `/study?scope=topic&topicVersionId=…&mode=all`, `/study?scope=saved&mode=all` và `/quiz?deckVersionId=…`.
+- File liên quan: `client/src/features/library/`, `client/src/App.jsx`, `tests/client/library.test.jsx`.
+- Điều hướng: Header mở Kho chủ đề tại `/topics` và Ôn cá nhân tại `/saved`. Ôn cá nhân mở thẳng danh sách Kiến thức đã lưu. Khi danh sách rỗng, người học có thể quay lại Kho chủ đề.
+- Tích hợp: Đồng bộ `develop@7250727`, giữ routing đăng nhập/đăng ký FE-009 cùng bàn giao backend và QA-006. Lỗi mạng/503 khi đọc thông tin nguồn có thông báo và nút thử lại; nguồn 403/404 vẫn hiện với thông báo không khả dụng.
+- Kiểm chứng: `npm ci` và `npm run check` đạt format, lint, typecheck, 438 ca unit/HTTP/component, 217 ca integration trên MongoDB replica set tạm và build Vite. Chín ca FE-007 kiểm bộ lọc, khách, retry ghi, xung đột phiên bản, phân trang nguồn, thử lại lỗi mạng/503 và nguồn 403/404. Edge với dữ liệu thử đã đạt ở 1440×900, 1366×768, 390×844 và 683×384 trong lần triển khai trước; đã kiểm nút nguồn, Escape, trả focus và tràn ngang. Sau đồng bộ QA-006, kiểm lại format/lint/typecheck cho fixture và tài liệu mới.
+- Tiếp theo: Nhờ Minh Xuân review, kiểm phần lưu của AT-08 trên bản tích hợp và nối các lối vào học với FE-017/FE-018. FE-017 chịu trách nhiệm nối chế độ đến hạn qua API study. API catalog hiện chỉ lọc theo trình độ; thao tác lưu cả bộ và CRUD bộ cá nhân thuộc phạm vi khác.
 
 ## Sprint 2
 

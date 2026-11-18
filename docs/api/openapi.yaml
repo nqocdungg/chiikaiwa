@@ -509,6 +509,100 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /guest-trials:
+    post:
+      tags: [Invitations]
+      operationId: createGuestTrial
+      summary: Tạo lượt thử khách bằng mã mời
+      description: >-
+        Không yêu cầu phiên tài khoản hay cookie khách để gọi lần đầu; nếu đã có
+        `ck_session`, trả 409 `IDENTITY_CONFLICT`. Mã mời sai, hết hạn hoặc đã
+        dùng đều trả 409 `INVITATION_UNAVAILABLE`. Khi tạo mới, server đặt cookie
+        HttpOnly `ck_guest` trong `Set-Cookie`; credential không xuất hiện trong
+        JSON. Retry với cùng cookie khách và cùng `Idempotency-Key` trả request
+        cũ; khác code trả 409 `IDEMPOTENCY_CONFLICT`; key mới khi khách còn giữ
+        lượt trả 409 `ACTOR_BUSY`. Cookie khách không tồn tại hoặc đã thu hồi
+        trả 401 `SESSION_EXPIRED`; hết hạn trả 410 `GUEST_EXPIRED`.
+      security:
+        - csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: '^[A-HJ-NP-Z2-9]{10}$'
+            example:
+              code: ABCD234567
+      responses:
+        '201':
+          description: >-
+            Request đã được tạo hoặc replay. Lượt tạo mới có `guest.status` là
+            `waiting`; replay cùng key có thể trả trạng thái hiện tại của khách.
+          headers:
+            Set-Cookie:
+              description: >-
+                Chỉ có khi tạo khách mới: cookie `ck_guest` HttpOnly, Secure,
+                SameSite=Lax, Path=/, không có Domain.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestTrialResponse'
+        '400':
+          description: Body JSON không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getAuthMe
+      summary: Đọc danh tính tài khoản hoặc khách hiện tại
+      description: >-
+        Không gia hạn hạn dùng thử của khách. Khách `waiting` không có
+        `sessionId`; khách `active`/`summary` trả đúng `sessionId`; `summary` có
+        `expiresAt`. Không trả trường nội bộ như `credentialHash`, `emailKey`
+        hay `authVersion`.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      responses:
+        '200':
+          description: Danh tính hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+
   /auth/password-change:
     post:
       tags: [Auth]
@@ -1874,6 +1968,66 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/InviteRequestList'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    GuestStatus:
+      type: string
+      enum: [waiting, active, summary]
+    GuestProjection:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/GuestStatus'
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+        expiresAt:
+          type: string
+          format: date-time
+    GuestTrial:
+      type: object
+      additionalProperties: false
+      required: [request, guest]
+      properties:
+        request:
+          $ref: '#/components/schemas/InviteRequest'
+        guest:
+          $ref: '#/components/schemas/GuestProjection'
+    GuestTrialResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/GuestTrial'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    AuthMe:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, user]
+          properties:
+            kind:
+              const: user
+            user:
+              $ref: '#/components/schemas/Self'
+        - type: object
+          additionalProperties: false
+          required: [kind, guest]
+          properties:
+            kind:
+              const: guest
+            guest:
+              $ref: '#/components/schemas/GuestProjection'
+    AuthMeResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/AuthMe'
         meta:
           $ref: '#/components/schemas/Meta'
       additionalProperties: false

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import hachiware from '../../assets/mascots/hachiware.png';
+import hachiware from '../../assets/mascots/waving-hachiware.gif';
 import { AuthLayout } from '../../components/layout/AuthLayout.jsx';
 import { Button } from '../../components/ui/controls.jsx';
 import { PasswordInput } from '../../components/ui/forms.jsx';
