@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
 import request from 'supertest';
@@ -791,7 +792,7 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
         .expect(409);
       expect(res3.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
 
-      // 4. Replay sau khi quiz đã submit -> trả QuizResult
+      // 4. Replay sau khi nộp vẫn trả QuizPublic theo hợp đồng của route tạo.
       await api('post', `/api/v1/quizzes/${quizId}/submission`)
         .send({ expectedVersion: 0, answers: [] })
         .expect(200);
@@ -801,8 +802,12 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       })
         .send(payloadA)
         .expect(201);
-      expect(resReplayAfterSubmit.body.data.status).toBe('submitted');
-      expect(resReplayAfterSubmit.body.data.id).toBe(quizId);
+      expect(resReplayAfterSubmit.body.data).toEqual({
+        ...res1.body.data,
+        status: 'submitted',
+        version: 1,
+      });
+      expect(resReplayAfterSubmit.headers.location).toBe(res1.headers.location);
     });
 
     it('hai request tạo quiz đồng thời cùng key và body: cả hai 201, cùng ID (Must fix 1)', async () => {
@@ -1287,6 +1292,15 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
         .expect(409);
       expect(resIdemConflict.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
 
+      const resVersionConflict = await api(
+        'post',
+        `/api/v1/quizzes/${quizId}/submission`,
+        { key: key1 },
+      )
+        .send({ ...payloadA, expectedVersion: 1 })
+        .expect(409);
+      expect(resVersionConflict.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
+
       // 4. Khác key và khác payload -> 409 QUIZ_ALREADY_SUBMITTED
       const resDiff = await api(
         'post',
@@ -1302,6 +1316,35 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
         .collection('statistics')
         .findOne({ _id: /** @type {any} */ ('lifetime') });
       expect(stats?.submittedQuizCount).toBe(1);
+    });
+
+    it('chỉ phát lại lượt nộp dùng hash cũ khi expectedVersion khớp lần nộp gốc', async () => {
+      const created = await api('post', '/api/v1/quizzes')
+        .send({ deckVersionId: deckVersionId.toHexString() })
+        .expect(201);
+      const { id, version } = created.body.data;
+      const path = `/api/v1/quizzes/${id}/submission`;
+      const key = createTestIdempotencyKey();
+      const payload = { expectedVersion: version, answers: [] };
+      const submitted = await api('post', path, { key })
+        .send(payload)
+        .expect(200);
+
+      const legacyHash = createHash('sha256').update('[]').digest('hex');
+      await db
+        .collection('quiz_attempts')
+        .updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { submitPayloadHash: legacyHash } },
+        );
+
+      const replay = await api('post', path, { key }).send(payload).expect(200);
+      expect(replay.body.data).toEqual(submitted.body.data);
+
+      const conflict = await api('post', path, { key })
+        .send({ ...payload, expectedVersion: version + 1 })
+        .expect(409);
+      expect(conflict.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
     });
 
     it('xử lý nộp song song: cùng payload cả hai 200 (counter 1); khác payload một 200 một 409 (B3)', async () => {

@@ -551,9 +551,7 @@ export async function createQuiz({
           message: 'Không tìm thấy lượt quiz đã tạo.',
         });
       }
-      return attempt.status === 'submitted'
-        ? toQuizResultDto(attempt)
-        : toQuizPublicDto(attempt);
+      return toQuizPublicDto(attempt);
     },
   });
 }
@@ -601,7 +599,20 @@ export async function submitQuiz({
   idempotencyKey,
 }) {
   const db = await connectDatabase();
-  const payloadHash = hashAnswers(answers);
+  const answersHash = hashAnswers(answers);
+  const payloadHash = createHash('sha256')
+    .update(JSON.stringify([expectedVersion, answersHash]))
+    .digest('hex');
+
+  /** @param {{ submitPayloadHash?: string | null, version: number }} attempt */
+  function matchesSubmission(attempt) {
+    // Older records hashed only answers. The submit CAS incremented version once.
+    return (
+      attempt.submitPayloadHash === payloadHash ||
+      (attempt.version === expectedVersion + 1 &&
+        attempt.submitPayloadHash === answersHash)
+    );
+  }
 
   const submittedAttempt = await withTransaction(async (session) => {
     // 1. Đọc attempt trong transaction trước
@@ -620,7 +631,7 @@ export async function submitQuiz({
     if (attempt.status === 'submitted') {
       // Replay không ghi học tập: chỉ đọc guestAccess (write = false), không tăng version nhưng vẫn chặn 410 nếu hết hạn
       await guestAccess(db, identity, session, false);
-      if (attempt.submitPayloadHash === payloadHash) {
+      if (matchesSubmission(attempt)) {
         return attempt;
       }
       if (idempotencyKey && attempt.submitOperationId === idempotencyKey) {
@@ -748,7 +759,7 @@ export async function submitQuiz({
     if (!updated) {
       const current = await findQuizAttemptById(id, { session });
       if (current?.status === 'submitted') {
-        if (current.submitPayloadHash === payloadHash) {
+        if (matchesSubmission(current)) {
           return current;
         }
         if (idempotencyKey && current.submitOperationId === idempotencyKey) {

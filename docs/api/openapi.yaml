@@ -1293,7 +1293,10 @@ paths:
       tags: [Quizzes]
       operationId: createQuiz
       summary: Tạo lượt làm quiz
-      description: Tạo lượt quiz gồm tối đa 5 câu hỏi không trùng từ ngân hàng câu hỏi của bộ chủ đề.
+      description: |
+        Tạo lượt quiz gồm tối đa 5 câu hỏi không trùng từ ngân hàng câu hỏi của bộ chủ đề.
+        Gửi lại cùng khóa và nội dung trả cùng lượt ở dạng QuizPublic với trạng thái và version hiện tại.
+        Đọc kết quả đã nộp qua GET /quizzes/{id}.
       security: *studySecurity
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1305,10 +1308,10 @@ paths:
               $ref: '#/components/schemas/CreateQuizRequest'
       responses:
         '201':
-          description: Lượt quiz đã được tạo thành công
+          description: Lượt quiz mới hoặc lượt đã tạo cho cùng yêu cầu
           headers:
             Location:
-              description: URI của lượt quiz vừa tạo
+              description: URI của lượt quiz
               schema:
                 type: string
           content:
@@ -1364,7 +1367,9 @@ paths:
       tags: [Quizzes]
       operationId: submitQuiz
       summary: Nộp bài chấm điểm quiz
-      description: Chấm điểm phía server, chuyển trạng thái sang submitted và lưu kết quả bất biến.
+      description: |
+        Chấm điểm phía server, chuyển trạng thái sang submitted và lưu kết quả bất biến.
+        Gửi lại cùng nội dung trả kết quả đã lưu. Dùng lại khóa với expectedVersion hoặc câu trả lời khác trả 409 IDEMPOTENCY_CONFLICT.
       security: *studySecurity
       parameters:
         - $ref: '#/components/parameters/QuizId'
