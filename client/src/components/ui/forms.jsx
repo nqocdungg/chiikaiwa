@@ -50,6 +50,7 @@ export function FormField({
  * helperText?: string,
  * error?: string,
  * fieldClassName?: string,
+ * inputRef?: import('react').Ref<HTMLInputElement>,
  * }} props
  */
 export function Input({
@@ -58,6 +59,7 @@ export function Input({
   helperText,
   error,
   required,
+  inputRef,
   className = '',
   fieldClassName = '',
   ...inputProps
@@ -80,6 +82,7 @@ export function Input({
       className={fieldClassName}
     >
       <input
+        ref={inputRef}
         {...inputProps}
         id={id}
         className={`ck-input ${className}`.trim()}

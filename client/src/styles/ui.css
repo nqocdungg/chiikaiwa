@@ -401,29 +401,46 @@
 }
 
 .ck-hero-title {
-  font-size: 32px;
+  font-size: clamp(34px, 2.4vw, 38px);
   font-weight: 800;
   color: var(--color-text);
-  line-height: 1.25;
-  margin-bottom: 10px;
+  line-height: 1.18;
+  margin-bottom: 16px;
   letter-spacing: -0.01em;
 }
 
 .ck-hero-subtitle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--color-text-muted);
-  margin-bottom: 24px;
+  margin-bottom: 28px;
   width: 100%;
   max-width: 100%;
   text-wrap: balance;
 }
 
+.ck-hero-subtitle__lead {
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.ck-hero-subtitle__detail {
+  display: block;
+}
+
 .ck-hero-primary-action {
-  margin-bottom: 14px;
+  width: min(100%, 280px);
+  margin-bottom: 16px;
+  margin-top: 1rem;
 }
 
 .ck-hero-btn-start {
+  width: 100%;
   border-radius: 9999px !important;
   min-height: 50px !important;
   padding: 0 32px !important;
@@ -436,15 +453,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  width: min(100%, 280px);
   gap: 12px;
-  margin-bottom: 26px;
+  margin-bottom: 30px;
 }
 
 .ck-hero-btn-pill {
+  width: 100%;
   border-radius: 9999px !important;
   padding: 8px 20px !important;
   font-size: 13.5px !important;
   gap: 6px !important;
+  display: inline-flex;
+}
+
+#ck-home .ck-hero-secondary-actions {
+  width: min(100%, 400px);
+}
+
+#ck-home .ck-hero-btn-pill {
+  flex: 1 1 0;
+  width: auto;
+  white-space: nowrap;
 }
 
 .ck-hero-topics {
@@ -1149,25 +1179,6 @@
   border-radius: 10px;
   box-shadow: 0 8px 25px #40312f20;
   font-size: 12px;
-}
-.ck-dialog {
-  max-width: min(460px, calc(100vw - 32px));
-  padding: 29px;
-  border: 0;
-  border-radius: 14px;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: 0 20px 70px #0003;
-}
-.ck-dialog::backdrop {
-  background: #40312f75;
-}
-.ck-dialog h2 {
-  font-size: 25px;
-}
-.ck-dialog p {
-  margin: 15px 0 25px;
-  color: var(--muted);
 }
 .ck-summary {
   display: grid;

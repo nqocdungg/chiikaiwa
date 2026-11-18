@@ -350,6 +350,18 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Kiểm chứng: `npm ci` và `npm run check` đạt format, lint, typecheck, 438 ca unit/HTTP/component, 217 ca integration trên MongoDB replica set tạm và build Vite. Chín ca FE-007 kiểm bộ lọc, khách, retry ghi, xung đột phiên bản, phân trang nguồn, thử lại lỗi mạng/503 và nguồn 403/404. Edge với dữ liệu thử đã đạt ở 1440×900, 1366×768, 390×844 và 683×384 trong lần triển khai trước; đã kiểm nút nguồn, Escape, trả focus và tràn ngang. Sau đồng bộ QA-006, kiểm lại format/lint/typecheck cho fixture và tài liệu mới.
 - Tiếp theo: Nhờ Minh Xuân review, kiểm phần lưu của AT-08 trên bản tích hợp và nối các lối vào học với FE-017/FE-018. FE-017 chịu trách nhiệm nối chế độ đến hạn qua API study. API catalog hiện chỉ lọc theo trình độ; thao tác lưu cả bộ và CRUD bộ cá nhân thuộc phạm vi khác.
 
+### FE-008 — Giao diện mã mời và khách
+
+- Ngày cập nhật: 2026-11-17
+- Trạng thái: Đã triển khai và tự kiểm chứng; chờ review độc lập và kiểm tra trực quan trên trình duyệt.
+- PR: Chưa có. Nhánh `feature/FE-008-invitation-guest-ui` từ `develop@be51432`.
+- Đã làm: Dùng một `InvitationDialog` với các view state nhập mã, host chờ, host duyệt request, requester chờ và kết thúc. Learner dùng `POST /invitation-requests`, khách dùng `POST /guest-trials`; host tạo/sao chép/hủy mã, accept/reject theo version hiện hành. UI phục hồi luồng qua `/me/coordination`, poll trạng thái không chồng request và chỉ vào `/room/:sessionId` sau xác nhận server.
+- An toàn dữ liệu: Mã theo contract 10 ký tự; hạn hiển thị từ `expiresAt` và `meta.serverTime`. Retry mutation giữ nguyên Idempotency-Key khi kết quả chưa chắc chắn, thao tác mới tạo key mới. Xử lý mã hết hạn/sai, `IDENTITY_CONFLICT`, version conflict, request bị từ chối/hủy và lỗi mạng mà không tự tạo lượt mới.
+- Component dùng chung: Mở rộng `Dialog`, `Input` và `Icon`; thêm `Countdown` dùng chung. CSS dialog cũ bị trùng đã được gỡ. Hình mascot chờ được lấy từ node Figma `108:1877`; cấu trúc dialog đối chiếu các node `108:1641`, `108:1901`, `108:2265`, `108:2093`, còn dữ liệu và luật nghiệp vụ theo contract dự án.
+- File liên quan: `client/src/features/invitation/`, `client/src/components/ui/`, `client/src/App.jsx`, `client/src/features/home/Home.jsx`, `client/src/features/landing/Landing.jsx`, `tests/client/invitation.test.jsx`, `tests/client/routes.test.jsx`.
+- Kiểm chứng: `npm run check` đạt format, lint, typecheck, 456 ca unit/HTTP/component, 230 ca integration trên MongoDB replica set tạm và build Vite. Chín ca FE-008 kiểm learner/guest dùng chung form, tạo mã host, khởi tạo lại đúng khi StrictMode hủy request coordination đầu tiên, giữ đúng create view khi khôi phục coordination lỗi, accept rồi mới điều hướng, retry cùng Idempotency-Key, hủy theo version không tạo mã mới và `IDENTITY_CONFLICT`. `git diff --check` đạt. Chưa chạy kiểm tra trực quan runtime ở các viewport; cần reviewer kiểm tra thêm trước Done.
+- Tiếp theo: Review độc lập theo CONTRIBUTING, kiểm trực quan dialog ở desktop/mobile và xác nhận dependency tích hợp BE-009/BE-015 trước khi ghi Done.
+
 ## Sprint 2
 
 ### QA-006 — Rà soát contract chọn bộ và manifest
