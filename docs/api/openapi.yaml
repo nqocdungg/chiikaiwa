@@ -171,6 +171,9 @@ paths:
         transaction. Sự kiện participant/room_finished của phiên đã biết trả 503
         nếu chưa nối consumer BE-012; không ghi receipt thành công giả.
         Không suy ra presence hoặc bắt đầu phiên từ room_started.
+        Khi đủ hai thành viên trở lại trước hạn phục hồi, chuyển reconnecting
+        về active sau khi kiểm tra quyền; giữ controller, bộ/thẻ/vai và phần
+        thời gian chọn bộ còn lại, không tăng lại số phiên đã bắt đầu.
       security:
         - livekitWebhookSignature: []
       requestBody:
