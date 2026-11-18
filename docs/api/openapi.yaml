@@ -21,6 +21,7 @@ tags:
   - name: Content Admin
   - name: Learning Content
   - name: Flashcards
+  - name: Quizzes
 
 paths:
   /sessions/{id}:
@@ -1287,6 +1288,165 @@ paths:
           description: Cấu hình lịch ôn chưa sẵn sàng
           content: *studyError
 
+  /quizzes:
+    post:
+      tags: [Quizzes]
+      operationId: createQuiz
+      summary: Tạo lượt làm quiz
+      description: |
+        Tạo lượt quiz gồm tối đa 5 câu hỏi không trùng từ ngân hàng câu hỏi của bộ chủ đề.
+        Gửi lại cùng khóa và nội dung trả cùng lượt ở dạng QuizPublic với trạng thái và version hiện tại.
+        Đọc kết quả đã nộp qua GET /quizzes/{id}.
+      security: *studySecurity
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuizRequest'
+      responses:
+        '201':
+          description: Lượt quiz mới hoặc lượt đã tạo cho cùng yêu cầu
+          headers:
+            Location:
+              description: URI của lượt quiz
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizPublicResponse'
+        '400':
+          description: Dữ liệu yêu cầu không hợp lệ
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '409':
+          description: Ngân hàng không có câu hỏi khả dụng (QUIZ_UNAVAILABLE) hoặc Idempotency-Key đã dùng với nội dung khác (IDEMPOTENCY_CONFLICT)
+          content: *studyError
+        '410': *studyGone
+        '413': *studyTooLarge
+        '415': *studyUnsupported
+        '422': *studyInvalid
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /quizzes/{id}:
+    get:
+      tags: [Quizzes]
+      operationId: getQuiz
+      summary: Xem chi tiết lượt quiz
+      description: Trả QuizPublic nếu đang làm, hoặc QuizResult nếu đã nộp.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - $ref: '#/components/parameters/QuizId'
+      responses:
+        '200':
+          description: Chi tiết lượt quiz
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/QuizPublicResponse'
+                  - $ref: '#/components/schemas/QuizResultResponse'
+        '400':
+          description: ID không hợp lệ (MALFORMED_REQUEST)
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '410': *studyGone
+
+  /quizzes/{id}/submission:
+    post:
+      tags: [Quizzes]
+      operationId: submitQuiz
+      summary: Nộp bài chấm điểm quiz
+      description: |
+        Chấm điểm phía server, chuyển trạng thái sang submitted và lưu kết quả bất biến.
+        Gửi lại cùng nội dung trả kết quả đã lưu. Dùng lại khóa với expectedVersion hoặc câu trả lời khác trả 409 IDEMPOTENCY_CONFLICT.
+      security: *studySecurity
+      parameters:
+        - $ref: '#/components/parameters/QuizId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitQuizRequest'
+      responses:
+        '200':
+          description: Kết quả chấm quiz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizResultResponse'
+        '400':
+          description: Dữ liệu yêu cầu không hợp lệ
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '409':
+          description: Lượt quiz đã được nộp (QUIZ_ALREADY_SUBMITTED), Idempotency-Key đã dùng với nội dung khác (IDEMPOTENCY_CONFLICT), hoặc xung đột phiên bản (VERSION_CONFLICT)
+          content: *studyError
+        '410': *studyGone
+        '413': *studyTooLarge
+        '415': *studyUnsupported
+        '422': *studyInvalid
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /me/quizzes:
+    get:
+      tags: [Quizzes]
+      operationId: listQuizzes
+      summary: Lấy danh sách lịch sử quiz của người gọi
+      description: Phân trang theo cursor và createdAt giảm dần.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: sourceSessionId
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        '200':
+          description: Danh sách quiz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizListResponse'
+        '400':
+          description: Con trỏ giải mã thất bại (INVALID_CURSOR) hoặc sourceSessionId sai định dạng (MALFORMED_REQUEST)
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '410': *studyGone
+        '422': *studyInvalid
+
 components:
   securitySchemes:
     livekitWebhookSignature:
@@ -1311,6 +1471,12 @@ components:
       description: Phải khớp cookie CSRF và Origin được phép
 
   parameters:
+    QuizId:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
     InvitationId:
       name: invitationId
       in: path
@@ -2262,6 +2428,237 @@ components:
             gender:
               type: [string, 'null']
               enum: [male, female, other, null]
+
+    CreateQuizRequest:
+      type: object
+      additionalProperties: false
+      required: [deckVersionId]
+      properties:
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+
+    QuizQuestionPublic:
+      type: object
+      additionalProperties: false
+      required: [questionVersionId, type, prompt]
+      properties:
+        questionVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        type:
+          type: string
+          enum: [multipleChoice, shortAnswer]
+        prompt:
+          type: string
+        options:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, text]
+            properties:
+              id:
+                type: string
+              text:
+                type: string
+
+    QuizPublic:
+      type: object
+      additionalProperties: false
+      required: [id, deckVersionId, status, total, version, questions]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [inProgress, submitted]
+        total:
+          type: integer
+          minimum: 1
+          maximum: 5
+        version:
+          type: integer
+          minimum: 0
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizQuestionPublic'
+
+    QuizPublicResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/QuizPublic'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    QuizResultItem:
+      type: object
+      additionalProperties: false
+      required:
+        [questionVersionId, isCorrect, points, explanation, knowledgeVersionIds]
+      properties:
+        questionVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        isCorrect:
+          type: boolean
+        points:
+          type: integer
+          enum: [0, 1]
+        correctOptionId:
+          type: string
+        acceptedAnswers:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+        knowledgeVersionIds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectId'
+
+    QuizResult:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          deckVersionId,
+          status,
+          total,
+          version,
+          questions,
+          answers,
+          score,
+          submittedAt,
+          results,
+        ]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [submitted]
+        total:
+          type: integer
+          minimum: 1
+          maximum: 5
+        version:
+          type: integer
+          minimum: 1
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizQuestionPublic'
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmitQuizAnswerItem'
+        score:
+          type: integer
+          minimum: 0
+          maximum: 5
+        submittedAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizResultItem'
+
+    QuizResultResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/QuizResult'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SubmitQuizAnswerItem:
+      type: object
+      additionalProperties: false
+      required: [questionVersionId]
+      properties:
+        questionVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        optionId:
+          type: string
+          maxLength: 64
+        text:
+          type: string
+          maxLength: 500
+
+    SubmitQuizRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, answers]
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+        answers:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/SubmitQuizAnswerItem'
+
+    QuizSummaryItem:
+      type: object
+      additionalProperties: false
+      required: [id, deckVersionId, status, total, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [inProgress, submitted]
+        total:
+          type: integer
+        score:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
+
+    QuizListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/QuizSummaryItem'
+            nextCursor:
+              type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
 
   responses:
     Unauthorized:
