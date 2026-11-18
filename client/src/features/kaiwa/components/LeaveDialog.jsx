@@ -1,21 +1,26 @@
 import { Button } from '../../../components/ui/controls.jsx';
 import { Dialog } from '../../../components/ui/Dialog.jsx';
 
-/** @param {{onCancel: () => void, onConfirm: () => void}} props */
-export function LeaveDialog({ onCancel, onConfirm }) {
+/** @param {{onCancel: () => void, onConfirm: () => void, pending?: boolean, partnerName?: string}} props */
+export function LeaveDialog({
+  onCancel,
+  onConfirm,
+  pending = false,
+  partnerName = 'Haru',
+}) {
   return (
     <Dialog
       open
       onClose={onCancel}
       title="Rời phòng cho cả hai?"
-      description="Phiên luyện của bạn và Haru sẽ kết thúc."
+      description={`Phiên luyện của bạn và ${partnerName} sẽ kết thúc.`}
       footer={
         <>
           <Button variant="secondary" onClick={onCancel}>
             Ở lại phòng
           </Button>
-          <Button variant="danger" onClick={onConfirm}>
-            Rời và xem tổng kết
+          <Button variant="danger" onClick={onConfirm} loading={pending}>
+            {pending ? 'Đang rời phòng…' : 'Rời và xem tổng kết'}
           </Button>
         </>
       }
