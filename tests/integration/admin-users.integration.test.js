@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
 import mongoose from 'mongoose';
 import request from 'supertest';
@@ -20,6 +21,8 @@ import {
 import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 import * as roomService from '../../server/integrations/livekit/room-service.js';
 import * as mediaCleanupService from '../../server/modules/sessions/media-cleanup-service.js';
+import { DEFAULT_JWT_SECRET } from '../fixtures/auth-fixtures.js';
+import { LIVEKIT_TEST_SECRET } from '../fixtures/livekit-fixtures.js';
 
 /** @type {MongoMemoryReplSet} */
 let replicaSet;
@@ -85,10 +88,10 @@ describe('Admin Users Integration Suite (BE-026, IU-01 - IU-07, IL-01 - IL-24, D
     process.env.MONGODB_URI = replicaSet.getUri();
     process.env.MONGODB_DB_NAME = 'chiikaiwa_admin_users_test';
     process.env.APP_ORIGIN = DEFAULT_ORIGIN;
-    process.env.JWT_SECRET = 'test-jwt-secret-0123456789abcdef0123456789';
+    process.env.JWT_SECRET = DEFAULT_JWT_SECRET;
     process.env.LIVEKIT_URL = 'wss://livekit.example.test';
     process.env.LIVEKIT_API_KEY = 'lk-test-key';
-    process.env.LIVEKIT_API_SECRET = 'lk-test-secret-0123456789abcdef';
+    process.env.LIVEKIT_API_SECRET = LIVEKIT_TEST_SECRET;
 
     db = await connectDatabase();
     await applyDesignIndexes(db);
@@ -440,7 +443,7 @@ describe('Admin Users Integration Suite (BE-026, IU-01 - IU-07, IL-01 - IL-24, D
         .toArray();
       expect(activeSessionsBefore.length).toBe(2);
 
-      const idempotencyKey = '4f63d5d0-d68a-4704-81a3-2833f534e532';
+      const idempotencyKey = randomUUID();
       const res = await request(app)
         .patch(`/api/v1/admin/users/${learner1Id.toHexString()}/status`)
         .set('Origin', DEFAULT_ORIGIN)

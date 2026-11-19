@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../server/app.js';
 import { readAuthEnv } from '../../server/config/env.js';
 import { signJwt } from '../../server/modules/identity/crypto.js';
+import { DEFAULT_JWT_SECRET } from '../fixtures/auth-fixtures.js';
 import {
   connectDatabase,
   disconnectDatabase,
@@ -74,7 +75,7 @@ describe('Admin Reports and Privacy Integration Suite (BE-026, IR-01 - IR-18, IP
     process.env.MONGODB_URI = replicaSet.getUri();
     process.env.MONGODB_DB_NAME = 'chiikaiwa_admin_reports_test';
     process.env.APP_ORIGIN = DEFAULT_ORIGIN;
-    process.env.JWT_SECRET = 'test-jwt-secret-0123456789abcdef0123456789';
+    process.env.JWT_SECRET = DEFAULT_JWT_SECRET;
 
     db = await connectDatabase();
     await applyDesignIndexes(db);

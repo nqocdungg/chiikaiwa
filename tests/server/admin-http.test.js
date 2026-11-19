@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { ObjectId } from 'mongodb';
@@ -86,7 +87,7 @@ describe('Admin HTTP Guard and Foundation Unit Tests (BE-026, H-01 - H-08)', () 
           req
             .set('Origin', DEFAULT_ORIGIN)
             .set('X-CSRF-Token', csrfToken)
-            .set('Idempotency-Key', '4f63d5d0-d68a-4704-81a3-2833f534e532')
+            .set('Idempotency-Key', randomUUID())
             .send({ expectedVersion: 0, status: 'locked' });
         }
 
@@ -123,7 +124,7 @@ describe('Admin HTTP Guard and Foundation Unit Tests (BE-026, H-01 - H-08)', () 
           req
             .set('Origin', DEFAULT_ORIGIN)
             .set('X-CSRF-Token', csrfToken)
-            .set('Idempotency-Key', '4f63d5d0-d68a-4704-81a3-2833f534e532')
+            .set('Idempotency-Key', randomUUID())
             .send({ expectedVersion: 0, status: 'locked' });
         }
 
