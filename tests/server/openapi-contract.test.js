@@ -16,6 +16,11 @@ const expectedPaths = [
   '/invitation-requests',
   '/invitation-requests/{requestId}',
   '/invitation-requests/{requestId}/responses',
+  '/guest-trials',
+  '/auth/me',
+  '/auth/password-change',
+  '/auth/password-reset-requests',
+  '/auth/password-resets',
   '/admin/content/{id}/publish',
   '/admin/content/{id}/hide',
   '/topics',
@@ -34,6 +39,10 @@ const expectedPaths = [
   '/sessions/{id}/cards/{cardId}/hints',
   '/sessions/{id}/actions',
   '/sessions/{id}/actions/{actionId}/responses',
+  '/quizzes',
+  '/quizzes/{id}',
+  '/quizzes/{id}/submission',
+  '/me/quizzes',
 ];
 
 const writeOperations = [
@@ -42,6 +51,7 @@ const writeOperations = [
   ['/invitation-requests', 'post'],
   ['/invitation-requests/{requestId}', 'delete'],
   ['/invitation-requests/{requestId}/responses', 'post'],
+  ['/guest-trials', 'post'],
   ['/admin/content/{id}/publish', 'post'],
   ['/admin/content/{id}/hide', 'post'],
   ['/me/saved-items', 'post'],
@@ -51,6 +61,8 @@ const writeOperations = [
   ['/sessions/{id}/draws', 'post'],
   ['/sessions/{id}/actions', 'post'],
   ['/sessions/{id}/actions/{actionId}/responses', 'post'],
+  ['/quizzes', 'post'],
+  ['/quizzes/{id}/submission', 'post'],
 ];
 
 describe('OpenAPI contract', () => {
@@ -75,6 +87,54 @@ describe('OpenAPI contract', () => {
     expect(schemas.StudyRevealResponse.properties.data.required).toContain(
       'reviewTicket',
     );
+  });
+
+  it('documents quiz rights and keeps snapshot answers out of public projection', () => {
+    expect(
+      document.tags.some((/** @type {any} */ tag) => tag.name === 'Quizzes'),
+    ).toBe(true);
+
+    // POST có csrfToken
+    for (const path of ['/quizzes', '/quizzes/{id}/submission']) {
+      const operation = document.paths[path].post;
+      expect(operation.security).toEqual([
+        { sessionCookie: [], csrfToken: [] },
+        { guestCookie: [], csrfToken: [] },
+      ]);
+    }
+
+    // GET không có csrfToken
+    for (const path of ['/quizzes/{id}', '/me/quizzes']) {
+      const operation = document.paths[path].get;
+      expect(operation.security).toEqual([
+        { sessionCookie: [] },
+        { guestCookie: [] },
+      ]);
+    }
+
+    expect(document.paths['/me/quizzes'].get.responses).toHaveProperty('422');
+    expect(document.paths['/me/quizzes'].get.responses).toHaveProperty('403');
+    expect(document.paths['/quizzes/{id}'].get.responses).toHaveProperty('403');
+
+    const schemas = document.components.schemas;
+    expect(schemas.QuizQuestionPublic.properties).not.toHaveProperty(
+      'correctOptionId',
+    );
+    expect(schemas.QuizQuestionPublic.properties).not.toHaveProperty(
+      'acceptedAnswers',
+    );
+    expect(schemas.QuizQuestionPublic.properties).not.toHaveProperty(
+      'explanation',
+    );
+    expect(schemas.QuizPublic.properties).toHaveProperty('version');
+    expect(schemas.QuizResult.properties).toHaveProperty('version');
+    expect(schemas.QuizResult.properties).toHaveProperty('answers');
+    expect(schemas.QuizResult.properties).toHaveProperty('results');
+    expect(schemas.QuizResultItem.properties).toHaveProperty('correctOptionId');
+    expect(schemas.QuizResultItem.properties).toHaveProperty('explanation');
+    expect(schemas.SubmitQuizRequest.properties.answers.maxItems).toBe(5);
+    expect(schemas.SubmitQuizAnswerItem.properties.optionId.maxLength).toBe(64);
+    expect(schemas.SubmitQuizAnswerItem.properties.text.maxLength).toBe(500);
   });
 
   it('documents LiveKit signature auth, raw content type and response statuses without browser auth', () => {
@@ -131,6 +191,23 @@ describe('OpenAPI contract', () => {
     }
   });
 
+  it('documents safety guard error responses (403, 409, 410, 503) on invitation request acceptance', () => {
+    const respondOp =
+      document.paths['/invitation-requests/{requestId}/responses'].post;
+    expect(Object.keys(respondOp.responses)).toEqual(
+      expect.arrayContaining([
+        '200',
+        '401',
+        '403',
+        '404',
+        '409',
+        '410',
+        '422',
+        '503',
+      ]),
+    );
+  });
+
   it('documents DELETE expectedVersion and keeps examples free of env secrets', () => {
     for (const path of [
       '/invitations/{invitationId}',
@@ -144,8 +221,93 @@ describe('OpenAPI contract', () => {
 
     const source = readFileSync(OPENAPI_SPEC_PATH, 'utf8');
     expect(source).not.toMatch(
-      /JWT_SECRET|MONGODB_URI|LIVEKIT_API_(KEY|SECRET)/u,
+      /JWT_SECRET|MONGODB_URI|LIVEKIT_API_(KEY|SECRET)|BREVO_API_KEY/u,
     );
+  });
+
+  it('documents BE-007 password change and reset endpoints without Idempotency-Key or auto-login cookies', () => {
+    const passwordChange = document.paths['/auth/password-change'].post;
+    const resetRequest = document.paths['/auth/password-reset-requests'].post;
+    const resetConfirm = document.paths['/auth/password-resets'].post;
+
+    expect(passwordChange.security).toEqual([
+      { sessionCookie: [], csrfToken: [] },
+    ]);
+    expect(resetRequest.security).toEqual([{ csrfToken: [] }]);
+    expect(resetConfirm.security).toEqual([{ csrfToken: [] }]);
+
+    for (const op of [passwordChange, resetRequest, resetConfirm]) {
+      expect(op.parameters ?? []).not.toContainEqual({
+        $ref: '#/components/parameters/IdempotencyKey',
+      });
+    }
+
+    expect(passwordChange.responses['204']).not.toHaveProperty('content');
+    expect(
+      resetRequest.responses['202'].content['application/json'].schema,
+    ).toEqual({
+      $ref: '#/components/schemas/PasswordResetRequestResponse',
+    });
+    expect(resetRequest.responses).toHaveProperty('503');
+    expect(resetConfirm.responses['204']).not.toHaveProperty('content');
+    expect(resetConfirm.responses).toHaveProperty('400');
+  });
+
+  it('documents POST /guest-trials and GET /auth/me without leaking guest internals', () => {
+    const guestTrial = document.paths['/guest-trials'].post;
+    expect(guestTrial.security).toEqual([{ csrfToken: [] }]);
+    expect(guestTrial.parameters).toContainEqual({
+      $ref: '#/components/parameters/IdempotencyKey',
+    });
+    expect(
+      guestTrial.requestBody.content['application/json'].schema,
+    ).toMatchObject({
+      type: 'object',
+      additionalProperties: false,
+      required: ['code'],
+    });
+    expect(Object.keys(guestTrial.responses)).toEqual(
+      expect.arrayContaining([
+        '201',
+        '400',
+        '401',
+        '403',
+        '409',
+        '410',
+        '422',
+        '429',
+      ]),
+    );
+    expect(
+      guestTrial.responses['201'].content['application/json'].schema,
+    ).toEqual({ $ref: '#/components/schemas/GuestTrialResponse' });
+    expect(guestTrial.responses['201'].headers).toHaveProperty('Set-Cookie');
+
+    const authMe = document.paths['/auth/me'].get;
+    expect(authMe.security).toEqual([
+      { sessionCookie: [] },
+      { guestCookie: [] },
+    ]);
+    expect(authMe.responses['200'].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/AuthMeResponse',
+    });
+
+    const schemas = document.components.schemas;
+    expect(schemas.GuestTrial.required).toEqual(
+      expect.arrayContaining(['request', 'guest']),
+    );
+    expect(schemas.GuestProjection.required).toEqual(['status']);
+    expect(schemas.AuthMe.oneOf[1].properties.guest).toEqual({
+      $ref: '#/components/schemas/GuestProjection',
+    });
+    for (const field of ['credentialHash', 'emailKey', 'authVersion']) {
+      expect(schemas.GuestProjection.properties).not.toHaveProperty(field);
+      expect(schemas.AuthMe.oneOf[1].properties).not.toHaveProperty(field);
+    }
+    expect(schemas.AuthMe.oneOf[0].properties.kind).toEqual({ const: 'user' });
+    expect(schemas.AuthMe.oneOf[1].properties.kind).toEqual({
+      const: 'guest',
+    });
   });
 
   it('serves Swagger UI and the raw YAML without requiring database access', async () => {
@@ -219,5 +381,38 @@ describe('OpenAPI contract', () => {
     ).toEqual({
       $ref: '#/components/schemas/SessionActionResponse',
     });
+  });
+
+  it('documents PATCH /me/profile with optional X-Expected-Actor header, 409 conflict, and safe Self projection', () => {
+    const patchProfile = document.paths['/me/profile'].patch;
+    expect(patchProfile.security).toEqual([
+      { sessionCookie: [], csrfToken: [] },
+    ]);
+    expect(patchProfile.parameters).toContainEqual({
+      $ref: '#/components/parameters/IdempotencyKey',
+    });
+    expect(patchProfile.parameters).toContainEqual({
+      $ref: '#/components/parameters/ExpectedActor',
+    });
+    expect(patchProfile.responses).toHaveProperty('409');
+    expect(document.components.parameters.ExpectedActor).toMatchObject({
+      name: 'X-Expected-Actor',
+      in: 'header',
+      required: false,
+      schema: {
+        type: 'string',
+        pattern: '^(user:)?[0-9a-fA-F]{24}$',
+      },
+    });
+    expect(document.components.schemas.Self.additionalProperties).toBe(false);
+    expect(document.components.schemas.Self.properties).not.toHaveProperty(
+      'passwordHash',
+    );
+    expect(document.components.schemas.Self.properties).not.toHaveProperty(
+      'authVersion',
+    );
+    expect(document.components.schemas.Self.properties).not.toHaveProperty(
+      'emailKey',
+    );
   });
 });

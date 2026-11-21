@@ -7,7 +7,10 @@ export function Icon({ name, size = 20, className }) {
     cards: 'm8 3 13 3-4 15-13-3Z M3 5 1 18l3 1',
     arrow: 'M4 12h16 M14 6l6 6-6 6',
     mic: 'M9 4a3 3 0 0 1 6 0v8a3 3 0 0 1-6 0Zm-3 6v2a6 6 0 0 0 12 0v-2 M12 18v4 M8 22h8',
+    micOff:
+      'M9 4a3 3 0 0 1 6 0v8a3 3 0 0 1-6 0Zm-3 6v2a6 6 0 0 0 12 0v-2 M12 18v4 M8 22h8 M3 3l18 18',
     camera: 'M3 6h12v12H3Z m12 4 6-4v12l-6-4',
+    cameraOff: 'M3 6h12v12H3Z m12 4 6-4v12l-6-4 M3 3l18 18',
     screen: 'M3 3h18v14H3Z M12 17v4 M7 21h10',
     exit: 'M9 4H3v16h6 M9 12h12 m-5-5 5 5-5 5',
     note: 'M5 3h14v18H5Z M8 8h8 M8 12h8 M8 16h5',
@@ -17,6 +20,7 @@ export function Icon({ name, size = 20, className }) {
     clock: 'M12 8v5l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',
     swap: 'M4 7h16 m-4-4 4 4-4 4 M20 17H4 m4-4-4 4 4 4',
     close: 'm5 5 14 14 M19 5 5 19',
+    copy: 'M9 9h11v11H9Z M4 15H3V3h12v1',
     eye: 'M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
     eyeOff:
       'm3 3 18 18 M10.6 6.1A11 11 0 0 1 12 6c6.5 0 10 6 10 6a16 16 0 0 1-2.1 2.8 M6.7 6.7C3.6 8.4 2 12 2 12s3.5 6 10 6a11 11 0 0 0 4.2-.8 M9.9 9.9a3 3 0 0 0 4.2 4.2',
@@ -46,7 +50,7 @@ export function Icon({ name, size = 20, className }) {
 
 /**
  * @param {{
- * children: import('react').ReactNode,
+ * children?: import('react').ReactNode,
  * onClick?: import('react').MouseEventHandler<HTMLButtonElement>,
  * variant?: 'primary'|'secondary'|'ghost'|'danger',
  * size?: 'compact'|'default'|'hero',
@@ -58,6 +62,9 @@ export function Icon({ name, size = 20, className }) {
  * type?: 'button'|'submit'|'reset',
  * className?: string,
  * 'aria-label'?: string,
+ * 'aria-pressed'?: boolean,
+ * 'aria-controls'?: string,
+ * buttonRef?: import('react').Ref<HTMLButtonElement>,
  * }} props
  */
 export function Button({
@@ -73,6 +80,9 @@ export function Button({
   type = 'button',
   className = '',
   'aria-label': ariaLabel,
+  'aria-pressed': ariaPressed,
+  'aria-controls': ariaControls,
+  buttonRef,
 }) {
   const classes = [
     'ck-button',
@@ -86,12 +96,16 @@ export function Button({
 
   return (
     <button
+      ref={buttonRef}
       type={type}
       className={classes}
       onClick={onClick}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       aria-label={ariaLabel}
+      title={ariaLabel}
+      aria-pressed={ariaPressed}
+      aria-controls={ariaControls}
       data-loading={loading || undefined}
     >
       {loading ? (

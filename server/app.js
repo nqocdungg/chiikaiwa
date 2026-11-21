@@ -14,17 +14,26 @@ import { createProfileRouter } from './modules/identity/profile-router.js';
 import { createInvitationRouter } from './modules/invitations/invitation-router.js';
 import { createSavedItemRouter } from './modules/learning/saved-item-router.js';
 import { createStudyCardRouter } from './modules/learning/study-card-router.js';
+import { createQuizRouter } from './modules/quiz/quiz-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
 import {
   createLivekitWebhookHandler,
   finishWebhookEffects,
 } from './modules/sessions/livekit-webhook-handler.js';
 import { createSessionPresenceConsumer } from './modules/sessions/session-lifecycle-service.js';
+import { assertPairCanEnterSession as defaultAssertPairCanEnterSession } from './modules/safety/safety-service.js';
 import { createOpenApiRouter } from './openapi.js';
 import { checkDatabase } from './persistence/database.js';
 
 /**
- * @param {{checkHealth?: () => Promise<void>, handleLivekitWebhook?: import('express').RequestHandler, onVerifiedPresence?: import('./modules/sessions/livekit-webhook-service.js').PresenceConsumer, assertPairCanEnterSession?: (input: Record<string, any>) => Promise<void>}} [options]
+ * @param {{
+ *   checkHealth?: () => Promise<void>,
+ *   handleLivekitWebhook?: import('express').RequestHandler,
+ *   onVerifiedPresence?: import('./modules/sessions/livekit-webhook-service.js').PresenceConsumer,
+ *   assertPairCanEnterSession?: typeof defaultAssertPairCanEnterSession,
+ *   sendPasswordResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>,
+ *   waitUntil?: (promise: Promise<unknown>) => void
+ * }} [options]
  */
 export function createApp({
   checkHealth = checkDatabase,
@@ -33,7 +42,9 @@ export function createApp({
     onVerifiedPresence,
     afterCommit: finishWebhookEffects,
   }),
-  assertPairCanEnterSession,
+  assertPairCanEnterSession = defaultAssertPairCanEnterSession,
+  sendPasswordResetEmail,
+  waitUntil,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -131,7 +142,10 @@ export function createApp({
     }),
   );
 
-  app.use('/api/v1/auth', createAuthRouter());
+  app.use(
+    '/api/v1/auth',
+    createAuthRouter({ sendPasswordResetEmail, waitUntil }),
+  );
   app.use('/api/v1', createProfileRouter());
   app.use('/api/v1', createCoordinationRouter());
   app.use('/api/v1', createInvitationRouter({ assertPairCanEnterSession }));
@@ -141,6 +155,7 @@ export function createApp({
   app.use('/api/v1', createLearnerContentRouter());
   app.use('/api/v1/me/saved-items', createSavedItemRouter());
   app.use('/api/v1/study/cards', createStudyCardRouter());
+  app.use('/api/v1', createQuizRouter());
 
   app.use((_request, response) => {
     response.status(404).json({

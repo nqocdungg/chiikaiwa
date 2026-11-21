@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readEnv } from '../../server/config/env.js';
+import { readBrevoEnv, readEnv } from '../../server/config/env.js';
 
 const source = {
   MONGODB_URI: 'mongodb://127.0.0.1:27018',
@@ -47,5 +47,60 @@ describe('environment', () => {
         JWT_SECRET: 'short-secret-value',
       }),
     ).toThrow('JWT_SECRET must be at least 32 characters');
+  });
+  it('validates Brevo configuration and never echoes BREVO_API_KEY in error messages', () => {
+    expect(
+      readBrevoEnv({
+        BREVO_API_KEY: '  xkeysib-test-api-key  ',
+        BREVO_SENDER_EMAIL: '  no-reply@chiikaiwa.example.com  ',
+      }),
+    ).toEqual({
+      apiKey: 'xkeysib-test-api-key',
+      senderEmail: 'no-reply@chiikaiwa.example.com',
+      senderName: 'Chiikaiwa',
+      apiUrl: 'https://api.brevo.com/v3/smtp/email',
+      timeoutMs: 5000,
+      appOrigin: 'http://127.0.0.1:5173',
+    });
+
+    expect(() =>
+      readBrevoEnv({
+        BREVO_SENDER_EMAIL: 'no-reply@chiikaiwa.example.com',
+      }),
+    ).toThrow('BREVO_API_KEY is required');
+
+    expect(() =>
+      readBrevoEnv({
+        BREVO_API_KEY: 'super-secret-brevo-key',
+        BREVO_SENDER_EMAIL: 'not-an-email',
+      }),
+    ).toThrow('BREVO_SENDER_EMAIL must be a valid email address');
+
+    expect(() =>
+      readBrevoEnv({
+        BREVO_API_KEY: 'super-secret-brevo-key',
+        BREVO_SENDER_EMAIL: 'no-reply@chiikaiwa.example.com',
+        BREVO_SENDER_NAME: '   ',
+      }),
+    ).toThrow('BREVO_SENDER_NAME must be between 1 and 100 characters');
+
+    expect(() =>
+      readBrevoEnv({
+        NODE_ENV: 'production',
+        APP_ORIGIN: 'https://chiikaiwa.example.com',
+        JWT_SECRET: 'a'.repeat(32),
+        BREVO_API_KEY: 'super-secret-brevo-key',
+        BREVO_SENDER_EMAIL: 'no-reply@chiikaiwa.example.com',
+        BREVO_API_URL: 'http://127.0.0.1:8080/v3/smtp/email',
+      }),
+    ).toThrow('BREVO_API_URL must use HTTPS');
+
+    expect(() =>
+      readBrevoEnv({
+        BREVO_API_KEY: 'super-secret-brevo-key',
+        BREVO_SENDER_EMAIL: 'no-reply@chiikaiwa.example.com',
+        BREVO_TIMEOUT_MS: '100',
+      }),
+    ).toThrow('BREVO_TIMEOUT_MS must be an integer between 500 and 20000');
   });
 });

@@ -5,7 +5,7 @@ import { Button, Icon, IconButton } from '../components/ui/controls.jsx';
 import { Dialog } from '../components/ui/Dialog.jsx';
 import { Input, PasswordInput } from '../components/ui/forms.jsx';
 import { Avatar, Badge, Card } from '../components/ui/surfaces.jsx';
-import usagi from '../assets/mascots/usagi.png';
+import usagi from '../assets/mascots/bouncing-usagi.gif';
 import '../styles/component-preview.css';
 
 const longName = 'Nguyễn Hoàng Minh Anh với một cái tên rất dài';

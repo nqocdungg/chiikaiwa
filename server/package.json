@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@vercel/functions": "3.11.3",
     "express": "5.3.0",
     "helmet": "8.3.0",
     "livekit-server-sdk": "2.19.2",

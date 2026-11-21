@@ -23,6 +23,60 @@ File này giúp agent hoặc thành viên tiếp theo nắm nhanh task đã làm
 
 ## Sprint 1
 
+### FE-002 — Tích hợp Home có sẵn và bổ sung landing
+
+- Ngày cập nhật: 2026-11-15
+- Trạng thái: Đã hoàn thiện toàn diện vòng 3 theo review của Owner (A1–A5, B1–B3, C1, D1, E1); sẵn sàng cập nhật PR.
+- PR: PR #33; branch `feature/FE-002-home-landing`, base `develop`.
+- Đã làm: Bổ sung màn hình Landing công khai (`SC-01`) tại route `/` và Trang chính (`SC-03`) tại `/home`. Đồng bộ hoàn toàn với bản thiết kế Figma Make mới và Design System Foundation (`docs/frontend/design-system.md`): bọc `PageContainer`, nhúng logo vector `chii-logo.svg`, thanh điều hướng Floating Pill Bar 5 tab với mascot icon, Centered Hero với 2 linh vật Usagi & Hachiware (đã xử lý trong suốt 100%), nút chính FlowButton `Tìm bạn luyện nói →`, cặp nút `Tạo mã mời`/`Nhập mã` và 3 chip chủ đề nhanh. Nối dữ liệu người học thật qua `AuthContext` (`GET /auth/me`), gọi `GET /me/coordination` hiển thị banner điều phối chống tạo luồng kép (`FR-LRN-01`).
+- Sửa theo Reviewer PR #33 (Ngọc Dung & Owner):
+  - **A1–A5. Luồng đăng xuất lỗi hoàn thiện (Flash Message Pattern & Quản lý Focus)**: Đọc cờ lỗi vào state cục bộ `logoutNotice` rồi lập tức dọn sạch `history.state` qua `navigate({ pathname, search, hash }, { replace: true, state: null })`, giải quyết triệt để lỗi banner hiện lại khi người dùng Back/Forward đồng thời bảo toàn trọn vẹn query `search` và `hash` URL. Đổi tên nút hành động của banner thành `"Thử đăng xuất lại"` (Should fix) để phân biệt rõ ràng và triệt tiêu xung đột với nút `"Thử lại"` của banner điều phối khi cả hai cùng xuất hiện. Chống điều hướng cưỡng bức khi lỗi đến muộn: sử dụng `activeLocationRef` đồng bộ từ `App.jsx` để kiểm tra vị trí thực tế trước khi điều hướng; nếu người dùng đã rời khỏi Home (ví dụ bấm Back sang `/profile`) trong lúc API đang chờ thì bỏ qua điều hướng, giữ nguyên trang hiện tại của người dùng. Tối ưu test `AUTH_SUPERSEDED` với `waitFor` loading biến mất và `act` đảm bảo Home phục hồi render trước khi assert không có alert (khôi phục năng lực falsification 100%). Câu chữ thông báo trung tính chuẩn contract: _"Chưa đăng xuất được. Yêu cầu đăng xuất chưa hoàn tất. Hãy thử lại."_ (không khẳng định điều chưa biết khi gặp lỗi mạng/401). Bỏ `aria-live="polite"` mâu thuẫn trên `role="alert"`. Chuyển focus tự động vào nút "Thử đăng xuất lại" khi banner xuất hiện và trả focus về nút tài khoản khi bấm "Đóng" (WCAG 2.4.3 & 04 §8.3). Tách `await logout()` trong `try`, bỏ qua `AUTH_SUPERSEDED` (409) và đặt `navigate('/login')` ra ngoài `try`. Giữ cờ `logoutInFlight` làm lớp bảo vệ phụ chống click lặp.
+  - **B1. Triệt để tuân thủ Label in Name (WCAG 2.5.3)**: Gỡ bỏ `aria-label` ở 3 chip chủ đề để tên truy cập kế thừa nguyên chữ hiển thị (`カフェで Ở quán cà phê`...); ẩn cụm bong bóng thoại mascot với `aria-hidden="true"` (trang trí trực quan). Tên nút tài khoản chứa toàn bộ nhãn hiển thị: bổ sung `level` vào `aria-label` khi có profile level (`Menu tài khoản: Minh Hoàng N3`) và loại bỏ khoảng trắng thừa khi không có level (`Menu tài khoản: Minh Hoàng`).
+  - **B2. Rà soát biên dữ liệu `/me/coordination`**: Khai báo danh sách 6 mode hợp lệ theo contract API 07 §5; bắt buộc `resourceId` hợp lệ và encode an toàn qua `encodeURIComponent` khi `mode === 'inSession'`. Mọi phản hồi thiếu `mode`, mode lạ hoặc thiếu `resourceId` đều xử lý fail-closed thành `coordinationError = true` kèm nút "Thử lại".
+  - **B3. Chuẩn hóa ARIA menu tài khoản**: Bỏ `aria-label` trên thẻ `<div>` dropdown; gán `aria-controls` động chỉ khi menu mở. Lối vào "Danh sách chặn (SC-18)" được xác nhận ngoài phạm vi FE-002 (dù route `/blocks` đã có sẵn tại `App.jsx:106`) và không tạo lối vào chưa hoàn chỉnh trong PR này.
+  - **C1. Tách biệt CSS Hover & Focus theo Design System**: Tách riêng `:hover` (chỉ đổi màu nền/chữ) khỏi `:focus-visible` (viền 3px dùng token `--color-focus: #9b526e`, `outline-offset: -3px`), đảm bảo độ tương phản $\ge 3:1$ theo WCAG 1.4.11.
+  - **D1, L2. Tối ưu trải nghiệm Landing**: Bỏ `aria-current` trên các liên kết điều hướng chưa active; placeholder nav tàng hình khi auth loading tránh giật layout; nút CTA Hero "Bắt đầu ngay" (`/register`) luôn là link sẵn sàng tương tác, không bị disabled khi đang xác thực cookie ngầm, tuân thủ đúng cam kết không ép đăng nhập ở landing. Kiểm thử tích hợp stack thật xác nhận khi auth check lỗi 500 landing vẫn fallback hiển thị giao diện khách an toàn.
+  - **L4 & Responsive**: Chuẩn hóa CSS specificity cho thanh điều hướng và header; cấu hình Header cho phép wrap và thanh điều hướng 5 tab chuyển xuống dòng 2 căn giữa khi co màn hình ($\le 960px$ và $\le 650px$), hỗ trợ zoom 200%–400% theo WCAG 2.1 AA Reflow; gỡ bỏ nút nổi `?` thừa ngoài đặc tả.
+  - **Hạn chế đã biết ngoài phạm vi FE-002**: `AuthContext.logout()` bật `isLoading = true` toàn cục khiến toàn bộ khu vực đăng nhập bị thay bằng màn hình loading thay vì chỉ khóa hành động đang submit (chưa đạt tiêu chuẩn Pending write theo 04 §6). Điểm này kế thừa từ thiết kế FE-001, ghi nhận để refactor trong task riêng của Auth.
+- File liên quan: `client/src/features/landing/Landing.jsx`, `client/src/features/home/Home.jsx`, `client/src/components/layout/PageContainer.jsx`, `client/src/App.jsx`, `client/src/styles/ui.css`, `client/src/assets/mascots/hachiware.png`, `tests/client/landing.test.jsx`, `tests/client/home.test.jsx`, `tests/client/home-logout.test.jsx`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng:
+  - `npm run lint`: Pass 0 errors, 0 warnings.
+  - `npm run format:check`: Pass 100% (All matched files use Prettier code style).
+  - `npm run typecheck`: Pass 0 errors trên client, server và root jsconfig.
+  - `tests/client` suite: 8/8 files passed, 77/77 tests passed (gồm 17/17 tests home, 8/8 tests home-logout stack thật, 7/7 tests landing, 13/13 tests routes, 13/13 api-client, 12/12 auth-context, 5/5 frontend-foundation, 2/2 app).
+  - `npm run build`: Pass 100% (client Vite dist + syntax check server).
+  - `npm run build-storybook`: Pass 100% (Storybook build completed successfully).
+- Tiếp theo: Commit các thay đổi, merge `origin/develop` vào nhánh con và push cập nhật PR #33 để reviewer nghiệm thu.
+
+### FE-004 — Giao diện gọi, thiết bị và chat
+
+- Sync 2026-11-18: fast-forward develop `ca322c7`; preserve pre-merge changes in stash. Keep upstream Auth/Home/Library/Invitation layouts; mount SessionRoom outside LearningLayout. Reuse Dialog.headingAdornment; remove FE-004 font assets and @font-face, retain foundation font stacks and Nunito fallback. Existing backend/test/OpenAPI changes preserved.
+- Validation 2026-11-18: format/lint/typecheck and production build pass; 484 unit/HTTP/component tests pass with maxWorkers=2; invitation integration 8/8 pass using MongoDB 8.2.7 system binary. Full npm run check did not pass as one run hit 7 Vitest worker-start timeouts; full integration rerun stopped after prolonged execution without a final result. git diff --check clean; independent merge/font review has no remaining Must fix/Should fix. No commit or push.
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã triển khai frontend và kiểm chứng local; chưa đủ điều kiện Done do thiếu nghiệm thu LiveKit hai máy, visual QA, human review/CI và dependency reconnect.
+- PR: Chưa có; branch `feature/FE-004-call-devices-chat` đã rebase theo yêu cầu lên `origin/develop@e08def0`, gồm BE-008/PR #45. Changes FE-004 vẫn chưa commit/push; stash `FE-004 before rebase onto develop BE-008 2026-11-16` và các stash trước đó được giữ làm dự phòng.
+- Đã làm: Route `/room/:sessionId` gắn `SessionRoom` sau guard FE-001. Tái sử dụng `KaiwaRoom`, `ParticipantVideo`, controls và `LeaveDialog`. Nối GET Session, POST media-token và leave qua API client hiện có; polling 2 giây không chồng request, backoff lỗi 2/4/8/16 giây; notice version mới chỉ kích hoạt GET. Kết nối LiveKit thật, mic/camera mặc định tắt và chỉ xin quyền khi bật; phân biệt thiết bị thiếu/từ chối/bận, xử lý autoplay. Chỉ Session thực mở SC-08; leave/unmount/ended/đổi danh tính dọn SDK và chat, chặn token/kết nối đến muộn.
+- Chat: Reliable data channel đúng session/topic/member, validate plain text UTF-8 và giới hạn packet kỹ thuật 15.000 bytes; React render text, không MongoDB/localStorage. Badge tin mới, giữ draft/pending send qua chuyển panel, thêm tin local sau publish thành công; bộ nhớ giữ tối đa 200 tin, không hứa khôi phục lịch sử.
+- Figma: Truy cập MCP thành công sau lần đầu thiếu quyền; session `47caab1c-35ba-44a9-b96b-ff375b85e658`. Đã đọc đủ tám nhóm Design Rules v1 (`12:460`) qua node con và context/ảnh dialog thiết bị `30:7829`, phòng `4:2728`, chat `32:8397`. Dùng skill Figma design-to-code; chưa xác nhận pixel match bằng trình duyệt.
+- Nguồn UI hiện hành: `client/README-FE.md`, `docs/frontend/design-system.md` và Figma MCP session `97a83a67-bb0f-4ba5-8b9a-a4f89bc694b3`. Đọc context/ảnh phòng `4:2728`, sidebar `32:8442`, chat `4:3279`, thiết bị `30:7829` và card `4:2855`. Áp foundation mới khi khác rules cũ: Button FlowButton 48px, compact 44px, Dialog padding 24 và friendly radius 30, type scale dễ đọc; không sao chép chữ 7–13px của frame import.
+- Quyết định theo tài liệu: Tái sử dụng `KaiwaRoom`, `ParticipantVideo`, `Button`/`IconButton`, `LeaveDialog`; giữ ba vùng và nút rời ngoài vùng cuộn. Session API quyết định bắt đầu/kết thúc/quyền; SDK không tự chuyển phiên active. Mic/cam tùy chọn, lỗi thiết bị không khóa chat/rời. Chat plain text qua LiveKit data channel, không MongoDB/localStorage hoặc cam kết khôi phục lịch sử. Chọn/bốc thẻ giữ phạm vi FE-019.
+- Quyết định thực thi: Reuse foundation font stacks/fallback and existing SVG controls. Sau đồng bộ foundation mới, dùng token font chung, Button FlowButton 48px/radius token và icon compact 44px; không ghi đè palette foundation. Mic/camera bật sau khi kết nối transport, không tự xin quyền khi mount; leave retry giữ idempotency key. Tách fixture runtime khỏi phòng và summary bằng props từ `KaiwaDemo`; production chỉ nhận dữ liệu/myRole từ API. Chọn/bốc thẻ giữ FE-019; không mở rộng nghiệp vụ note/gợi ý/chia sẻ/tổng kết hoặc sửa backend reconnect. Chưa cập nhật Project Tracker; URL Sheets không đọc được bằng công cụ web nên reviewer/trạng thái dependencies trên bảng chưa xác minh.
+- Đồng bộ develop: Bảo toàn thay đổi bằng stash include-untracked, fast-forward feature branch rồi apply stash. Resolve conflict App bằng cách giữ cả ComponentPreview dev và route SessionRoom; LeaveDialog dùng Dialog foundation mới, giữ partnerName và pending/loading. Không sửa nhánh develop hoặc push/merge FE-004 vào nhánh chung.
+- Bố cục: Header 80 với logo/trạng thái/thời lượng, công cụ Kiến thức/Ghi chú/Chat và nút rời; mic/camera cạnh local participant, sidebar 192 dùng Avatar/ParticipantVideo gọn, panel phải 320, chat log cuộn riêng và ô nhập ở cuối. Tái sử dụng Button, Dialog, Card, Badge, Avatar; một modal tại một thời điểm, cleanup trả lại body scroll. Trạng thái người luyện xét SDK reconnect kể cả participant cache; tiêu đề/timer chọn bộ xét Session DTO. Palette từ tokens; thêm một token sidebar lấy từ Figma.
+- Local preview: Vite `/__dev/room`, các query state preparing/chat/long-chat/reconnecting/device-error/denied và clean=1. Dùng cùng component phòng, fixture chỉ dành development và không xin quyền thiết bị; production loại preview khỏi bundle. Ba bộ mẫu chỉ để đối chiếu thiết kế, không giả lập chọn/bốc cho API thật. Không tiếp tục cập nhật Storybook; đã gỡ story FE-004 mới. Không tạo tài liệu FE-004 riêng; `docs/development/ui.md` giữ nguyên base. Cách chạy nằm trong README client.
+- File liên quan: `client/src/features/kaiwa/`, `client/src/components/ui/`, `client/src/App.jsx`, `client/src/demo/RoomPreview.jsx`, `client/src/demo/KaiwaDemo.jsx`, `client/src/features/session-summary/SessionSummary.jsx`, `client/src/styles/{ui,tokens}.css`, fonts/OFL, README client, manifest/lockfile và tests client.
+- Kiểm chứng: `npm ci` pass trên Node 24.19.0/npm 11.21.1. Sau đồng bộ base và UI, `npm run check` pass: format/lint/typecheck, 335 unit/HTTP/component tests, 158 integration tests, build app và build Storybook vốn nằm trong lệnh check chung. Nhóm mục tiêu media/room/routes/foundation pass 43 tests, có ca modal/scroll cleanup, SDK reconnect với cached participant, heading theo DTO và preview không gọi API/SDK. Review độc lập không còn Must fix/Should fix trong source đã kiểm; chưa có human approval hoặc CI. `npm audit --audit-level=high` pass, còn 6 moderate ở tooling hiện có; không auto-fix. Build có cảnh báo chunk lớn. Vite preview và module trả HTTP 200; browser automation bị chặn khi không xác định được URL Edge, nên chưa xác nhận pixel match hoặc media hai máy/dịch vụ thật. Bản build production đã kiểm không chứa fixture vai hoặc preview dev.
+- Tiếp theo: Visual QA route Vite local ở 1440×900, 1366×768, 390px/zoom 200%; browser automation hiện không khả dụng nên chưa xác nhận pixel match. Test LiveKit hai máy với hai danh tính/Session hợp lệ: cùng project test, server env đúng, webhook HTTPS nhận được event; kiểm mic/cam, chat, rời và hai phòng không lẫn dữ liệu. Preview Vercel cần deployment chứa FE-004, APP_ORIGIN đúng URL, database/env và webhook truy cập được; merge develop không tự bảo đảm domain production cập nhật. Giải quyết dependency phục hồi BE-012, xác minh Task Handoff/reviewer và review nhóm/CI trước Done.
+- Lưu ý/blocker: Source BE-010/011/012 và FE-001 hiện có trên base không đồng nghĩa dependencies đã Done. Bản sửa reconnect BE-012 được bổ sung ngay trên nhánh FE-004; vẫn cần nghiệm thu hai browser/LiveKit Cloud, review nhóm và CI trước Done. Không tự sửa thiết kế 01–07, commit, push, merge hoặc deploy.
+- Rà soát readiness backend sau rebase: BE-008 đã nối `assertPairCanEnterSession` mặc định trong `createApp()`. Test tích hợp dùng API client/session API thật của FE-004 gọi Express để tạo/chấp nhận lời mời, đọc Session và xác minh chữ ký token đúng room/actor của cả hai thành viên; người thứ ba bị từ chối. Sau block, kiểm lời gọi thu hồi hai participant, Session ended, token mới trả `SESSION_ENDED` và leave vẫn hợp lệ. Nhóm safety đạt 13/13 trên replica set tạm; adapter LiveKit bên ngoài được mock, chưa xác nhận media Cloud thật. Summary và screen-share claim/release chưa có handler trong router hiện tại.
+- Kiểm lại backend trước nghiệm thu: 38/38 server tests của media-token/webhook/session-clock/invitations và 73/73 integration tests của media-token/webhook/session-lifecycle/invitations pass. Integration dùng MongoDB replica set tạm, SDK/service LiveKit được mock; chưa chứng minh transport LiveKit Cloud/webhook deployed. Chat theo AC dùng data channel, grant `canPublishData` đã có trong BE-010; không có REST/persistence chat riêng. Phiên chưa chọn bộ chỉ có 60 giây hoạt động sau khi bắt đầu; cần phân biệt selection timeout với lỗi media khi test thủ công.
+- Phạm vi tài liệu: Chỉ cập nhật file progress này; README client và `docs/development/ui.md` đã hoàn nguyên về base, không có tài liệu FE-004 riêng. Hướng dẫn test được báo trực tiếp khi bàn giao.
+- Kiểm kết nối dịch vụ: `RoomServiceClient.listRooms()` thành công với cấu hình `.env` hiện hành, chỉ đọc và không in secret/danh sách phòng. Kết quả xác nhận truy cập API LiveKit, chưa thay thế kiểm media/data/webhook thật bằng hai browser. Rebase giữ auth FE-009 và Home mới; bỏ demo Storybook đã được upstream xóa, giữ preview Vite dev. Review độc lập phần resolve không còn Must fix/Should fix.
+- Kiểm chứng sau rebase `e08def0`: `npm ci` và `npm run check` pass trên Node 24.19.0/npm 11.21.1 (format, lint, typecheck, 454 unit/HTTP/component tests, 218 integration tests, build). `git diff --check` pass. `npm audit --audit-level=high` pass, còn 3 moderate trong chuỗi ESLint/minimatch; không tự nâng dependency ngoài task. Build còn cảnh báo chunk lớn. Không tạo tài liệu/collection LiveKit riêng; hướng dẫn Postman trao đổi trong chat.
+
+- Pre-push validation: format/lint/typecheck and build pass. Full check stopped at FE-003 profile VERSION_CONFLICT assertion (483/484 pass); isolated rerun of profile, room, media and routes passes 57/57 with maxWorkers=2. Full integration not revalidated; real two-browser LiveKit/visual QA and CI remain pending. Shared Button supports icon-only content and native tooltip from aria-label. Backend/OpenAPI/integration changes excluded from FE-004 commit.
+
 ### OPS-004 — Thiết lập CI cho pull request
 
 - Ngày cập nhật: 2026-11-08
@@ -147,7 +201,7 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ### BE-012 — Vòng đời chuẩn bị, bắt đầu và kết thúc phòng
 
-- Ngày cập nhật: 2026-11-12
+- Ngày cập nhật: 2026-11-16
 - Trạng thái: Đã triển khai và kiểm chứng local; chờ tích hợp luồng cấp phòng thật, LiveKit Cloud, review nhóm và CI.
 - PR: Chưa có; branch `feature/BE-012-session-lifecycle`, base `develop@c7508a5`; chưa commit/push.
 - Đã làm: GET Session và leave API theo membership/CSRF/idempotency; nối consumer BE-011 mặc định. Start/controller/counter cùng transaction, GET không cộng clock vào DB. Disconnect chốt clock và giữ deadline, timeout dùng mốc nghiệp vụ, end giải phóng đúng actor resource và cố định hạn khách; lá current thành unfinished. Media cleanup sau commit có retry bền và attempt guard chống worker cũ ghi đè late join; coordination/tạo lời mời cũng xử lý timeout và thu hồi media.
@@ -155,7 +209,10 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Kiểm chứng: `npm run lint`, `npm run typecheck`, `npm test` (272 ca), `npm run test:integration` (138 ca), `npm run openapi:check` (6 ca), `npm run build`, `npm run build-storybook` pass. Node 24.19.0/npm 11.21.1, MongoDB 8.2.7 replica set tạm; adapter LiveKit dùng mock/credential giả, không dùng Atlas hoặc dịch vụ thật. Các ca mới kiểm join/leave cạnh tranh, rollback start/end, token ký cạnh tranh leave, deadline qua snapshot GET, đối soát disconnect chậm, room_finished, vai riêng, guest expiry và late join cạnh tranh cleanup. Review độc lập bằng agent không còn Must fix; chưa có human approval hoặc CI. Storybook vẫn cảnh báo chunk lớn, không chặn build.
 - Giới hạn check: Không còn bị chặn bởi format local. Người thực hiện xác nhận `npm run check` pass toàn bộ ngày 2026-11-12 sau khi xóa `.vscode/settings.json`; log cung cấp ghi nhận 138 integration tests pass lúc 20:48:17 và cả hai build thành công. Chưa có kết quả CI hoặc kiểm chứng LiveKit Cloud thật.
 - Tiếp theo: Nối dependency `assertPairCanEnterSession` và luồng guest-trial trước nghiệm thu đường mời/khách thật. Kiểm hai client, leave một phía, token cũ/vừa refresh/identity đã rời và retry thu hồi trên LiveKit Cloud test qua HTTPS. Tạo PR về develop, chạy CI và nhờ reviewer khác owner theo Tracker; chưa cập nhật Sheets/Done.
-- Bàn giao reconnect: BE-012 chỉ cung cấp nền disconnect và deadline theo phạm vi đã chốt. Nhánh phục hồi phiên đã startedAt hiện trả 503 và rollback receipt/presence; task tiếp theo thay nhánh này bằng reconnecting→active và phục hồi đầy đủ. Consumer có observedAt để chốt mất kết nối, checkedAt để recheck deadline; giữ controller, thời gian còn lại và SID guards. Không nghiệm thu toàn bộ PB-11/AT-07 từ task này. Maintenance toàn cục/full guest cleanup vẫn thuộc task sau; cleanup pending cần request/webhook hoặc maintenance tiếp tục xử lý khi dịch vụ trở lại.
+- Bổ sung reconnect BE-012 trên nhánh `feature/FE-004-call-devices-chat`: task có yêu cầu phục hồi trạng thái/thời hạn/thời lượng, nên phần reconnect thuộc BE-012. Thay nhánh 503 bằng `reconnecting → active` sau khi đủ hai hiện diện hợp lệ, còn hạn và kiểm lại block/lock/guest cùng actor guards. Giữ `startedAt`, controller, bộ/thẻ/vai, thời lượng đã chốt và thời gian chọn bộ còn lại; chỉ mở khoảng hoạt động mới, không random lại hoặc tăng `startedSessions`. Disconnect vẫn hủy pending action. Dùng `observedAt` chốt mất kết nối, `checkedAt` kiểm lại deadline; giữ SID guards và transaction receipt/presence. Chưa nghiệm thu toàn bộ PB-11/AT-07 bằng LiveKit Cloud thật. Maintenance toàn cục/full guest cleanup vẫn thuộc task sau; cleanup pending cần request/webhook hoặc maintenance tiếp tục xử lý khi dịch vụ trở lại.
+- Kiểm chứng reconnect bổ sung (2026-11-16): regression phục hồi hợp lệ fail với nhánh 503 cũ; regression partial reconnect đối soát qua deadline fail trước khi sửa cách chọn mốc kiểm tra. Sau sửa, lifecycle integration pass 42/42, gồm clocks/controller/statistics, bộ/thẻ/vai, hai người reconnect riêng rẽ/đồng thời, duplicate/SID cũ, deadline -1/0/+1 ms và đối soát qua hạn, block/lock/guest, rollback/retry, race block/lock/leave; webhook có chữ ký trả 204 và GET trả active. `npm run check` pass (454 unit/HTTP/component tests, 233 integration tests, build); `npm run openapi:check` pass 10/10; `git diff --check` pass. Node 24.19.0/npm 11.21.1, MongoDB replica set tạm, adapter LiveKit mock. Review độc lập đã xử lý phát hiện deadline partial reconnect, không còn Must fix/Should fix; chưa human approval/CI hoặc kiểm reconnect hai browser trên Cloud. Chưa commit/push; dự kiến chung PR FE-004/BE-012 theo yêu cầu người dùng.
+
+- Pre-push BE-012 validation: lifecycle/safety integration 55/55 and OpenAPI contract 11/11 pass on MongoDB 8.2.7 replica set; git diff --check clean; independent review has no Must fix/Should fix. Publish as a separate BE-012 commit on feature/FE-004-call-devices-chat for one combined PR. Real LiveKit reconnect and CI remain unverified; latest full check had the FE-003 assertion failure recorded above.
 
 ### BE-013 — Xuất bản revision và đọc học liệu theo quyền
 
@@ -209,6 +266,65 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Triển khai: Chạy [migration đăng ký FSRS-6](../server/persistence/migrations/20261115000100-register-fsrs-six-config.js) trên database đích trước khi gọi reveal. Migration giữ nguyên cấu hình theo hash. Vé dùng khóa server hiện có với miền chữ ký riêng.
 - Tiếp theo: BE-025 dùng `verifyReviewTicket`, kiểm tra lại quyền/scope hiện hành, revision và version trước khi ghi review. Nghiệm thu luồng cấp khách và chọn bộ với BE-015/BE-022, quản lý bộ cá nhân với BE-035. Kiểm thử HTTP hiện dùng bản ghi MongoDB được chuẩn bị sẵn cho các luồng đó.
 
+### BE-015 — Danh tính khách qua mã mời
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã triển khai và self-test; chờ CI, review độc lập và nghiệm thu AT-03/AT-11. Chưa chuyển Done.
+- PR: Chưa có; branch `feature/BE-015-add-guest-trial-identity`, base `develop@e08def0`, chưa commit/push.
+- Đã làm:
+  - Thêm `POST /api/v1/guest-trials` công khai có CSRF: từ chối `ck_session` bằng `409 IDENTITY_CONFLICT`; mã sai/hết hạn/đã dùng trả `409 INVITATION_UNAVAILABLE`; giới hạn 20 lượt/5 phút theo IP và 120 lượt ghi/phút theo actor/IP. Mã mời được trim/chuyển chữ hoa, body chỉ nhận `{code}`.
+  - Cấp credential khách 32 byte base64url, chỉ lưu hash trong `guest_sessions`, đặt cookie `ck_guest` HttpOnly/SameSite=Lax/Path=/ (Secure theo cấu hình), không đặt Max-Age; deadline do server quyết định.
+  - Tạo mới trong một transaction gồm `guest_sessions`, `actor_states` (`requestingInvite`) và `invite_requests`; retry cùng cookie/key/code trả request cũ, khác code trả `IDEMPOTENCY_CONFLICT`, key mới khi còn giữ lượt trả `ACTOR_BUSY`; cookie không tồn tại/đã thu hồi trả `SESSION_EXPIRED`, hết hạn trả `GUEST_EXPIRED`.
+  - Siết `GET /auth/me` và mọi endpoint dùng danh tính khách: khách `waiting` chỉ còn quyền khi request còn pending và invitation còn open; `active`/`summary` phải có `practiceSessionId` và membership; `summary` phải còn `expiresAt`; `/auth/me` không gia hạn deadline. Media token kiểm tra đúng session, trạng thái và hạn của khách.
+  - Reject/cancel request, cancel/expire invitation và accept thua cuộc đều chuyển guest `waiting` sang `expired` và giải phóng reservation trong cùng transaction. Accept chỉ thành công khi guest guard cập nhật đúng một bản ghi.
+  - Cập nhật `docs/api/openapi.yaml` cho `/guest-trials` và `/auth/me`, thêm schema `GuestProjection`, `GuestTrial`, `AuthMe`; mở rộng test contract OpenAPI.
+  - Sửa fixture guest `active` trong các integration test cũ để có membership `practice_sessions` tương ứng, không nới lỏng guard production.
+- File liên quan: `server/modules/invitations/invitation-service.js`, `invitation-router.js`, `invitation-validation.js`, `server/modules/identity/identity-service.js`, `crypto.js`, `server/middleware/cookies.js`, `docs/api/openapi.yaml`, `tests/integration/guest-trials.integration.test.js`, `tests/server/guest-identity.test.js`, `tests/server/openapi-contract.test.js`.
+- Kiểm chứng: `npm test` 439/439; `npm run test:integration` 230/230 (13 ca BE-015) trên MongoDB 8.2.7 replica set tạm; `npm run openapi:check` 11/11; `npm run typecheck`, ESLint/Prettier trên toàn bộ file thay đổi và `npm run build` pass. `npm run check` chưa pass trọn gói vì bước `format:check`/`lint` toàn repo quét thư mục `storybook-static/` chưa được ignore (artifact có sẵn ngoài phạm vi task); các bước còn lại đã chạy riêng và pass.
+- Dependency: `assertPairCanEnterSession` của BE-008 đã được nối mặc định trong `server/app.js`; không còn blocker pair guard.
+- Giới hạn: Chưa chạy CI, chưa nghiệm thu LiveKit/dịch vụ thật, chưa có reviewer khác owner; AT-03/AT-11 mới có bằng chứng local. Plan triển khai ghi response guest-trial không có `actorKey`, nhưng `07-api-specification.md` và OpenAPI `Partner` hiện yêu cầu `actorKey`; giữ DTO hiện có và chờ quyết định contract.
+- Tiếp theo: Xử lý artifact `storybook-static/` ngoài diff, chạy CI, push/mở PR về `develop`, nhờ reviewer độc lập và chốt mâu thuẫn `actorKey` trước khi đóng task.
+
+### DATA-002 — Script seed idempotent và fixtures kiểm thử
+
+- Ngày cập nhật: 2026-11-15
+- Trạng thái: Đã hoàn thiện, chờ mở PR
+- PR: Chưa có (branch `feature/DATA-002-idempotent-seed-script`, base `develop`)
+- Đã làm:
+  - **Idempotent seed script cho content & account fixtures (DB-T18)**: Triển khai toàn diện `seedAll`, `seedContentDataset`, `seedTestAccountFixtures` đảm bảo nạp lần đầu khởi tạo đầy đủ, nạp lại không sinh bản ghi trùng, không ghi đè mật khẩu user và bảo toàn lịch sử revision (06 §13.1, PB-31).
+  - **Bảo toàn bản nháp của Admin & Revision Guard**: Cập nhật `upsertContentItemAndVersion` để bảo toàn tuyệt đối `draftPayload` và `extraItemFields` (level, title của deck) khi Admin đang biên tập dở (06 §7.1). Toàn bộ dữ liệu nháp và thông tin khởi tạo chỉ gán qua `$setOnInsert`; nhánh update chỉ đồng bộ `status`, `latestRevision`, `publishedVersionId`. Nếu không có thay đổi con trỏ/trạng thái thì hoàn toàn không gọi `updateOne` (no-op, không cập nhật `updatedAt`).
+  - **Tự phục hồi liên kết content_items thiếu khi version đã tồn tại (Partial-failure healing)**: Khi version đã tồn tại nhưng bản ghi cha `content_items` bị thiếu hoặc mất con trỏ, tự động khôi phục item với hành động `recovered` hoặc `pointer_synced`. Đồng thời trong `seedTestAccountFixtures`, tự động bù đắp `actor_states` độc lập nếu tài khoản đã tồn tại từ trước nhưng bị gián đoạn giữa chừng.
+  - **Bảo vệ tính bất biến của revision & Race condition 11000**: Chủ động phát hiện xung đột `contentId + revision` khi đã tồn tại với `versionId` khác trong `content_versions`, ném thông báo nghiệp vụ rõ ràng tuân thủ 06 §13.1.5. Xử lý an toàn lỗi duplicate key (code 11000) tại `insertOne` của version và trong CAS retry loop của `content_items` khi chạy seed đồng thời.
+  - **Fail-closed database protection**: Kết hợp whitelist regex segment dev/demo/test cùng blacklist `FORBIDDEN_DATABASE_SEGMENT_PATTERN = /(^|_)(prod|production|live)(_|$)/u` để fail-closed tuyệt đối, chặn mọi hành vi seed ngoài ý muốn lên môi trường production trừ khi có cờ `forceProduction: true`.
+  - **Validation fail-fast liên dataset**: Kiểm tra tồn tại và validate schema toàn diện của toàn bộ dataset (`validateSeedDataset`) ở đầu `seedAll` trước khi thực hiện bất kỳ lệnh ghi nào vào cơ sở dữ liệu. Khi có dataset sai schema, `seedAll` trả về `success: false` (không throw) kèm danh sách lỗi có cấu trúc để CLI hiển thị rõ ràng.
+  - **Ràng buộc mật khẩu tối thiểu 8 ký tự & Fail-fast**: Áp dụng hàm chuẩn hóa `normalizeSeedPassword` kiểm tra chuỗi và độ dài tối thiểu 8 ký tự cho cả `SEED_ADMIN_PASSWORD` và `SEED_USER_PASSWORD`, fail-fast ngay từ đầu trước khi ghi.
+  - **CAS concurrency retry loop & Chuẩn hóa version: 0**: Triển khai Compare-and-Swap (CAS) tối đa 3 lần thử (`MAX_ITEM_SYNC_ATTEMPTS = 3`) với điều kiện lọc `{ _id, latestRevision, status, version }` kèm `$inc: { version: 1 }`. Xử lý chính xác trường hợp item cũ chưa có trường `version` bằng bộ lọc `{ $exists: false }`. Chuẩn hóa `version: 0` khi khởi tạo `content_items` khớp với convention Optimistic Concurrency Control toàn hệ thống.
+  - **Bảo mật mật khẩu, loại bỏ plaintext & Cảnh báo đúng ngữ cảnh**: Xóa bỏ hoàn toàn hằng số `DETERMINISTIC_PASSWORD_HASH` và comment chứa plaintext mật khẩu. Admin bắt buộc cung cấp qua `SEED_ADMIN_PASSWORD`; User fixtures sử dụng `SEED_USER_PASSWORD` (nếu có) hoặc sinh mật khẩu ngẫu nhiên an toàn qua `randomBytes(32).toString('hex')`. Cảnh báo mật khẩu ngẫu nhiên chỉ in đúng 1 lần sau vòng lặp; cảnh báo thiếu Admin chỉ bật khi chạy `--content-only` hoặc gọi `seedContentDataset` trực tiếp mà DB chưa có Admin. Thông báo các tài khoản đã tồn tại được gom thành 1 dòng duy nhất sau vòng lặp.
+  - **Chi tiết kết quả theo record & Bảng notable records**: Phân loại chính xác các hành động `inserted`, `recovered`, `pointer_synced`, `preserved`, `unchanged`. Bổ sung trường `versionInserted` để thống kê chính xác số version mới được chèn kể cả khi item được bảo toàn (preserved). Gom lỗi chi tiết theo từng record và hiển thị bảng tổng hợp notable records trong `scripts/seed.js` cả khi thành công lẫn khi gặp lỗi phân đoạn giữa chừng.
+  - **Test suite hoàn thiện & Siết chặt assert tham chiếu**:
+    - **38 ca unit tests** trong `tests/server/content-seed-idempotency.test.js` kiểm chứng toàn diện mọi nhánh bảo vệ, fail-fast schema, CAS retry, race condition 11000, cảnh báo ngữ cảnh, ràng buộc mật khẩu và partial-failure recovery.
+    - **7 ca integration tests** trong `tests/integration/seed-idempotency.integration.test.js` trên MongoDB replica set: kịch bản DB-T18 nạp lặp lại (bao gồm assert `item.version === 0` ngay sau lần nạp 1), negative test quét toàn bộ tham chiếu gãy giữa Deck -> Scenario -> Question -> Knowledge bằng helper `findBrokenReferences`, kiểm tra đăng nhập bằng mật khẩu động và bảo toàn dữ liệu nháp/ẩn.
+- File liên quan:
+  - `server/persistence/seed/seed-content.js`
+  - `server/persistence/seed/account-fixtures.js`
+  - `scripts/seed.js`
+  - `README.md`
+  - `.env.example`
+  - `tests/server/content-seed-idempotency.test.js`
+  - `tests/integration/seed-idempotency.integration.test.js`
+  - `docs/PROGRESS-TRACKER.md`
+- Kiểm chứng:
+  - `npm run format:check`: Pass (All matched files use Prettier code style).
+  - `npm run lint`: Pass (0 errors, 0 warnings).
+  - `npm run typecheck`: Pass (0 errors trên client, server và root jsconfig).
+  - `npm test`: **349/349 unit tests passed** (bao gồm 38/38 unit tests của `tests/server/content-seed-idempotency.test.js`).
+  - `npm run test:integration`: **176/176 integration tests passed** trên MongoDB replica set (bao gồm 7/7 integration tests của `tests/integration/seed-idempotency.integration.test.js`).
+  - `npm run openapi:check`: Pass 7/7 tests.
+  - `npm run build`: Pass (client vite production build & server app/index syntax check).
+  - `npm run build-storybook`: Pass (Storybook static build completed).
+  - `npm run check`: **Passed toàn diện cả 7/7 bước**.
+- Tiếp theo: Trình người dùng review và mở PR về `develop` để reviewer Minh Xuân rà soát.
+
 ### BE-016 — API lưu kiến thức và nguồn
 
 - Ngày cập nhật: 2026-11-15
@@ -220,6 +336,136 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Kiểm chứng: `npm run openapi:check` đạt 6/6. `npm run check` đạt 310 ca unit/HTTP/component, 165 ca integration và cả hai bản build. 7 ca HTTP BE-016 đạt khi chạy đảo thứ tự với seed 20261115 trên MongoDB 8.2.7 replica set tạm. DB-T08 giữ một mục với hai nguồn và giữ nguyên tiến độ khi bỏ rồi lưu lại. Ca xuất bản lại xác nhận revision ngoài lượt thử không xuất hiện trong danh sách hoặc phản hồi lưu/retry của khách. Storybook có cảnh báo kích thước chunk.
 - Tiếp theo: QA-008 chạy lại DB-T08 với lá được bốc qua API thật. FE-007 nối danh sách và thao tác lưu/bỏ lưu; BE-021 dùng nguồn trong tổng kết. Schema, index và cấu hình môi trường dùng nền hiện có.
 
+### BE-018 — API tạo lượt, chấm và truy vấn kết quả quiz
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã hoàn thiện toàn diện (B1–B11, C1–C6, Comments 1–5 của Reviewer Ngọc Dung), self-test đạt 100%; sẵn sàng mở PR về `develop` để reviewer rà soát và merge.
+- PR: Chưa có. Nhánh `feature/BE-018-quiz-attempts-and-results` từ `develop@d04579c`.
+- Đã làm:
+  - **Tạo lượt quiz và snapshot câu hỏi (`POST /api/v1/quizzes`, `GET /api/v1/quizzes/:id`)**:
+    - Bắt buộc `Idempotency-Key` (Must fix 1, 07 §2.2): thiếu hoặc sai format trả 422 `VALIDATION_FAILED`. `runIdempotentOperation` ghi receipt nguyên tử vào `operation_receipts`. Cùng key khác payload trả 409 `IDEMPOTENCY_CONFLICT`. Hai request đồng thời cùng key và payload trả 201 với cùng ID và chỉ tạo một receipt. Replay sau khi nộp vẫn trả `QuizPublic` với trạng thái và version hiện tại.
+    - Trả header `Location: /api/v1/quizzes/{id}` cho mã 201 (Must fix 1).
+    - Trả DTO `QuizPublic` chuẩn (Must fix 2, 07 §3): bổ sung `version: 0`, loại bỏ `createdAt` khỏi response data.
+    - Lấy tối đa 5 câu hỏi không trùng lặp từ manifest của `deckVersionId` (nếu ngân hàng rỗng hoặc phiên có deck rỗng trả 409 `QUIZ_UNAVAILABLE`).
+    - Lọc nghiêm ngặt câu hỏi có thể chấm được (`isGradableQuestion` - B4): loại bỏ câu thiếu prompt/explanation, MC có ít hơn 2 options, options trùng ID, `correctOptionId` không thuộc options hoặc text rỗng; SA có `acceptedAnswers` rỗng hoặc chứa chuỗi rỗng/chưa trim.
+    - Sắp xếp tất định theo thứ tự manifest (`orderedDocs` - C1) trước khi lọc và khử trùng theo `contentId`, đảm bảo luôn ưu tiên phiên bản đứng trước trong manifest khi có nhiều version của cùng một câu hỏi.
+    - Đóng băng toàn bộ snapshot câu hỏi/đáp án/giải thích/kiến thức liên quan trong collection `quiz_attempts` ở server, ngăn chặn việc sửa ngân hàng làm đổi đề thi.
+    - Không nhận owner từ body (dùng identity đăng nhập của Learner hoặc Guest).
+    - Kiểm tra quyền truy cập deck cha qua `assertDeckVersionSourceAccess` (B7, C2, C6): deck đang ẩn (`status === 'hidden'`) mà người học không có phiên hay nguồn hợp lệ thì trả 404 `RESOURCE_NOT_FOUND` (chỉ chuyển đổi lỗi `FORBIDDEN` thành 404 để giấu sự tồn tại, giữ nguyên các lỗi 403 khác như `ACCOUNT_LOCKED` - C2). Khi người học có `sourceSessionId` hợp lệ tham gia thì vẫn được tạo lượt quiz bình thường (C6).
+    - Kiểm tra phiên thực hành liên kết (`sourceSessionId`): nếu phiên không khớp `deckVersionId` thì từ chối bằng 422 `VALIDATION_FAILED` (C3).
+    - Kiểm tra quyền khách và CAS version trong transaction (Must fix 3, B6, 06 §11.2): tách `guestAccess` sang shared module `server/modules/learning/guest-write-guard.js`. Kiểm tra trạng thái `active`/`summary`, tính hạn chính xác `min(endedAt + 15m, expiresAt)`. Khách hết hạn trả 410 `GUEST_EXPIRED`, khách chỉ được tạo quiz trên deck của lượt thử (sai deck trả 404 `RESOURCE_NOT_FOUND`), gán TTL `purgeAt` chuẩn xác theo hạn khách, CAS tăng `guest_sessions.version` trong transaction để phát hiện bị thu hồi đồng thời.
+    - Trả projection `QuizPublic` cho các attempt `inProgress`, giấu kín toàn bộ đáp án đúng, danh sách lựa chọn đúng và giải thích trước khi nộp.
+  - **Chấm điểm server-side và ghi kết quả nguyên tử (`POST /api/v1/quizzes/:id/submission`)**:
+    - Bắt buộc `Idempotency-Key` (Must fix 1, 07 §2.2): thiếu key trả 422 `VALIDATION_FAILED`.
+    - Validate nghiêm ngặt `expectedVersion` (B1): kiểm tra `typeof === 'number'`, số nguyên an toàn không âm; từ chối ép kiểu với `null`, `""`, `"0"`, `true`, `-1`, `1.5` bằng 422 `VALIDATION_FAILED`.
+    - Optimistic Concurrency Control (OCC): khi lệch `expectedVersion` trả 409 `VERSION_CONFLICT` kèm `details: { currentVersion }` để client đồng bộ lại.
+    - Validate giới hạn đầu vào (B8): `answers` tối đa 5 phần tử, `text` tối đa 500 ký tự (đo chính xác theo Unicode code points qua `[...item.text].length`), `optionId` tối đa 64 ký tự (trả 422 nếu vượt quá).
+    - Validate đáp án đối chiếu với snapshot của attempt (B2): từ chối câu hỏi lạ, câu hỏi trùng lặp hoặc sai loại đáp án (MC gửi kèm `text`, SA gửi kèm `optionId`, MC `optionId` lạ) bằng 422 `VALIDATION_FAILED` với danh sách `error.details.fields`. Cho phép bỏ trống câu trả lời (không gửi `optionId` lẫn `text` hoặc bỏ qua khỏi mảng) và tính 0 điểm.
+    - Chấm điểm phía server (BR-22): câu bỏ trống tính 0 điểm; câu `shortAnswer` chỉ trim khoảng trắng đầu/cuối rồi so khớp chính xác (case-sensitive) với danh sách `acceptedAnswers` đã đóng băng.
+    - Áp dụng CAS với `expectedVersion` chống ghi đè đồng thời. Transaction nguyên tử kiểm tra `guestAccess` (tăng `guest_sessions.version`), cập nhật kết quả quiz và tăng counter `statistics.submittedQuizCount` (TX-10, 06 §8.5).
+    - Idempotency và replay (B3): Nộp lặp lại với cùng payload trả kết quả đã lưu mà không chấm lại hay tăng counter. Hash payload gồm `expectedVersion` và câu trả lời đã chuẩn hóa. Cùng `Idempotency-Key` nhưng khác payload trả 409 `IDEMPOTENCY_CONFLICT`. Khác key và khác payload trả 409 `QUIZ_ALREADY_SUBMITTED`. `hashAnswers` phân biệt trường vắng với trường chỉ chứa chuỗi rỗng hoặc khoảng trắng.
+    - Trả DTO `QuizResult` chuẩn (Must fix 2, 07 §3): `questions` giữ nguyên cấu trúc sạch giống `QuizPublic`; `answers` chứa danh sách đáp án người học đã nộp; `results` chứa kết quả chấm (`isCorrect`, `points`, `explanation`, `knowledgeVersionIds`; `correctOptionId` chỉ trả cho MC, `acceptedAnswers` chỉ trả cho SA); trả `version` (bỏ `createdAt`). Khớp hoàn toàn giữa response submission và `GET /quizzes/:id`.
+    - Đảm bảo quiz độc lập: không thay đổi tiến độ FSRS (`card_progress`) hay danh sách mục đã lưu (`saved_items`).
+  - **Lịch sử và truy vấn kết quả (`GET /api/v1/me/quizzes`, `GET /api/v1/quizzes/:id`)**:
+    - `GET /quizzes/:id` truy vấn theo `_id` và `ownerKey` (B5): tài nguyên của người khác trả 404 `RESOURCE_NOT_FOUND` (loại bỏ hoàn toàn mã 403 để không rò rỉ sự tồn tại của ID). ID sai định dạng ObjectId trả 400 `MALFORMED_REQUEST`. Trả projection theo trạng thái: `QuizPublic` khi `inProgress`, `QuizResult` khi `submitted`.
+    - `GET /me/quizzes` hỗ trợ phân trang cursor keyset kèm context bảo vệ (Must fix 4): nhúng context `[ownerKey, sourceSessionId ?? null, 'createdAt:desc,_id:desc']` vào cursor. Giải mã lệch context hoặc chuỗi rác ném 400 `INVALID_CURSOR`.
+    - Giới hạn limit tối đa 50 (Should fix 5, 07 §1): `MAX_QUIZ_LIST_LIMIT = 50`. `limit > 50` hoặc `limit < 1` trả 422 `VALIDATION_FAILED` (`INVALID_FIELD`). Chặn query parameters lạ ngoài contract bằng 422 `VALIDATION_FAILED` (`UNRECOGNIZED_FIELD`). `sourceSessionId` sai format trả 400 `MALFORMED_REQUEST`.
+    - Schema subdocument `options` trong snapshot thiết lập `_id: false` (B11) ngăn sinh `_id` rác.
+    - Cập nhật OpenAPI specification `docs/api/openapi.yaml` (Must fix 1, 2, Should fix 5, C4, D1): bổ sung `Idempotency-Key` bắt buộc cho 2 route POST, header `Location` cho 201, `limit` tối đa 50, chuẩn hóa schema `QuizPublic` (thêm `version`, bỏ `createdAt`), `QuizResult` (thêm `version`, `answers`, `results`, bỏ `createdAt`), `QuizResultItem`.
+    - Đối chiếu index và TTL (C5): collection `quiz_attempts` đã được định nghĩa đầy đủ 3 index trong migration `20261103000100-add-design-indexes.js` (`owner_createdAt_id`, `owner_sourceSession`, `purgeAt_ttl`).
+    - Thẩm tra và ghi chú: Bằng chứng sắp xếp tất định C1 nằm ở ca thứ 2 (`[qValidV2, qValidV1]`); C2 (`ACCOUNT_LOCKED` giữ nguyên 403) được thẩm tra qua đọc code.
+  - Sửa sau review (Ngọc Dung & reviewer comments):
+    - Đọc dữ liệu trong transaction snapshot (06 §11.1): truyền `{ session }` vào `findContentVersionById`, `findContentVersionsByIds` và `assertDeckVersionSourceAccess`.
+    - Không tăng version 2 lần ở `createQuiz`: lưu kết quả `guestAccess` từ `authorize` qua biến closure `guestGuard` và tái sử dụng trong `execute`.
+    - Replay nộp bài không ghi: đọc `attempt` trước, nếu đã `submitted` thì gọi `guestAccess(..., write = false)` (vẫn chặn 410 nếu hết hạn nhưng không tăng version).
+    - Thống nhất kiểm tra khách cho các route đọc `getQuiz` và `listQuizzes` qua `guestAccess(..., write = false)`.
+    - Loại bỏ trạng thái chết `'summary'` khỏi điều kiện kiểm tra phiên nguồn (`sessionDoc.status !== 'ended'`).
+    - Bổ sung kiểm thử: thu hồi quyền khách giữa chừng lúc tạo lượt (410, 0 attempt, 0 receipt); thu hồi khách giữa chừng lúc submit (410, attempt inProgress, giữ nguyên version và submittedQuizCount); kiểm tra DB chỉ có 1 attempt và 1 receipt khi tạo quiz đồng thời; từ chối 422 khi `sourceSessionId` active; từ chối 410 khi replay sau khi khách hết hạn; làm lại quiz (retake - FR-QIZ-05, AT-10, BE-030) tạo attempt mới độc lập, giữ nguyên kết quả cũ và không đổi FSRS/saved_items.
+- File liên quan:
+  - `server/modules/quiz/quiz-model.js`
+  - `server/modules/quiz/quiz-repository.js`
+  - `server/modules/quiz/quiz-service.js`
+  - `server/modules/quiz/quiz-router.js`
+  - `server/modules/learning/guest-write-guard.js`
+  - `server/modules/learning/saved-item-service.js`
+  - `docs/api/openapi.yaml`
+  - `tests/server/quiz-service.test.js`
+  - `tests/integration/quiz-api.integration.test.js`
+  - `tests/server/openapi-contract.test.js`
+  - `docs/PROGRESS-TRACKER.md`
+- Kiểm chứng:
+  - `npm run format:check`: Pass 100% (All matched files use Prettier code style).
+  - `npm run lint`: Pass 100% (0 errors, 0 warnings).
+  - `npm run typecheck`: Pass 100% (0 errors trên client, server và root jsconfig).
+  - `npm test`: **450/450 tests pass** trên 32 test suites (bao gồm 20/20 quiz-service unit tests).
+  - `npm run openapi:check`: **11/11 tests pass** (kiểm chứng tag `Quizzes`, security, schemas `QuizPublic`, `QuizResult`, `QuizResultItem`, headers).
+  - `tests/integration/quiz-api.integration.test.js`: **42/42 tests pass** trên môi trường MongoDB 8.2.7 replica set tạm (`MongoMemoryReplSet`); chưa chạy trên cụm MongoDB/Atlas thật.
+  - `npm run test:integration`: **260/260 integration tests pass** trên replica set tạm.
+  - `npm run build`: Pass 100% (client vite production build & server app/index syntax check).
+- Giới hạn và ghi chú PR:
+  - Chưa kiểm chứng integration test trên MongoDB/Atlas thật do phụ thuộc môi trường chạy replica set.
+  - Test thu hồi khách mới chứng minh việc service đọc lại trạng thái khách trong transaction snapshot trước khi ghi; chưa mô phỏng ca thu hồi chen ngang giữa lúc đọc và ghi trong `guestAccess` (phần này được bảo vệ bởi điều kiện CAS `updateOne({ _id, version })`).
+  - Quyết định nghiệp vụ: chỉ phiên thực hành đã kết thúc (`ended`) mới được dùng làm `sourceSessionId`; không trả `createdAt` trong body data theo đúng DTO spec.
+- Tiếp theo: Trình người dùng cho phép commit và push branch `feature/BE-018-quiz-attempts-and-results`, mở PR về `develop` để reviewer Ngọc Dung rà soát.
+
+### BE-007 — Đổi mật khẩu và đặt lại mật khẩu qua Brevo
+
+- Ngày cập nhật: 2026-11-15
+- Trạng thái: Đã hoàn tất sửa review (phương án A dùng `@vercel/functions` `waitUntil`) và kiểm chứng local; chờ commit/push, review PR #40 và xác minh trên Vercel Preview.
+- PR: [PR #40](https://github.com/nqocdungg/chiikaiwa/pull/40), nhánh `feature/BE-007-password-reset` (HEAD local `c874056`, ref `origin/feature/BE-007-password-reset` trước đó ở `30130cb`, chưa push bản sửa mới).
+- Đã làm: Tách việc chờ Brevo khỏi phản hồi HTTP công khai của `POST /api/v1/auth/password-reset-requests` bằng `waitUntil` từ `@vercel/functions@3.11.3`: cả ba nhóm (`active`, không tồn tại, `locked`) đều nhận ngay HTTP `202` với payload trung tính (sau khi kiểm tra cấu hình Brevo chung đầu hàm để vẫn trả `503` nhất quán nếu thiếu cấu hình). Tác vụ hậu xử lý trong `waitUntil` bắt mọi lỗi để không phát sinh unhandled rejection, không log token/link/credentials, và kiểm tra lại nguyên tử `users.status === 'active'` cùng trạng thái token trong `withTransaction` trước khi vô hiệu các token cũ hơn (`issuedVersion`). Giới hạn `BREVO_TIMEOUT_MS` trong `500..20000` ms (mặc định `5000` ms) để vừa ngân sách `maxDuration: 30` trên Vercel.
+- File liên quan: `server/package.json`, `package-lock.json`, `server/config/env.js`, `server/app.js`, `server/modules/identity/auth-router.js`, `server/modules/identity/identity-service.js`, `server/jsconfig.json`, `server/types/ws.d.ts`, `tests/server/env.test.js`, `tests/integration/password-reset.integration.test.js`, `docs/api/openapi.yaml`.
+- Kiểm chứng: `npm run check` pass trên Node `v24.22.2` và `npm@11.21.1`: Prettier format check, ESLint 0 warnings, TypeScript typecheck 0 errors, `324/324` unit/HTTP/component tests (`tests/server/password-reset.test.js` 11/11, `tests/server/env.test.js` 11/11), `197/197` replica-set integration tests (`tests/integration/password-reset.integration.test.js` 21/21, gồm các ca deferred-promise `waitUntil` cho pending `202`, thành công/thất bại hậu phản hồi và race khóa tài khoản khi Brevo đang in-flight), build client và build Storybook pass. `npm run openapi:check` pass (`8/8`).
+- Kịch bản xác minh Vercel Preview: (1) Thiết lập env Preview riêng (`APP_ORIGIN`, `MONGODB_URI`, `MONGODB_DB_NAME` đã có index, `JWT_SECRET`, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME`, `BREVO_TIMEOUT_MS=5000`). (2) Gửi `POST /api/v1/auth/password-reset-requests` với tài khoản test thuộc 3 nhóm (`active`, không tồn tại, `locked`), đối chiếu cả 3 đều trả `202` cùng payload trung tính ngay lập tức và kiểm tra hộp thư test nhận đúng 1 email hợp lệ cho tài khoản `active`. (3) Kiểm tra Vercel Function logs không log token/link/credentials và không có unhandled rejection. (4) Hoàn tất đổi mật khẩu bằng token nhận được qua `POST /api/v1/auth/password-resets` (`204`), xác nhận token không dùng lại được (`400 RESET_TOKEN_INVALID`) và phiên cũ bị thu hồi.
+- Lưu ý/blocker: `waitUntil` không phải durable queue và không tự động retry; nếu Vercel invocation bị ngắt bất thường trước khi tác vụ kết thúc, email có thể không được gửi và token vừa tạo chưa kịp gắn `invalidatedAt` sẽ tự hết hạn sau 15 phút. Bỏ chờ Brevo chỉ loại bỏ chênh lệch độ trễ do upstream Brevo, chưa loại bỏ mọi timing side-channel khác (ví dụ truy vấn/transaction DB cho tài khoản `active`).
+
+### BE-008 — Guard an toàn dùng chung
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã triển khai và hoàn tất `npm run check` trên Node `v24.22.1` (`npm@11.21.1`); chờ LiveKit Cloud thật, CI và review của Yến Nhi.
+- PR: [#45](https://github.com/nqocdungg/chiikaiwa/pull/45), branch `feature/BE-008-shared-safety-guard`; bản sửa review đang ở working tree, chưa commit/push.
+- Đã làm:
+  - Triển khai `assertPairCanEnterSession` tại `server/modules/safety/safety-service.js`: kiểm tra `actor_states` (bận/expectedStates), tự ghép (`IDENTITY_CONFLICT`), chặn hai chiều (`PAIR_BLOCKED`), tài khoản khóa (`ACCOUNT_LOCKED`), khách hết hạn/thu hồi (`GUEST_EXPIRED`), và ghi tăng `actor_states.version` theo thứ tự `actorKey` cố định để tham gia tranh chấp ghi.
+  - Triển khai TX-05 `createPairBlock` và `lockUserAccount` tại `server/modules/safety/safety-service.js`: ghi `blocks` hoặc khóa `users` + tăng `authVersion` + thu hồi `auth_sessions`, đồng thời tranh chấp trên `actor_states`, hủy proposal/invite request/search liên quan (không hủy invitation hoặc request không liên quan khi block một cặp), kết thúc phiên đang hoạt động (`endReason: 'blocked'` / `'account_locked'`, `mediaCleanup.state: 'pending'`) và gọi `finishSessionEffects` sau commit.
+  - Nối mặc định `assertPairCanEnterSession` vào `createApp` tại `server/app.js` và truyền `expectedStates` từ `server/modules/invitations/invitation-service.js` (giữ fail-closed 503 khi guard không được truyền).
+  - Bổ sung `docs/api/openapi.yaml` (thêm response `403` `ACCOUNT_LOCKED`/`FORBIDDEN`/`CSRF_INVALID`, `410` `GUEST_EXPIRED` và mô tả `PAIR_BLOCKED` trong `409 Conflict` cho `POST /invitation-requests/{requestId}/responses`) và test contract tại `tests/server/openapi-contract.test.js`.
+  - Bổ sung `tests/integration/safety-guard.integration.test.js` (8 ca): actor busy/self-pair/block/lock/guest expired, HTTP `POST /api/v1/invitation-requests/:id/responses` (`409 PAIR_BLOCKED`, `403 ACCOUNT_LOCKED`, `410 GUEST_EXPIRED`), DB-T04 (race `respondToInviteRequest` và `assertPairCanEnterSession` trực tiếp với `createPairBlock`/`lockUserAccount`), không hủy tài nguyên không liên quan, thu hồi `inviting`/`searching` + token cũ bị từ chối, retry cleanup LiveKit qua adapter mock + kiểm tra lại sau `sign()`, và rollback transaction.
+- File liên quan: `server/modules/safety/safety-service.js`, `server/app.js`, `server/modules/invitations/invitation-router.js`, `server/modules/invitations/invitation-service.js`, `docs/api/openapi.yaml`, `tests/server/openapi-contract.test.js`, `tests/integration/safety-guard.integration.test.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng: `corepack npm run check` **Pass 100%** trên Node `v24.22.1` + `npm@11.21.1`: `format:check`, `lint` (0 warnings), `typecheck` (0 errors), `npm test` (24 files, 311/311 server+client tests), `npm run test:integration` (16 files, 184/184 tests trên MongoDB 8.2.7 replica set tạm, gồm 8/8 ca BE-008 và 8/8 ca BE-009), `npm run build` và `npm run build-storybook` (cảnh báo chunk lớn, không chặn build). Adapter LiveKit dùng mock; chưa kiểm chứng LiveKit Cloud thật hoặc Atlas.
+- Tiếp theo: Mở PR về `develop`, chạy CI trên Node 24 (`npm run check`, `dependency-audit`, `secret-scan`) và nhờ Yến Nhi review. BE-019 sẽ gắn các REST endpoints chặn/khóa tài khoản vào `createPairBlock`/`lockUserAccount` và bổ sung OpenAPI; BE-009/matching sẽ gọi `assertPairCanEnterSession` khi tạo phiên từ proposal.
+- Lưu ý/blocker: Không sửa thiết kế 01–07, không tự cập nhật Sheets hay đánh dấu Done.
+
+- Sửa review PR #45:
+  - Nhập mã kiểm tra block hai chiều trước khi giữ chỗ hoặc mở lại request; ghi hai `actor_states` theo thứ tự cố định trong cùng transaction để tranh chấp với thao tác block.
+  - Chấp nhận lấy giờ server mới trong mỗi lần execute của transaction; cùng mốc mới được dùng kiểm tra hạn invitation, request và guest. Tham số `now` tường minh vẫn phục vụ fixture thời gian cố định.
+  - Bổ sung 4 ca hồi quy: gửi lại mã với key mới sau block ở cả hai chiều, block commit sau snapshot nhập mã, retry chấp nhận đúng hạn mã. Bốn ca đều fail với invitation service gốc tại `96bd9af`, pass với bản sửa; nhóm safety integration đạt 12/12 trên MongoDB replica set tạm.
+  - Review độc lập bản sửa chưa phát hiện Must fix/Should fix; vẫn cần approval của reviewer PR. Không truy cập được Project Tracker/Task Handoff trên Google Sheets nên chưa xác minh lại phân công/AC trên bảng; không cập nhật bảng.
+  - Kiểm chứng bản sửa trên Node `v24.19.0`, npm `11.21.1`: `npm run check` pass (350 unit/HTTP/component tests, 195 integration tests, build và Storybook); `npm run openapi:check` pass 8/8; `git diff --check` pass. Storybook còn cảnh báo chunk lớn và thời gian plugin, không chặn build. Chưa chạy CI hoặc LiveKit Cloud thật.
+
+### FE-007 — Giao diện kho, nguồn và kiến thức đã lưu
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Đã triển khai SC-11/12; chờ kiểm chứng bản tích hợp và review.
+- PR: Chưa có. Nhánh `feature/FE-007-learning-library` từ `develop@93f1593`.
+- Đã làm: Nối danh sách theo trình độ/cursor, chi tiết học liệu đúng revision, danh sách đã lưu, lưu/bỏ lưu từng mục và hộp thoại nguồn có phân trang. Khách đọc bộ của lượt thử. Lối vào học chuyển phạm vi qua `/study?scope=topic&topicVersionId=…&mode=all`, `/study?scope=saved&mode=all` và `/quiz?deckVersionId=…`.
+- File liên quan: `client/src/features/library/`, `client/src/App.jsx`, `tests/client/library.test.jsx`.
+- Điều hướng: Header mở Kho chủ đề tại `/topics` và Ôn cá nhân tại `/saved`. Ôn cá nhân mở thẳng danh sách Kiến thức đã lưu. Khi danh sách rỗng, người học có thể quay lại Kho chủ đề.
+- Tích hợp: Đồng bộ `develop@7250727`, giữ routing đăng nhập/đăng ký FE-009 cùng bàn giao backend và QA-006. Lỗi mạng/503 khi đọc thông tin nguồn có thông báo và nút thử lại; nguồn 403/404 vẫn hiện với thông báo không khả dụng.
+- Kiểm chứng: `npm ci` và `npm run check` đạt format, lint, typecheck, 438 ca unit/HTTP/component, 217 ca integration trên MongoDB replica set tạm và build Vite. Chín ca FE-007 kiểm bộ lọc, khách, retry ghi, xung đột phiên bản, phân trang nguồn, thử lại lỗi mạng/503 và nguồn 403/404. Edge với dữ liệu thử đã đạt ở 1440×900, 1366×768, 390×844 và 683×384 trong lần triển khai trước; đã kiểm nút nguồn, Escape, trả focus và tràn ngang. Sau đồng bộ QA-006, kiểm lại format/lint/typecheck cho fixture và tài liệu mới.
+- Tiếp theo: Nhờ Minh Xuân review, kiểm phần lưu của AT-08 trên bản tích hợp và nối các lối vào học với FE-017/FE-018. FE-017 chịu trách nhiệm nối chế độ đến hạn qua API study. API catalog hiện chỉ lọc theo trình độ; thao tác lưu cả bộ và CRUD bộ cá nhân thuộc phạm vi khác.
+
+### FE-008 — Giao diện mã mời và khách
+
+- Ngày cập nhật: 2026-11-17
+- Trạng thái: Đã triển khai và tự kiểm chứng; chờ review độc lập và kiểm tra trực quan trên trình duyệt.
+- PR: Chưa có. Nhánh `feature/FE-008-invitation-guest-ui` từ `develop@be51432`.
+- Đã làm: Dùng một `InvitationDialog` với các view state nhập mã, host chờ, host duyệt request, requester chờ và kết thúc. Learner dùng `POST /invitation-requests`, khách dùng `POST /guest-trials`; host tạo/sao chép/hủy mã, accept/reject theo version hiện hành. UI phục hồi luồng qua `/me/coordination`, poll trạng thái không chồng request và chỉ vào `/room/:sessionId` sau xác nhận server.
+- An toàn dữ liệu: Mã theo contract 10 ký tự; hạn hiển thị từ `expiresAt` và `meta.serverTime`. Retry mutation giữ nguyên Idempotency-Key khi kết quả chưa chắc chắn, thao tác mới tạo key mới. Xử lý mã hết hạn/sai, `IDENTITY_CONFLICT`, version conflict, request bị từ chối/hủy và lỗi mạng mà không tự tạo lượt mới.
+- Component dùng chung: Mở rộng `Dialog`, `Input` và `Icon`; thêm `Countdown` dùng chung. CSS dialog cũ bị trùng đã được gỡ. Hình mascot chờ được lấy từ node Figma `108:1877`; cấu trúc dialog đối chiếu các node `108:1641`, `108:1901`, `108:2265`, `108:2093`, còn dữ liệu và luật nghiệp vụ theo contract dự án.
+- File liên quan: `client/src/features/invitation/`, `client/src/components/ui/`, `client/src/App.jsx`, `client/src/features/home/Home.jsx`, `client/src/features/landing/Landing.jsx`, `tests/client/invitation.test.jsx`, `tests/client/routes.test.jsx`.
+- Kiểm chứng: `npm run check` đạt format, lint, typecheck, 456 ca unit/HTTP/component, 230 ca integration trên MongoDB replica set tạm và build Vite. Chín ca FE-008 kiểm learner/guest dùng chung form, tạo mã host, khởi tạo lại đúng khi StrictMode hủy request coordination đầu tiên, giữ đúng create view khi khôi phục coordination lỗi, accept rồi mới điều hướng, retry cùng Idempotency-Key, hủy theo version không tạo mã mới và `IDENTITY_CONFLICT`. `git diff --check` đạt. Chưa chạy kiểm tra trực quan runtime ở các viewport; cần reviewer kiểm tra thêm trước Done.
+- Tiếp theo: Review độc lập theo CONTRIBUTING, kiểm trực quan dialog ở desktop/mobile và xác nhận dependency tích hợp BE-009/BE-015 trước khi ghi Done.
+
 ## Sprint 2
 
 ### BE-022 — Chọn bộ, bốc lá, gợi ý và đồng thuận trong phiên
@@ -230,6 +476,20 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - File liên quan: [Service](../server/modules/sessions/session-card-service.js), [router](../server/modules/sessions/sessions-router.js), [OpenAPI](api/openapi.yaml), [kiểm thử tích hợp](../tests/integration/session-cards-api.test.js).
 - Kiểm chứng: `npm run check` đạt toàn bộ, gồm 312 ca unit/HTTP/component, 185 ca tích hợp, build ứng dụng và Storybook. Chín ca BE-022 dùng MongoDB 8.2.7 replica set tạm, kiểm cạnh tranh claim/draw, vai riêng, retry, hạn chọn bộ, hủy đề nghị khi mất kết nối và lưu kiến thức từ lá vừa bốc qua BE-016. LiveKit dùng mock ở ranh giới gọi dịch vụ. Storybook có cảnh báo kích thước chunk và thời gian plugin.
 - Tiếp theo: Nối phục hồi phiên với BE-017 và chạy nghiệm thu QA-006 trên hai client LiveKit. Đặc tả API §6 chưa liệt kê `scenarioCount`; contract OpenAPI bổ sung trường theo FR-CAR-01.
+
+### QA-006 — Rà soát contract chọn bộ và manifest
+
+- Ngày cập nhật: 2026-11-16
+- Trạng thái: Còn dở (đã hoàn tất đối chiếu và fixtures; chờ quyết định contract Q1–Q4 và reviewer Yến Nhi duyệt, chưa ghi Done)
+- PR: Chưa có; branch `test/QA-006-review-deck-selection-manifest`, base `origin/develop@93f1593` (tại worktree riêng `D:\cn web\worktree-qa006`, giữ nguyên repo `BE-008`).
+- Đã làm:
+  - Đối chiếu contract chọn bộ chủ đề & manifest giữa `02-srs.md` (`FR-CAR-01/02`, `BR-12`), `04-ui-ux-design.md` (`SC-08`, `UF-05`), `06-database-design.md` (`§6.1–6.2`, `§7.1–7.2`, `TX-07`, `§12.1`), `07-api-specification.md` (`§6`, `§7`, `§12`), `docs/api/openapi.yaml` và source trên `origin/develop`.
+  - Lập biên bản đối chiếu chi tiết tại `docs/qa/QA-006-deck-selection-manifest-review.md`, phân loại rõ Q1 (`scenarioCount` — blocker sai khác SRS/UI vs API), Q2a (`level?` filter — đề xuất không blocker), Q2b (điều kiện trạng thái phiên cho `deck-options`), Q3 (khoảng trống mã lỗi `deck-selection` cho bộ `hidden`/`draft`/revision cũ/sai loại theo bảng lỗi hiện có) và Q4 (truy vết `toTopicSummaryDto` — rủi ro phòng thủ cần xác minh, chưa có đường lộ thực tế).
+  - Chuẩn bị bộ fixtures kiểm thử tại `tests/fixtures/deck-selection-fixtures.js` cho các ca `published`, `hidden`, `draft`, `empty`, tách riêng `CONTRACT_DECK_OPTION_PROJECTIONS` (theo `07 §6` hiện hành) và `PROPOSED_DECK_OPTION_EXTENSIONS` (chờ chốt Q1).
+- File liên quan: `docs/qa/QA-006-deck-selection-manifest-review.md`, `tests/fixtures/deck-selection-fixtures.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng: `corepack npm ci` và `corepack npm run check` **Pass 100%** trên `Node v24.22.1` + `npm@11.21.1`: `format:check`, `lint` (0 warnings), `typecheck` (0 errors), `test` (25 files, 349/349), `test:integration` (16 files, 183/183 trên MongoDB replica set tạm), `build` và `build-storybook` (cảnh báo chunk > 500 kB, không chặn build). `git diff --check` không có lỗi whitespace; working tree còn 3 file QA-006 chưa commit.
+- Tiếp theo: Nhờ reviewer Yến Nhi và nhóm chốt các câu hỏi Q1–Q4 (đặc biệt là bổ sung `scenarioCount` vào `07 §6` và `openapi.yaml`), duyệt `tests/fixtures/deck-selection-fixtures.js`, sau đó cập nhật `07-api-specification.md`/`openapi.yaml` theo phạm vi được thống nhất trước khi merge `BE-022`.
+- Lưu ý/blocker: Chưa ghi `Done` vì contract `scenarioCount` trong `GET /sessions/:id/deck-options` còn thiếu ở `07 §6` & `openapi.yaml` và chưa có xác nhận của reviewer. Không tự sửa thiết kế 01–07 hoặc code chức năng.
 
 ## Sprint 3
 

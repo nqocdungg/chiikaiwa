@@ -28,67 +28,15 @@ import { SavedSource } from './saved-item-models.js';
 /** @typedef {{size: number, cursor?: string}} PageInput */
 /** @typedef {{identity: Identity, getIdentity: () => Promise<Identity>, operationId: string}} WriteInput */
 
+import { guestAccess } from './guest-write-guard.js';
+
 const { ObjectId } = mongoose.Types;
-const trialGraceMs = 15 * 60 * 1000;
 
 function notFound() {
   return new AppError({
     status: 404,
     code: 'RESOURCE_NOT_FOUND',
     message: 'Không tìm thấy mục đã lưu hoặc nguồn học liệu.',
-  });
-}
-
-/** @param {Db} db @param {Identity} identity @param {Transaction} [session] @param {boolean} [write] */
-async function guestAccess(db, identity, session, write = false) {
-  if (identity.kind !== 'guest') return null;
-  const guests = db.collection('guest_sessions');
-  const guest = await guests.findOne({ _id: identity.guestId }, { session });
-  if (
-    !guest ||
-    guest.revokedAt ||
-    !['active', 'summary'].includes(guest.status) ||
-    !guest.practiceSessionId
-  ) {
-    throw guestExpired();
-  }
-  const trial = await db.collection('practice_sessions').findOne(
-    {
-      _id: guest.practiceSessionId,
-      'members.actorKey': identity.actorKey,
-    },
-    { session },
-  );
-  if (!trial?.deckVersionId) throw notFound();
-  const endsAt =
-    trial.endedAt instanceof Date
-      ? trial.endedAt.getTime() + trialGraceMs
-      : Infinity;
-  const expires = Math.min(
-    endsAt,
-    guest.expiresAt instanceof Date ? guest.expiresAt.getTime() : Infinity,
-  );
-  if (expires <= Date.now()) throw guestExpired();
-  if (write) {
-    const result = await guests.updateOne(
-      { _id: guest._id, version: guest.version },
-      { $inc: { version: 1 } },
-      { session },
-    );
-    if (!result.matchedCount) throw guestExpired();
-  }
-  return {
-    sessionId: trial._id,
-    deckVersionId: /** @type {ObjectId} */ (trial.deckVersionId),
-    purgeAt: Number.isFinite(expires) ? new Date(expires) : undefined,
-  };
-}
-
-function guestExpired() {
-  return new AppError({
-    status: 410,
-    code: 'GUEST_EXPIRED',
-    message: 'Quyền truy cập tạm của khách đã hết hạn.',
   });
 }
 

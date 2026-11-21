@@ -12,13 +12,16 @@ servers:
     description: Cùng origin với ứng dụng
 
 tags:
+  - name: Auth
   - name: Sessions
   - name: System
+  - name: Profile
   - name: Invitations
   - name: Invitation Requests
   - name: Content Admin
   - name: Learning Content
   - name: Flashcards
+  - name: Quizzes
 
 paths:
   /sessions/{id}:
@@ -47,17 +50,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        '400': &a1
-          description: L?i theo ErrorResponse v? API specification
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '410': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
   /sessions/{id}/leave:
     post:
       tags:
@@ -91,17 +95,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '409': *a1
-        '410': *a1
-        '413': *a1
-        '415': *a1
-        '422': *a1
-        '429': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
   /sessions/{id}/media-token:
     post:
       tags:
@@ -145,17 +160,28 @@ paths:
                         format: date-time
                   meta:
                     $ref: '#/components/schemas/Meta'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '409': *a1
-        '410': *a1
-        '413': *a1
-        '415': *a1
-        '422': *a1
-        '429': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
   /sessions/{id}/deck-options:
     get:
       tags: [Sessions]
@@ -179,13 +205,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionDeckOptionsResponse'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '410': *a1
-        '422': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
 
   /sessions/{id}/deck-selection:
     post:
@@ -209,17 +242,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '409': *a1
-        '410': *a1
-        '413': *a1
-        '415': *a1
-        '422': *a1
-        '429': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
 
   /sessions/{id}/control/claim:
     post:
@@ -243,17 +287,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '409': *a1
-        '410': *a1
-        '413': *a1
-        '415': *a1
-        '422': *a1
-        '429': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
 
   /sessions/{id}/draws:
     post:
@@ -277,17 +332,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '409': *a1
-        '410': *a1
-        '413': *a1
-        '415': *a1
-        '422': *a1
-        '429': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
 
   /sessions/{id}/cards/{cardId}/hints:
     get:
@@ -310,13 +376,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionHintsResponse'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '410': *a1
-        '422': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
 
   /sessions/{id}/actions:
     post:
@@ -340,17 +413,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionActionResponse'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '409': *a1
-        '410': *a1
-        '413': *a1
-        '415': *a1
-        '422': *a1
-        '429': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
 
   /sessions/{id}/actions/{actionId}/responses:
     post:
@@ -378,17 +462,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '409': *a1
-        '410': *a1
-        '413': *a1
-        '415': *a1
-        '422': *a1
-        '429': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
 
   /webhooks/livekit:
     post:
@@ -403,6 +498,9 @@ paths:
         transaction. Sự kiện participant/room_finished của phiên đã biết trả 503
         nếu chưa nối consumer BE-012; không ghi receipt thành công giả.
         Không suy ra presence hoặc bắt đầu phiên từ room_started.
+        Khi đủ hai thành viên trở lại trước hạn phục hồi, chuyển reconnecting
+        về active sau khi kiểm tra quyền; giữ controller, bộ/thẻ/vai và phần
+        thời gian chọn bộ còn lại, không tăng lại số phiên đã bắt đầu.
       security:
         - livekitWebhookSignature: []
       requestBody:
@@ -605,6 +703,7 @@ paths:
       tags: [Invitation Requests]
       operationId: createInvitationRequest
       summary: Người học gửi request bằng mã mời
+      description: Checks two-way pair blocks in the transaction before reserving the requester or reopening a request; returns 409 PAIR_BLOCKED for a blocked pair.
       security:
         - sessionCookie: []
           csrfToken: []
@@ -726,14 +825,227 @@ paths:
                 $ref: '#/components/schemas/InviteRequestResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+
+  /guest-trials:
+    post:
+      tags: [Invitations]
+      operationId: createGuestTrial
+      summary: Tạo lượt thử khách bằng mã mời
+      description: >-
+        Không yêu cầu phiên tài khoản hay cookie khách để gọi lần đầu; nếu đã có
+        `ck_session`, trả 409 `IDENTITY_CONFLICT`. Mã mời sai, hết hạn hoặc đã
+        dùng đều trả 409 `INVITATION_UNAVAILABLE`. Khi tạo mới, server đặt cookie
+        HttpOnly `ck_guest` trong `Set-Cookie`; credential không xuất hiện trong
+        JSON. Retry với cùng cookie khách và cùng `Idempotency-Key` trả request
+        cũ; khác code trả 409 `IDEMPOTENCY_CONFLICT`; key mới khi khách còn giữ
+        lượt trả 409 `ACTOR_BUSY`. Cookie khách không tồn tại hoặc đã thu hồi
+        trả 401 `SESSION_EXPIRED`; hết hạn trả 410 `GUEST_EXPIRED`.
+      security:
+        - csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: '^[A-HJ-NP-Z2-9]{10}$'
+            example:
+              code: ABCD234567
+      responses:
+        '201':
+          description: >-
+            Request đã được tạo hoặc replay. Lượt tạo mới có `guest.status` là
+            `waiting`; replay cùng key có thể trả trạng thái hiện tại của khách.
+          headers:
+            Set-Cookie:
+              description: >-
+                Chỉ có khi tạo khách mới: cookie `ck_guest` HttpOnly, Secure,
+                SameSite=Lax, Path=/, không có Domain.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestTrialResponse'
+        '400':
+          description: Body JSON không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getAuthMe
+      summary: Đọc danh tính tài khoản hoặc khách hiện tại
+      description: >-
+        Không gia hạn hạn dùng thử của khách. Khách `waiting` không có
+        `sessionId`; khách `active`/`summary` trả đúng `sessionId`; `summary` có
+        `expiresAt`. Không trả trường nội bộ như `credentialHash`, `emailKey`
+        hay `authVersion`.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      responses:
+        '200':
+          description: Danh tính hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+
+  /auth/password-change:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Đổi mật khẩu của tài khoản đang hoạt động
+      description: >-
+        Kiểm tra mật khẩu hiện tại, cập nhật passwordHash, tăng authVersion và
+        version, thu hồi mọi phiên đăng nhập cũ và vô hiệu các token đặt lại mật
+        khẩu chưa dùng trong transaction TX-02. Không dùng Idempotency-Key.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '204':
+          description: Đổi mật khẩu thành công và thu hồi mọi phiên đăng nhập cũ
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/password-reset-requests:
+    post:
+      tags: [Auth]
+      operationId: requestPasswordReset
+      summary: Yêu cầu gửi liên kết đặt lại mật khẩu dùng một lần
+      description: >-
+        Tạo token đặt lại mật khẩu hiệu lực 15 phút (chỉ lưu SHA-256 tokenHash)
+        cho tài khoản đang hoạt động trong transaction và đăng ký tác vụ gửi
+        qua Brevo HTTPS API cùng hậu xử lý token qua Vercel waitUntil để không
+        chặn phản hồi HTTP 202 (không phải durable queue và không tự retry khi
+        lượt gửi thất bại). Luôn trả phản hồi 202 trung tính không tiết lộ email
+        có tồn tại hoặc bị khóa hay không, kể cả khi lượt gửi riêng lẻ thất bại
+        sau phản hồi (chỉ trả 503 trước khi tra email theo trạng thái cấu hình
+        dịch vụ chung). Không thay mật khẩu nếu gửi thư thất bại.
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestInput'
+      responses:
+        '202':
+          description: Phản hồi trung tính cho mọi yêu cầu hợp lệ về cú pháp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetRequestResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /auth/password-resets:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Đặt lại mật khẩu bằng liên kết một lần
+      description: >-
+        Tiêu thụ nguyên tử token còn hạn (15 phút, dùng một lần), cập nhật mật
+        khẩu, tăng authVersion, vô hiệu các token reset còn lại và thu hồi mọi
+        phiên đăng nhập cũ trong transaction TX-02. Không tự đăng nhập sau khi
+        đặt lại. Token sai, đã hết hạn hoặc đã dùng đều trả 400
+        RESET_TOKEN_INVALID.
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetInput'
+      responses:
+        '204':
+          description: Đặt lại mật khẩu thành công; không tự đăng nhập
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /admin/content/{id}/publish:
     post:
@@ -1145,6 +1457,69 @@ paths:
         '410': *savedExpired
         '422': *savedInvalid
 
+  /me/profile:
+    patch:
+      tags: [Profile]
+      operationId: updateMyProfile
+      summary: Cập nhật hồ sơ người dùng hiện tại
+      description: >-
+        Cập nhật một phần hồ sơ theo cơ chế CAS (`expectedVersion`) và
+        idempotency (`Idempotency-Key`). Các trường không gửi giữ nguyên; các
+        trường tùy chọn trong `profile` gửi `null` để xóa. Header tùy chọn
+        `X-Expected-Actor` gắn yêu cầu với tài khoản đã mở biểu mẫu; nếu khác
+        phiên đăng nhập hiện tại sẽ trả `409 IDENTITY_CONFLICT` trước khi ghi.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ExpectedActor'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfilePatchRequest'
+      responses:
+        '200':
+          description: Hồ sơ người dùng sau cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfResponse'
+        '400':
+          description: Yêu cầu không hợp lệ (MALFORMED_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Thiếu/sai CSRF hoặc tài khoản bị khóa (CSRF_INVALID, ACCOUNT_LOCKED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          description: Payload vượt giới hạn kích thước (PAYLOAD_TOO_LARGE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Định dạng nén không được hỗ trợ (UNSUPPORTED_MEDIA_TYPE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /study/cards/query:
     post:
       tags: [Flashcards]
@@ -1254,6 +1629,165 @@ paths:
           description: Cấu hình lịch ôn chưa sẵn sàng
           content: *studyError
 
+  /quizzes:
+    post:
+      tags: [Quizzes]
+      operationId: createQuiz
+      summary: Tạo lượt làm quiz
+      description: |
+        Tạo lượt quiz gồm tối đa 5 câu hỏi không trùng từ ngân hàng câu hỏi của bộ chủ đề.
+        Gửi lại cùng khóa và nội dung trả cùng lượt ở dạng QuizPublic với trạng thái và version hiện tại.
+        Đọc kết quả đã nộp qua GET /quizzes/{id}.
+      security: *studySecurity
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuizRequest'
+      responses:
+        '201':
+          description: Lượt quiz mới hoặc lượt đã tạo cho cùng yêu cầu
+          headers:
+            Location:
+              description: URI của lượt quiz
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizPublicResponse'
+        '400':
+          description: Dữ liệu yêu cầu không hợp lệ
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '409':
+          description: Ngân hàng không có câu hỏi khả dụng (QUIZ_UNAVAILABLE) hoặc Idempotency-Key đã dùng với nội dung khác (IDEMPOTENCY_CONFLICT)
+          content: *studyError
+        '410': *studyGone
+        '413': *studyTooLarge
+        '415': *studyUnsupported
+        '422': *studyInvalid
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /quizzes/{id}:
+    get:
+      tags: [Quizzes]
+      operationId: getQuiz
+      summary: Xem chi tiết lượt quiz
+      description: Trả QuizPublic nếu đang làm, hoặc QuizResult nếu đã nộp.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - $ref: '#/components/parameters/QuizId'
+      responses:
+        '200':
+          description: Chi tiết lượt quiz
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/QuizPublicResponse'
+                  - $ref: '#/components/schemas/QuizResultResponse'
+        '400':
+          description: ID không hợp lệ (MALFORMED_REQUEST)
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '410': *studyGone
+
+  /quizzes/{id}/submission:
+    post:
+      tags: [Quizzes]
+      operationId: submitQuiz
+      summary: Nộp bài chấm điểm quiz
+      description: |
+        Chấm điểm phía server, chuyển trạng thái sang submitted và lưu kết quả bất biến.
+        Gửi lại cùng nội dung trả kết quả đã lưu. Dùng lại khóa với expectedVersion hoặc câu trả lời khác trả 409 IDEMPOTENCY_CONFLICT.
+      security: *studySecurity
+      parameters:
+        - $ref: '#/components/parameters/QuizId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitQuizRequest'
+      responses:
+        '200':
+          description: Kết quả chấm quiz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizResultResponse'
+        '400':
+          description: Dữ liệu yêu cầu không hợp lệ
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '409':
+          description: Lượt quiz đã được nộp (QUIZ_ALREADY_SUBMITTED), Idempotency-Key đã dùng với nội dung khác (IDEMPOTENCY_CONFLICT), hoặc xung đột phiên bản (VERSION_CONFLICT)
+          content: *studyError
+        '410': *studyGone
+        '413': *studyTooLarge
+        '415': *studyUnsupported
+        '422': *studyInvalid
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /me/quizzes:
+    get:
+      tags: [Quizzes]
+      operationId: listQuizzes
+      summary: Lấy danh sách lịch sử quiz của người gọi
+      description: Phân trang theo cursor và createdAt giảm dần.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: sourceSessionId
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        '200':
+          description: Danh sách quiz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizListResponse'
+        '400':
+          description: Con trỏ giải mã thất bại (INVALID_CURSOR) hoặc sourceSessionId sai định dạng (MALFORMED_REQUEST)
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '410': *studyGone
+        '422': *studyInvalid
+
 components:
   securitySchemes:
     livekitWebhookSignature:
@@ -1278,6 +1812,12 @@ components:
       description: Phải khớp cookie CSRF và Origin được phép
 
   parameters:
+    QuizId:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
     InvitationId:
       name: invitationId
       in: path
@@ -1304,6 +1844,19 @@ components:
       schema:
         type: string
         format: uuid
+    ExpectedActor:
+      name: X-Expected-Actor
+      in: header
+      required: false
+      description: >-
+        Tùy chọn. Gắn yêu cầu ghi với tài khoản đã mở biểu mẫu, nhận ObjectId
+        24 ký tự hex hoặc chuỗi dạng `user:<ObjectId>`. Khi bỏ qua, server xử lý
+        theo phiên hiện tại. Khi được gửi (kể cả chuỗi rỗng) và khác
+        `identity.userId` hoặc `identity.actorKey` của phiên hiện tại, server từ
+        chối trước khi ghi với `409 IDENTITY_CONFLICT`.
+      schema:
+        type: string
+        pattern: '^(user:)?[0-9a-fA-F]{24}$'
 
   schemas:
     SavedItem:
@@ -1862,6 +2415,66 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
       additionalProperties: false
+    GuestStatus:
+      type: string
+      enum: [waiting, active, summary]
+    GuestProjection:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/GuestStatus'
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+        expiresAt:
+          type: string
+          format: date-time
+    GuestTrial:
+      type: object
+      additionalProperties: false
+      required: [request, guest]
+      properties:
+        request:
+          $ref: '#/components/schemas/InviteRequest'
+        guest:
+          $ref: '#/components/schemas/GuestProjection'
+    GuestTrialResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/GuestTrial'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    AuthMe:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, user]
+          properties:
+            kind:
+              const: user
+            user:
+              $ref: '#/components/schemas/Self'
+        - type: object
+          additionalProperties: false
+          required: [kind, guest]
+          properties:
+            kind:
+              const: guest
+            guest:
+              $ref: '#/components/schemas/GuestProjection'
+    AuthMeResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/AuthMe'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
     Health:
       type: object
       required: [status]
@@ -1878,6 +2491,57 @@ components:
           $ref: '#/components/schemas/Health'
         meta:
           $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    PasswordChangeRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+      additionalProperties: false
+    PasswordResetRequestInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+      additionalProperties: false
+    PasswordResetRequestNotice:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+      additionalProperties: false
+    PasswordResetRequestResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/PasswordResetRequestNotice'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    PasswordResetInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 512
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
       additionalProperties: false
     ContentItem:
       type: object
@@ -2110,10 +2774,359 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
       additionalProperties: false
+    UserProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        level:
+          type: string
+          enum: [N5, N4, N3, N2, N1]
+        nativeLanguageCode:
+          type: string
+        goal:
+          type: string
+          enum:
+            - dailyCommunication
+            - travel
+            - studyAndWork
+            - examPreparation
+            - culturalExchange
+        interests:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items:
+            type: string
+        countryCode:
+          type: string
+        ageGroup:
+          type: string
+          enum: [under18, 18to22, 23to30, over30]
+        gender:
+          type: string
+          enum: [male, female, other]
+    Self:
+      type: object
+      additionalProperties: false
+      required: [id, email, displayName, avatarKey, role, profile, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        avatarKey:
+          type: string
+        role:
+          type: string
+          enum: [learner, admin]
+        profile:
+          $ref: '#/components/schemas/UserProfile'
+        version:
+          type: integer
+          minimum: 0
+    SelfResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Self'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ProfilePatchRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+        displayName:
+          type: string
+        avatarKey:
+          type: string
+        profile:
+          type: object
+          additionalProperties: false
+          properties:
+            level:
+              type: [string, 'null']
+              enum: [N5, N4, N3, N2, N1, null]
+            nativeLanguageCode:
+              type: [string, 'null']
+            goal:
+              type: [string, 'null']
+              enum:
+                - dailyCommunication
+                - travel
+                - studyAndWork
+                - examPreparation
+                - culturalExchange
+                - null
+            interests:
+              type: array
+              maxItems: 3
+              uniqueItems: true
+              items:
+                type: string
+            countryCode:
+              type: [string, 'null']
+            ageGroup:
+              type: [string, 'null']
+              enum: [under18, 18to22, 23to30, over30, null]
+            gender:
+              type: [string, 'null']
+              enum: [male, female, other, null]
+
+    CreateQuizRequest:
+      type: object
+      additionalProperties: false
+      required: [deckVersionId]
+      properties:
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+
+    QuizQuestionPublic:
+      type: object
+      additionalProperties: false
+      required: [questionVersionId, type, prompt]
+      properties:
+        questionVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        type:
+          type: string
+          enum: [multipleChoice, shortAnswer]
+        prompt:
+          type: string
+        options:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, text]
+            properties:
+              id:
+                type: string
+              text:
+                type: string
+
+    QuizPublic:
+      type: object
+      additionalProperties: false
+      required: [id, deckVersionId, status, total, version, questions]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [inProgress, submitted]
+        total:
+          type: integer
+          minimum: 1
+          maximum: 5
+        version:
+          type: integer
+          minimum: 0
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizQuestionPublic'
+
+    QuizPublicResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/QuizPublic'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    QuizResultItem:
+      type: object
+      additionalProperties: false
+      required:
+        [questionVersionId, isCorrect, points, explanation, knowledgeVersionIds]
+      properties:
+        questionVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        isCorrect:
+          type: boolean
+        points:
+          type: integer
+          enum: [0, 1]
+        correctOptionId:
+          type: string
+        acceptedAnswers:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+        knowledgeVersionIds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectId'
+
+    QuizResult:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          deckVersionId,
+          status,
+          total,
+          version,
+          questions,
+          answers,
+          score,
+          submittedAt,
+          results,
+        ]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [submitted]
+        total:
+          type: integer
+          minimum: 1
+          maximum: 5
+        version:
+          type: integer
+          minimum: 1
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizQuestionPublic'
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmitQuizAnswerItem'
+        score:
+          type: integer
+          minimum: 0
+          maximum: 5
+        submittedAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizResultItem'
+
+    QuizResultResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/QuizResult'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SubmitQuizAnswerItem:
+      type: object
+      additionalProperties: false
+      required: [questionVersionId]
+      properties:
+        questionVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        optionId:
+          type: string
+          maxLength: 64
+        text:
+          type: string
+          maxLength: 500
+
+    SubmitQuizRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, answers]
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+        answers:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/SubmitQuizAnswerItem'
+
+    QuizSummaryItem:
+      type: object
+      additionalProperties: false
+      required: [id, deckVersionId, status, total, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [inProgress, submitted]
+        total:
+          type: integer
+        score:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
+
+    QuizListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/QuizSummaryItem'
+            nextCursor:
+              type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
 
   responses:
+    RequestError:
+      description: L?i theo ErrorResponse v? API specification
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     Unauthorized:
       description: Thiếu hoặc không còn phiên xác thực hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Không có quyền, sai CSRF/Origin hoặc tài khoản đã bị khóa (FORBIDDEN, CSRF_INVALID, ACCOUNT_LOCKED)
       content:
         application/json:
           schema:
@@ -2125,7 +3138,16 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: Version conflict, actor busy hoặc invitation không khả dụng
+      description: >-
+        Xung đột trạng thái hoặc danh tính (`VERSION_CONFLICT`,
+        `IDEMPOTENCY_CONFLICT`, `IDENTITY_CONFLICT`, `ACTOR_BUSY`,
+        `INVITATION_UNAVAILABLE`, ...)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: Quyền truy cập tạm của khách đã hết hạn hoặc bị thu hồi (GUEST_EXPIRED)
       content:
         application/json:
           schema:

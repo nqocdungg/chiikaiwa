@@ -7,6 +7,7 @@ import { useState } from 'react';
  * selected?: boolean,
  * className?: string,
  * onClick?: import('react').MouseEventHandler<HTMLButtonElement>,
+ * disabled?: boolean,
  * }} props
  */
 export function Card({
@@ -15,6 +16,7 @@ export function Card({
   selected = false,
   className = '',
   onClick,
+  disabled,
 }) {
   const classes = [
     'ck-card',
@@ -31,6 +33,7 @@ export function Card({
         className={classes}
         aria-pressed={selected}
         onClick={onClick}
+        disabled={disabled}
       >
         {children}
       </button>

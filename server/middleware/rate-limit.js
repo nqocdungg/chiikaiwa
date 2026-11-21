@@ -6,6 +6,9 @@ import { AppError } from './http-error.js';
 
 export const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 export const LOGIN_RATE_LIMIT_MAX = 10;
+export const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+export const PASSWORD_RESET_EMAIL_RATE_LIMIT_MAX = 3;
+export const PASSWORD_RESET_IP_RATE_LIMIT_MAX = 20;
 export const WRITE_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 export const WRITE_RATE_LIMIT_MAX = 120;
 
@@ -182,6 +185,44 @@ export async function enforceLoginRateLimit({
       subjectKey: emailKey,
       limit: LOGIN_RATE_LIMIT_MAX,
       windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+      now,
+    });
+  }
+}
+
+/**
+ * Enforces password reset request rate limits: 20 requests / 15 minutes per IP
+ * and 3 requests / 15 minutes per normalized emailKey hash (applied even when email does not exist, 07 §11).
+ *
+ * @param {Object} params
+ * @param {import('mongoose').mongo.Db} [params.db]
+ * @param {string} params.ip
+ * @param {string} [params.emailKey]
+ * @param {Date} [params.now]
+ */
+export async function enforcePasswordResetRequestRateLimit({
+  db,
+  ip,
+  emailKey,
+  now = new Date(),
+}) {
+  const database = db ?? (await connectDatabase());
+  await consumeRateLimit({
+    db: database,
+    scope: 'password-reset-ip',
+    subjectKey: ip,
+    limit: PASSWORD_RESET_IP_RATE_LIMIT_MAX,
+    windowMs: PASSWORD_RESET_RATE_LIMIT_WINDOW_MS,
+    now,
+  });
+
+  if (emailKey) {
+    await consumeRateLimit({
+      db: database,
+      scope: 'password-reset-email',
+      subjectKey: emailKey,
+      limit: PASSWORD_RESET_EMAIL_RATE_LIMIT_MAX,
+      windowMs: PASSWORD_RESET_RATE_LIMIT_WINDOW_MS,
       now,
     });
   }

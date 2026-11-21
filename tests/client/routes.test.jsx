@@ -46,7 +46,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Phòng mời' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Nhập mã mời' })).toBeVisible();
   });
 
   it('allows anonymous visitor to stay on /invitation after /auth/me returns 401', async () => {
@@ -59,7 +59,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Phòng mời' }),
+      await screen.findByRole('heading', { name: 'Nhập mã mời' }),
     ).toBeVisible();
   });
 
@@ -119,33 +119,40 @@ describe('Route protection, direct URL navigation and refresh', () => {
     ).toBeVisible();
   });
 
-  it('allows admin to access /admin', async () => {
-    vi.spyOn(api, 'get').mockImplementationOnce(async () => ({
-      data: {
-        kind: 'user',
-        user: {
-          id: 'admin1',
-          email: 'admin@test.com',
-          displayName: 'Admin',
-          role: 'admin',
-          status: 'active',
-          version: 1,
+  it.each(['/admin', '/home'])(
+    'shows the admin area to an admin opening %s',
+    async (path) => {
+      vi.spyOn(api, 'get').mockImplementationOnce(async () => ({
+        data: {
+          kind: 'user',
+          user: {
+            id: 'admin1',
+            email: 'admin@test.com',
+            displayName: 'Admin',
+            role: 'admin',
+            status: 'active',
+            version: 1,
+          },
         },
-      },
-      meta: {},
-      epoch: getIdentityEpoch(),
-    }));
+        meta: {},
+        epoch: getIdentityEpoch(),
+      }));
 
-    render(
-      <MemoryRouter initialEntries={['/admin']}>
-        <App />
-      </MemoryRouter>,
-    );
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <App />
+        </MemoryRouter>,
+      );
 
-    expect(
-      await screen.findByRole('heading', { name: 'Khu vực quản trị' }),
-    ).toBeVisible();
-  });
+      expect(
+        await screen.findByRole('heading', { name: 'Khu vực quản trị' }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole('button', { name: 'Tìm bạn luyện nói' }),
+      ).toBeNull();
+      expect(api.get).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('redirects logged-in user away from /login to /home', async () => {
     vi.spyOn(api, 'get').mockImplementationOnce(async () => ({
@@ -223,7 +230,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Phòng mời' }),
+      await screen.findByRole('heading', { name: 'Nhập mã mời' }),
     ).toBeVisible();
   });
 
@@ -253,6 +260,23 @@ describe('Route protection, direct URL navigation and refresh', () => {
         },
         meta: {},
         epoch: getIdentityEpoch(),
+      }))
+      .mockImplementation(async () => ({
+        data: {
+          id: '507f1f77bcf86cd799439011',
+          status: 'active',
+          version: 1,
+          members: [
+            { actorKey: 'user:u1', displayName: 'Test' },
+            { actorKey: 'user:u2', displayName: 'Partner' },
+          ],
+          activeDurationMs: 0,
+          selectionRemainingMs: 60000,
+          slots: [],
+          screenShare: { state: 'idle' },
+        },
+        meta: {},
+        epoch: getIdentityEpoch(),
       }));
 
     render(
@@ -262,7 +286,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Phòng hội thoại' }),
+      await screen.findByRole('heading', { name: 'Sẵn sàng vào phòng?' }),
     ).toBeVisible();
     expect(getSpy).toHaveBeenCalledWith('/sessions/507f1f77bcf86cd799439011');
   });
