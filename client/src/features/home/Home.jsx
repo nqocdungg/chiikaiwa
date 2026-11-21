@@ -1,10 +1,11 @@
 import { Link, useNavigate, useOutletContext } from 'react-router';
 import { Button } from '../../components/ui/controls.jsx';
 import chiikawaPeek from '../../assets/mascots/chiikawa-peek.webp';
-import hachiwareFace from './hachiware-face.webp';
-import usagiFace from './usagi-face.webp';
-import { HomeIcon } from './HomeIcon.jsx';
-import { HomeMascot } from './HomeMascot.jsx';
+import hachiwareFace from '../../assets/mascots/hachiware-face.webp';
+import usagiFace from '../../assets/mascots/usagi-face.webp';
+import { StudyIcon } from '../../components/ui/StudyIcon.jsx';
+import { StudyScene } from '../../components/ui/StudyScene.jsx';
+import '../../components/ui/study-studio.css';
 import './home.css';
 
 const activeFlows = {
@@ -101,7 +102,7 @@ export function Home() {
           </div>
           {resumePath && (
             <Link to={resumePath} className="ck-button ck-button--primary">
-              {activeFlow.action} <HomeIcon name="arrow" />
+              {activeFlow.action} <StudyIcon name="arrow" />
             </Link>
           )}
         </section>
@@ -125,8 +126,8 @@ export function Home() {
               variant="primary"
               size="hero"
               className="ck-home-action ck-home-action--main"
-              leadingIcon={<HomeIcon name="chat" size={28} />}
-              trailingIcon={<HomeIcon name="chevron" size={24} />}
+              leadingIcon={<StudyIcon name="chat" size={28} />}
+              trailingIcon={<StudyIcon name="chevron" size={24} />}
               onClick={() => navigate('/match')}
               disabled={isStartDisabled}
             >
@@ -156,7 +157,7 @@ export function Home() {
                 variant="secondary"
                 size="compact"
                 className="ck-home-action"
-                leadingIcon={<HomeIcon name="invite" />}
+                leadingIcon={<StudyIcon name="invite" />}
                 onClick={() => navigate('/invitation?mode=create')}
                 disabled={isStartDisabled}
               >
@@ -166,7 +167,7 @@ export function Home() {
                 variant="secondary"
                 size="compact"
                 className="ck-home-action"
-                leadingIcon={<HomeIcon name="join" />}
+                leadingIcon={<StudyIcon name="join" />}
                 onClick={() => navigate('/invitation?mode=join')}
                 disabled={isStartDisabled}
               >
@@ -175,7 +176,7 @@ export function Home() {
             </div>
           </div>
         </div>
-        <HomeMascot />
+        <StudyScene />
       </section>
 
       <nav className="ck-home-study" aria-label="Lối tắt học tập">
@@ -197,7 +198,7 @@ export function Home() {
               Chọn tình huống để luyện nói.
             </span>
           </span>
-          <HomeIcon name="chevron" size={22} />
+          <StudyIcon name="chevron" size={22} />
         </Link>
         <Link
           to="/saved"
@@ -217,7 +218,7 @@ export function Home() {
               Ôn lại các câu đã lưu.
             </span>
           </span>
-          <HomeIcon name="chevron" size={22} />
+          <StudyIcon name="chevron" size={22} />
         </Link>
       </nav>
     </div>

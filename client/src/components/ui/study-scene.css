@@ -34,36 +34,39 @@
 .ck-home-greeting {
   position: absolute;
   z-index: 1;
+  isolation: isolate;
   inset-block-start: 1%;
   inset-inline-start: 35%;
   display: grid;
   align-content: center;
   justify-items: center;
   width: max(28%, 7.6rem);
-  min-height: 23%;
-  padding: 0.4rem;
-  border: 2px solid var(--home-outline);
-  border-radius: 48% 50% 46% 47%;
-  background: #fffaf7;
-  box-shadow: 0 4px 7px #7842581c;
+  min-height: 25%;
+  padding: 0.52rem 0.65rem 0.76rem;
   text-align: center;
   line-height: 1.18;
-  transform: rotate(-4deg);
+  transform: rotate(-2deg);
   pointer-events: none;
 }
 
-.ck-home-greeting::after {
+.ck-home-greeting__outline {
   position: absolute;
-  inset-inline-start: 31%;
-  inset-block-end: -0.4rem;
-  width: 0.7rem;
-  height: 0.7rem;
-  border-right: 2px solid var(--home-outline);
-  border-bottom: 2px solid var(--home-outline);
-  border-end-end-radius: 2px;
-  background: #fffaf7;
-  transform: skew(10deg) rotate(45deg);
-  content: '';
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 3px 5px #7842581c);
+}
+
+.ck-home-greeting__outline path {
+  fill: #fffaf7;
+  stroke: #ce7fa0;
+  stroke-width: 1.3;
+  stroke-dasharray: 5 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
 .ck-home-greeting strong {

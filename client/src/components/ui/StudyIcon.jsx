@@ -1,5 +1,5 @@
 /** @param {{name: 'chat' | 'invite' | 'join' | 'arrow' | 'chevron', size?: number}} props */
-export function HomeIcon({ name, size = 22 }) {
+export function StudyIcon({ name, size = 22 }) {
   const stickers = {
     chat: (
       <>
