@@ -80,7 +80,7 @@
 .ck-home-start {
   position: relative;
   max-width: 100%;
-  margin-block: 1.85rem 0.45rem;
+  margin-block: 1.85rem 0.2rem;
 }
 
 .ck-home-start-mascot {
@@ -111,9 +111,30 @@
   font-size: var(--font-size-caption);
 }
 
+.ck-home-invite-group {
+  display: grid;
+  max-width: 100%;
+  gap: 0.55rem;
+}
+
 .ck-home-invite-group > p {
-  margin-block-end: 0.4rem;
-  font-size: clamp(0.88rem, 1.35vw, 1.08rem);
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  color: #795065;
+  font-size: var(--font-size-label);
+  font-weight: 750;
+  line-height: var(--line-height-label);
+  text-align: center;
+}
+
+.ck-home-invite-group > p::before,
+.ck-home-invite-group > p::after {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+  content: '';
 }
 
 .ck-home-invites {

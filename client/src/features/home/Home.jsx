@@ -145,8 +145,12 @@ export function Home() {
               </p>
             )}
           </div>
-          <div className="ck-home-invite-group">
-            <p>Đã có bạn luyện cùng?</p>
+          <div
+            className="ck-home-invite-group"
+            role="group"
+            aria-labelledby="ck-home-invite-label"
+          >
+            <p id="ck-home-invite-label">Luyện cùng bạn bè</p>
             <div className="ck-home-invites">
               <Button
                 variant="secondary"
