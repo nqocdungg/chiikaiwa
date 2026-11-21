@@ -323,19 +323,26 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ### DATA-003 — Biên soạn dữ liệu seed tình huống và quiz N3
 
-- Ngày cập nhật: 2026-11-16
-- Trạng thái: Còn dở (đã biên soạn bản nháp N3 và kiểm chứng tự động; chờ Yến Nhi review tiếng Nhật trước khi mở PR/publish)
-- PR: Chưa có; branch `feature/DATA-003-seed-n3-content` (tách từ `origin/develop@93f1593`), chưa commit/push.
+- Ngày cập nhật: 2026-11-21
+- Trạng thái: Đang sửa theo review PR #51 (bản nháp N3 đã xử lý M1/M2/S1–S4 của `tyn275` và 2 inline review comments của `nt-thuyr`, đã kiểm chứng tự động; chờ Yến Nhi / `tyn275` và `nt-thuyr` review lại tiếng Nhật theo PB-31 AC3 trước khi merge/publish)
+- PR: #51 (`feature/DATA-003-seed-n3-content` → `develop`; lưu ý nhánh đang có conflict tại `docs/PROGRESS-TRACKER.md` với `origin/develop`, cần merge `origin/develop` khi tích hợp)
 - Đã làm:
   - Biên soạn bộ dữ liệu seed N3 nháp tại `server/persistence/seed/n3-content.js` theo Database Design §7.1–§7.2 và checklist PB-31 (giữ tách biệt khỏi luồng seed mặc định `seed-content.js` để chờ review):
     - 01 bộ chủ đề Deck N3: `Giao tiếp Đời sống & Công sở Trung cấp` (`topicKey: daily_work_and_life_n3`, `level: N3`).
     - 05 tình huống N3: nhờ đồng nghiệp kiểm tra tài liệu trước giờ họp; gọi điện xin đổi lịch hẹn khám nha khoa; liên hệ cửa hàng xử lý sản phẩm giao bị hỏng; thảo luận lịch trình và góp ý kế hoạch dã ngoại cuối tuần; nhắn tin/gọi điện xin nghỉ ốm và bàn giao việc trong ngày. Mỗi tình huống có `context`, `objective`, `roleA`/`roleB` phân biệt, `hints`, `knowledgeVersionIds` và 3 `questionVersionIds`.
     - 10 mục kiến thức N3: 05 ngữ pháp (`〜ようにしている`, `〜てしまう`, `〜てある`, `〜ことにする`, `〜場合`) và 05 từ vựng (`確認`, `都合`, `交換`, `予定`, `連絡`) kèm `reading`, `meaning` tiếng Việt và `examples` song ngữ Nhật–Việt.
     - 15 câu hỏi quiz N3 (3 câu/tình huống; kết hợp `multipleChoice` và `shortAnswer`), có đáp án đúng, giải thích tiếng Việt và `knowledgeVersionIds`.
-  - Bổ sung `tests/server/content-seed-n3.test.js` (6 ca) kiểm tra `validateSeedDataset`, ngưỡng PB-31, `reading` bắt buộc, phân biệt `roleA`/`roleB`, không có bản ghi mồ côi khỏi manifest/tình huống, tính rõ ràng của đáp án và không trùng ID/`topicKey` với `sampleDataset` và `n1Dataset`.
+  - Xử lý toàn bộ review PR #51 (`tyn275` và `nt-thuyr`):
+    - M1 (`tyn275`) & inline Must fix (`nt-thuyr`, `b010`): thay distractor `行くことになりました` bằng `行くはずでした` để chỉ còn đúng một đáp án (`〜ことにしました`) trong ngữ cảnh nhóm bàn bạc quyết định; cập nhật giải thích theo từng lựa chọn, không khẳng định tuyệt đối `ことになる` chỉ dùng cho quyết định từ bên ngoài.
+    - M2 (`tyn275`, `tests/server/content-seed-n3.test.js`): đổi tên test so chuỗi về đúng phạm vi kiểm tra không trùng nội dung lựa chọn/đáp án và liên kết kiến thức; ghi rõ tính duy nhất về ngữ nghĩa của đáp án cần người review tiếng Nhật xác nhận theo PB-31 AC3.
+    - S1 (`tyn275`): phân bố lại vị trí đáp án đúng của 10 câu `multipleChoice` trong `n3-content.js` qua cả 3 vị trí (3 câu vị trí 0 / `opt_1`, 4 câu vị trí 1 / `opt_2`, 3 câu vị trí 2 / `opt_3`), bảo toàn liên kết `correctOptionId`, và thêm test chặn tập trung một vị trí đồng thời không để một vị trí chiếm quá 50%.
+    - S2 (`tyn275`): bổ sung hint tự nhiên dùng đúng kiến thức tham chiếu cho `c002` (`都合` / `a104`), `c003` (`〜てある` / `a105`) và `c005` (`連絡` / `a110`).
+    - S3 (`tyn275`, `c001`): thay hint 2 (`13時半までに終わらせるようにしています`) bằng câu dùng `〜ようにしている` cho thói quen thường xuyên và tách yêu cầu mốc 13:30 thành hint riêng.
+    - S4 (`tyn275`) & inline Should fix (`nt-thuyr`, `b004`): thay `できておき` và `できてみせ` bằng dạng ngữ pháp thật nhưng sai ngữ cảnh (`できておいて`, `できてみて`), đồng thời sửa giải thích tên dạng chia của `〜てしまい` từ "thể て" thành dạng liên dụng dùng để nối câu trang trọng (thể て tương ứng là `〜てしまって`) kèm lý do loại từng lựa chọn.
+  - Bổ sung `tests/server/content-seed-n3.test.js` (7 ca) kiểm tra `validateSeedDataset`, ngưỡng PB-31, `reading` bắt buộc, phân biệt `roleA`/`roleB`, không có bản ghi mồ côi khỏi manifest/tình huống, không trùng nội dung lựa chọn/đáp án, phân bố vị trí đáp án đúng và không trùng ID/`topicKey` với `sampleDataset` và `n1Dataset`.
 - File liên quan: `server/persistence/seed/n3-content.js`, `tests/server/content-seed-n3.test.js`, `docs/PROGRESS-TRACKER.md`.
-- Kiểm chứng: `npm run check` pass 100% trên Node `v24.22.2` + `npm@11.21.1` (`format:check`, `lint` 0 warnings, `typecheck` 0 errors, `npm test` 26 files / 355 tests gồm 6/6 ca `content-seed-n3.test.js`, `npm run test:integration` 16 files / 183 tests trên MongoDB replica set tạm, `npm run build`, `npm run build-storybook`). Chưa review chéo tiếng Nhật; kiểm tra tự động không thay thế review chuyên môn.
-- Tiếp theo: Yến Nhi review tiếng Nhật, nghĩa, ví dụ và đáp án từng record; sửa phản hồi nếu có rồi mới mở PR về `develop` và đưa vào luồng seed/publish sau khi đạt review.
+- Kiểm chứng: Trên Node `v24.22.2` + `npm@11.21.1` (sau `npm ci`): `prettier --check` trên 3 file thay đổi pass; `eslint --max-warnings=0` trên 2 file JS thay đổi pass; `npm run typecheck` pass (0 lỗi); `npm test` pass 32 files / 436 tests (gồm 7/7 ca `tests/server/content-seed-n3.test.js`); `npm run test:integration` pass 18 files / 217 tests trên MongoDB replica set tạm; `npm run build` pass. Lưu ý: `npm run format:check` và `npm run lint` toàn repo hiện bị chặn tại local do thư mục untracked `storybook-static/` còn sót từ trước khi `develop` gỡ Storybook (không tự xóa file untracked). Chưa review chéo lại tiếng Nhật; kiểm tra tự động (bao gồm test so chuỗi không trùng) không thay thế xác nhận tính duy nhất về ngữ nghĩa theo PB-31 AC3.
+- Tiếp theo: Người review tiếng Nhật (`tyn275` / Yến Nhi) xác nhận lại ngữ nghĩa, tính duy nhất của đáp án (PB-31 AC3), ví dụ và hints sau bản sửa PR #51 trước khi merge và đưa vào luồng seed/publish.
 - Lưu ý/blocker: Task Handoff DATA-003 có mục `Deliverables` ghi `Nội dung N3/N2 để review` không thống nhất với tên task/Objective/AC N3 (N2 thuộc DATA-008); chỉ biên soạn phần N3 theo đúng phạm vi DATA-003. Không tự commit/push, sửa Tracker online hay đánh dấu Done.
 
 ## Sprint 3

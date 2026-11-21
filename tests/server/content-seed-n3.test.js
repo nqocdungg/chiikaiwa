@@ -46,7 +46,7 @@ describe('DATA-003: N3 Learning Material Seed Dataset (PB-31)', () => {
     }
   });
 
-  it('ensures quiz choices and short answers are unambiguous and linked to knowledge items', () => {
+  it('ensures quiz options and acceptedAnswers have no duplicate text and link to knowledge items', () => {
     for (const question of n3Dataset.questions) {
       expect(Array.isArray(question.knowledgeVersionIds)).toBe(true);
       expect(question.knowledgeVersionIds.length).toBeGreaterThanOrEqual(1);
@@ -61,6 +61,30 @@ describe('DATA-003: N3 Learning Material Seed Dataset (PB-31)', () => {
         expect(new Set(normalizedAnswers).size).toBe(normalizedAnswers.length);
       }
     }
+  });
+
+  it('distributes multiple-choice correct answers across multiple option array positions', () => {
+    const mcQuestions = n3Dataset.questions.filter(
+      (question) => question.type === 'multipleChoice',
+    );
+    expect(mcQuestions.length).toBeGreaterThan(1);
+
+    /** @type {Map<number, number>} */
+    const positionCounts = new Map();
+    for (const question of mcQuestions) {
+      const options = question.options ?? [];
+      const index = options.findIndex(
+        (opt) => opt.id === question.correctOptionId,
+      );
+      expect(index).toBeGreaterThanOrEqual(0);
+      positionCounts.set(index, (positionCounts.get(index) ?? 0) + 1);
+    }
+
+    expect(positionCounts.size).toBeGreaterThan(1);
+    const maxPositionCount = Math.max(...positionCounts.values());
+    expect(maxPositionCount).toBeLessThanOrEqual(
+      Math.ceil(mcQuestions.length / 2),
+    );
   });
 
   it('has no orphan scenarios, questions, or knowledges unreferenced by scenarios or deck manifest', () => {

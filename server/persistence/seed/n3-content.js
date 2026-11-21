@@ -226,11 +226,11 @@ export const n3Dataset = {
       prompt:
         "Từ vựng nào phù hợp nhất để điền vào chỗ trống trong câu: '数値に間違いがないか、もう一度（　）していただけますか。'?",
       options: [
-        { id: 'opt_1', text: '確認（かくにん）' },
-        { id: 'opt_2', text: '期待（きたい）' },
+        { id: 'opt_1', text: '期待（きたい）' },
+        { id: 'opt_2', text: '確認（かくにん）' },
         { id: 'opt_3', text: '発見（はっけん）' },
       ],
-      correctOptionId: 'opt_1',
+      correctOptionId: 'opt_2',
       explanation:
         "'確認（かくにん）' nghĩa là xác nhận, kiểm tra lại. '期待' là kỳ vọng, '発見' là phát hiện.",
       knowledgeVersionIds: ['67230000000000000000a102'],
@@ -261,20 +261,20 @@ export const n3Dataset = {
       options: [
         {
           id: 'opt_1',
-          text: '急用ができてしまい、土曜日に伺えなくなりました。',
+          text: '急用ができておいて、土曜日に伺えなくなりました。',
         },
         {
           id: 'opt_2',
-          text: '急用ができておき、土曜日に伺えなくなりました。',
+          text: '急用ができてみて、土曜日に伺えなくなりました。',
         },
         {
           id: 'opt_3',
-          text: '急用ができてみせ、土曜日に伺えなくなりました。',
+          text: '急用ができてしまい、土曜日に伺えなくなりました。',
         },
       ],
-      correctOptionId: 'opt_1',
+      correctOptionId: 'opt_3',
       explanation:
-        "'〜てしまう' (ở đây chia thể て là '〜てしまい') diễn tả sự việc xảy ra ngoài ý muốn kèm cảm giác tiếc nuối hoặc áy náy.",
+        "'〜てしまう' (ở đây dùng dạng liên dụng '〜てしまい' để nối câu trang trọng; thể て tương ứng là '〜てしまって') diễn tả sự việc xảy ra ngoài ý muốn kèm cảm giác tiếc nuối hoặc áy náy khi xin lỗi. '〜ておいて' (thể て của '〜ておく') mang nghĩa làm sẵn có chủ đích, còn '〜てみて' (thể て của '〜てみる') mang nghĩa thử làm xem sao, đều không phù hợp với việc đột xuất ngoài ý muốn.",
       knowledgeVersionIds: ['67230000000000000000a103'],
     },
     {
@@ -286,14 +286,14 @@ export const n3Dataset = {
       prompt:
         "Trong hội thoại sắp xếp lịch hẹn, cụm từ 'ご都合はいかがでしょうか' có nghĩa là gì?",
       options: [
+        { id: 'opt_1', text: 'Sức khỏe của anh/chị dạo này thế nào ạ?' },
         {
-          id: 'opt_1',
+          id: 'opt_2',
           text: 'Lịch trình / thời gian của anh/chị có thuận tiện không ạ?',
         },
-        { id: 'opt_2', text: 'Sức khỏe của anh/chị dạo này thế nào ạ?' },
         { id: 'opt_3', text: 'Địa chỉ nhà của anh/chị ở đâu ạ?' },
       ],
-      correctOptionId: 'opt_1',
+      correctOptionId: 'opt_2',
       explanation:
         "'ご都合（つごう）' là cách nói lịch sự hỏi về sự thuận tiện về mặt thời gian hoặc hoàn cảnh của đối phương.",
       knowledgeVersionIds: ['67230000000000000000a104'],
@@ -348,11 +348,11 @@ export const n3Dataset = {
       prompt:
         'Khi muốn yêu cầu đổi sản phẩm bị lỗi lấy sản phẩm mới, từ nào sau đây phù hợp nhất?',
       options: [
-        { id: 'opt_1', text: '交換（こうかん）' },
-        { id: 'opt_2', text: '紹介（しょうかい）' },
-        { id: 'opt_3', text: '説明（せつめい）' },
+        { id: 'opt_1', text: '紹介（しょうかい）' },
+        { id: 'opt_2', text: '説明（せつめい）' },
+        { id: 'opt_3', text: '交換（こうかん）' },
       ],
-      correctOptionId: 'opt_1',
+      correctOptionId: 'opt_3',
       explanation:
         "'交換（こうかん）' là đổi (đổi hàng, đổi chỗ). '紹介' là giới thiệu, '説明' là giải thích.",
       knowledgeVersionIds: ['67230000000000000000a106'],
@@ -382,20 +382,20 @@ export const n3Dataset = {
       options: [
         {
           id: 'opt_1',
-          text: '駅の近くで昼ご飯を食べてから行くことにしました。',
+          text: '駅の近くで昼ご飯を食べてから行くはずでした。',
         },
         {
           id: 'opt_2',
-          text: '駅の近くで昼ご飯を食べてから行くことになりました。',
+          text: '駅の近くで昼ご飯を食べてから行くことにしました。',
         },
         {
           id: 'opt_3',
           text: '駅の近くで昼ご飯を食べてから行くところでした。',
         },
       ],
-      correctOptionId: 'opt_1',
+      correctOptionId: 'opt_2',
       explanation:
-        "'〜ことにする' thể hiện quyết định chủ động của người nói hoặc nhóm. '〜ことになる' mang nghĩa kết quả được quyết định từ bên ngoài hoặc quy định.",
+        "'〜ことにする' thể hiện quyết định chủ động của người nói hoặc nhóm sau khi cân nhắc/bàn bạc. '〜はずでした' diễn tả dự đoán trong quá khứ nhưng thực tế không như vậy ('lẽ ra đã...'), còn '〜ところでした' diễn tả sự việc suýt nữa thì xảy ra hoặc vừa đúng lúc sắp làm.",
       knowledgeVersionIds: ['67230000000000000000a107'],
     },
     {
@@ -441,18 +441,18 @@ export const n3Dataset = {
       options: [
         {
           id: 'opt_1',
-          text: 'メールで連絡が取れない場合は、電話をしてください。',
-        },
-        {
-          id: 'opt_2',
           text: 'メールで連絡が取れないおかげで、電話をしてください。',
         },
         {
-          id: 'opt_3',
+          id: 'opt_2',
           text: 'メールで連絡が取れないせいで、電話をしてください。',
         },
+        {
+          id: 'opt_3',
+          text: 'メールで連絡が取れない場合は、電話をしてください。',
+        },
       ],
-      correctOptionId: 'opt_1',
+      correctOptionId: 'opt_3',
       explanation:
         "'〜場合は' dùng để giả định một tình huống có thể xảy ra ('trong trường hợp...'). '〜おかげで' là nhờ vào, '〜せいで' là tại vì.",
       knowledgeVersionIds: ['67230000000000000000a109'],
@@ -466,11 +466,11 @@ export const n3Dataset = {
       prompt:
         "Khi muốn nói 'Tôi xin lỗi vì đã liên lạc gấp vào buổi sáng', từ nào điền vào chỗ trống là tự nhiên nhất: '朝早くに急な（　）をしてしまい、申し訳ありません。'?",
       options: [
-        { id: 'opt_1', text: '連絡（れんらく）' },
-        { id: 'opt_2', text: '練習（れんしゅう）' },
+        { id: 'opt_1', text: '練習（れんしゅう）' },
+        { id: 'opt_2', text: '連絡（れんらく）' },
         { id: 'opt_3', text: '連続（れんぞく）' },
       ],
-      correctOptionId: 'opt_1',
+      correctOptionId: 'opt_2',
       explanation:
         "'連絡（れんらく）' là liên lạc, thông báo. '練習' là luyện tập, '連続' là liên tục.",
       knowledgeVersionIds: ['67230000000000000000a110'],
@@ -505,7 +505,8 @@ export const n3Dataset = {
         'Đồng nghiệp (Senpai): Đang bận xử lý việc riêng nhưng sẵn sàng hỗ trợ nếu chỉ xem phần tóm tắt chính, đồng thời gợi ý cách chỉnh sửa câu văn tự nhiên hơn.',
       hints: [
         'お忙しいところ申し訳ありませんが、資料をご確認いただけないでしょうか (Xin lỗi đã làm phiền lúc anh/chị đang bận, anh/chị có thể xem giúp em tài liệu được không ạ?)',
-        '13時半までに終わらせるようにしています (Em đang cố gắng hoàn thành trước 13 giờ 30 ạ)',
+        '大切な会議の前には、いつも事前にチェックしてもらうようにしています (Trước những cuộc họp quan trọng, em luôn cố gắng nhờ kiểm tra trước ạ)',
+        '13時半までにお返事をいただけますと助かります (Nếu anh/chị có thể phản hồi giúp em trước 13 giờ 30 thì tốt quá ạ)',
         '全体を見る時間はないので、結論の部分だけ確認しましょうか (Vì không có thời gian xem toàn bộ, mình kiểm tra phần kết luận thôi nhé?)',
       ],
       knowledgeVersionIds: [
@@ -535,6 +536,7 @@ export const n3Dataset = {
       hints: [
         '予約を変更していただきたいのですが、よろしいでしょうか (Tôi muốn xin đổi lịch hẹn, có được không ạ?)',
         '急な用事ができてしまい、伺えなくなりました (Vì có việc đột xuất nên tôi không thể đến được ạ)',
+        '来週でしたら、水曜日の午後が都合がいいのですが、いかがでしょうか (Nếu là tuần sau thì chiều thứ Tư tôi thuận tiện, không biết có được không ạ?)',
         '来週の水曜日の午後3時でしたら、空きがございます (Nếu là 3 giờ chiều thứ Tư tuần sau thì phòng khám còn trống ạ)',
       ],
       knowledgeVersionIds: [
@@ -564,6 +566,7 @@ export const n3Dataset = {
       hints: [
         '届いた商品のふたが割れていたのですが (Nắp của sản phẩm mới giao đến bị nứt ạ)',
         '別の新しいものと交換していただけますか (Anh/chị có thể đổi cho tôi sang một chiếc mới khác được không ạ?)',
+        '箱の中に返送用の伝票が入れてありますので、そちらをご利用ください (Trong hộp đã có đặt sẵn phiếu gửi trả hàng rồi, xin quý khách hãy sử dụng phiếu đó)',
         'ご迷惑をおかけして申し訳ございません。すぐに代替品を手配いたします (Xin lỗi quý khách vì sự phiền toái. Chúng tôi sẽ sắp xếp hàng thay thế ngay lập tức)',
       ],
       knowledgeVersionIds: [
@@ -620,6 +623,7 @@ export const n3Dataset = {
       roleB:
         'Trưởng nhóm: Hỏi thăm tình trạng sức khỏe, đồng ý cho nghỉ ngơi, xác nhận sẽ tiếp nhận đầu việc bàn giao và nhắc nhân viên đi khám nếu chưa đỡ.',
       hints: [
+        '朝早くに急な連絡をしてしまい、申し訳ありません (Em xin lỗi vì đã liên lạc gấp vào sáng sớm ạ)',
         '朝から熱があるため、本日お休みをいただいてもよろしいでしょうか (Vì từ sáng em bị sốt nên hôm nay cho phép em xin nghỉ có được không ạ?)',
         'B社からのメールが届いた場合は、田中さんに対応をお願いできますか (Trong trường hợp có email từ công ty B gửi tới, anh/chị có thể nhờ anh Tanaka xử lý giúp được không ạ?)',
         '仕事のことは心配しないで、今日はゆっくり休んでください (Đừng lo về công việc, hôm nay hãy nghỉ ngơi cho khỏe nhé)',
