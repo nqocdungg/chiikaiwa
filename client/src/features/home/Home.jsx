@@ -126,7 +126,7 @@ export function Home() {
               size="hero"
               className="ck-home-action ck-home-action--main"
               leadingIcon={<HomeIcon name="chat" size={28} />}
-              trailingIcon={<HomeIcon name="arrow" size={30} />}
+              trailingIcon={<HomeIcon name="chevron" size={24} />}
               onClick={() => navigate('/match')}
               disabled={isStartDisabled}
             >
@@ -161,7 +161,7 @@ export function Home() {
               <Button
                 variant="secondary"
                 size="compact"
-                className="ck-home-action ck-home-action--join"
+                className="ck-home-action"
                 leadingIcon={<HomeIcon name="join" />}
                 onClick={() => navigate('/invitation?mode=join')}
                 disabled={isStartDisabled}

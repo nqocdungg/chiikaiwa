@@ -123,50 +123,50 @@
 }
 
 .ck-home-studio .ck-home-action {
-  --home-edge: #edb1c8;
-  --home-light: #fff4f8;
-  --home-face: #ffdaea;
-  --home-hover: #ffd0e5;
-  --button-secondary-text: var(--home-ink);
-  --button-primary-text: var(--home-ink);
-  min-height: 2.75rem;
-  border: 1px solid var(--home-edge);
-  border-radius: 0.95rem;
+  --sticker-face: #fff4e9;
+  --sticker-press: #f9a1bb;
+  --sticker-hover-edge: #be6984;
+  --sticker-hover: #fddde6;
+  --sticker-rim: #fffdf7;
+  --sticker-edge: #b47d67;
+  --sticker-depth: #dbab91;
+  --button-secondary-text: #492337;
+  min-height: var(--control-height-compact);
+  border: 2px solid var(--sticker-rim);
+  border-radius: var(--radius-pill);
   padding-inline: clamp(0.85rem, 1.45vw, 1.25rem);
-  background: linear-gradient(158deg, var(--home-light), var(--home-face));
+  background: var(--sticker-face);
   box-shadow:
-    inset 0 1px 1px #fff9,
-    0 4px 9px #89335420;
+    inset 0 -2px 0 #fff8,
+    0 0 0 1px var(--sticker-edge),
+    0 4px 0 1px var(--sticker-depth);
   font-weight: 800 !important;
   transition:
     transform 220ms var(--home-spring),
-    box-shadow 170ms ease;
-}
-
-.ck-home-studio .ck-home-action--join {
-  --home-edge: #e5bd75;
-  --home-light: #fff8e3;
-  --home-face: #ffe8ad;
-  --home-hover: #ffe09a;
+    box-shadow 135ms ease,
+    background-color 135ms ease;
 }
 
 .ck-home-studio .ck-home-action--main {
-  --home-edge: #e4789b;
-  --home-light: #ffd0e1;
-  --home-face: #ff9cba;
-  --home-hover: #ff91b4;
-  width: clamp(17rem, 27.2vw, 29.5rem);
+  --sticker-face: #f6bed2;
+  --sticker-press: #e982a4;
+  --sticker-hover-edge: #b0486e;
+  --sticker-hover: #ffa8c1;
+  --sticker-edge: #bc718b;
+  --sticker-depth: #de9eb3;
+  --button-primary-text: #562638;
+  width: clamp(17rem, 25.5vw, 27rem);
   max-width: 100%;
   min-height: clamp(3.35rem, 9.2vh, 4.55rem);
-  border-radius: 1.45rem;
+  border-width: 3px;
+  border-radius: var(--radius-pill);
   padding-inline: clamp(0.9rem, 2vw, 1.4rem);
   box-shadow:
-    inset 0 2px 2px #fff9,
-    inset 0 -3px 5px #bc557332,
-    0 6px 12px #ad446947;
-  font-size: clamp(1.1rem, 1.86vw, 1.8rem) !important;
+    inset 0 -2px 0 #fff8,
+    0 0 0 1px var(--sticker-edge),
+    0 6px 0 1px var(--sticker-depth);
+  font-size: clamp(1.05rem, 1.65vw, 1.55rem) !important;
 }
-
 .ck-home-action--main .ck-button__content {
   width: 100%;
   justify-content: space-between;
@@ -178,27 +178,64 @@
   height: auto;
 }
 
+.ck-home-action .ck-home-glyph--sticker {
+  flex: none;
+  width: 1.85rem;
+  height: auto;
+  filter: drop-shadow(1px 0 0 #fffdf8) drop-shadow(-1px 0 0 #fffdf8)
+    drop-shadow(0 1px 0 #fffdf8) drop-shadow(0 -1px 0 #fffdf8);
+}
+
+.ck-home-action--main .ck-home-glyph--sticker {
+  width: clamp(2.25rem, 3.6vw, 3.1rem);
+}
+
+.ck-home-action::before {
+  position: absolute;
+  top: 0.23rem;
+  inset-inline: 18% 16%;
+  height: 0.18rem;
+  border-radius: 50%;
+  background: #fff9;
+  content: '';
+  pointer-events: none;
+}
+
+.ck-home-action:disabled::before {
+  display: none;
+}
+
+.ck-home-action--main .ck-home-glyph:last-child {
+  width: clamp(1.65rem, 2.65vw, 2.2rem);
+  padding: 0.2rem;
+  border-radius: var(--radius-pill);
+  background: #fff4f6;
+  color: #782645;
+}
+
 .ck-home-studio .ck-home-action:not(:disabled):is(:hover, :focus-visible) {
-  background: linear-gradient(158deg, var(--home-light), var(--home-hover));
-  transform: translateY(-2px);
-  box-shadow:
-    inset 0 2px 2px #fff9,
-    0 8px 15px #a13c6240;
+  --sticker-edge: var(--sticker-hover-edge);
+  background: var(--sticker-hover);
+  transform: translateY(-1px);
 }
 
-.ck-home-studio .ck-home-action:not(:disabled):active {
-  transform: translateY(2px) scale(0.98, 0.96);
+.ck-home-studio
+  .ck-home-action:not(:disabled):is(:active, [data-home-touched]) {
+  --sticker-edge: #9d4264;
+  background: var(--sticker-press);
+  transform: translateY(3px) scale(0.98, 0.96);
   box-shadow:
-    inset 0 2px 5px #8d315626,
-    0 2px 5px #8d315626;
+    inset 0 -2px 0 #fff8,
+    0 0 0 1px var(--sticker-edge),
+    0 1px 0 1px var(--sticker-depth);
 }
-
 .ck-home-action[data-home-touched] .ck-home-glyph,
 .ck-home-shortcut[data-home-touched] .ck-home-shortcut-icon img {
   transform: scale(0.92);
 }
 
 .ck-home-studio .ck-home-action:disabled {
+  --sticker-face: #f4e9ed;
   background: #f4e9ed;
   border-color: var(--color-border);
   box-shadow: none;
