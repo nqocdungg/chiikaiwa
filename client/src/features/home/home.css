@@ -1,0 +1,460 @@
+.ck-learning-content:has(> .ck-home-studio) {
+  background:
+    radial-gradient(ellipse at 11% 25%, #ffe3ed 0, transparent 43%),
+    radial-gradient(ellipse at 92% 91%, #ffedcd 0, transparent 35%),
+    radial-gradient(ellipse at 27% 96%, #f0f5e7 0, transparent 39%),
+    var(--color-background);
+}
+
+.ck-home-studio {
+  --home-ink: #492337;
+  --home-outline: #dc9bb0;
+  --home-mint: #e9efde;
+  --home-spring: cubic-bezier(0.21, 0.8, 0.32, 1.3);
+  position: relative;
+  isolation: isolate;
+  width: min(76.5%, 86rem);
+  margin-inline: auto;
+  padding-block: clamp(1rem, 5.8vh, 3.15rem) 1.25rem;
+  color: var(--home-ink);
+}
+
+.ck-home-studio::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: radial-gradient(circle, #be72952e 1px, transparent 1.4px) 0 0 /
+    13px 13px;
+  mask-image: radial-gradient(
+    ellipse 50% 43% at 18% 26%,
+    #000 20%,
+    transparent 72%
+  );
+  pointer-events: none;
+  content: '';
+}
+
+.ck-home-feature {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: clamp(1rem, 4vw, 3rem);
+}
+
+.ck-home-intro {
+  display: grid;
+  justify-items: start;
+  gap: clamp(0.55rem, 1.8vh, 1rem);
+}
+
+.ck-home-studio .ck-home-intro h2 {
+  font-size: clamp(2rem, min(5vw, 8.1vh), 4.1rem);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 1.03;
+}
+
+.ck-home-heading-accent {
+  position: relative;
+}
+
+.ck-home-heading-accent::after {
+  position: absolute;
+  inset-inline-start: calc(100% + 0.65rem);
+  top: -0.07em;
+  width: 0.14em;
+  height: 0.45em;
+  border-radius: 90% 80% 85% 80%;
+  background: #ffd263;
+  box-shadow: 0.28em 0.06em 0 -0.015em #ffd263;
+  transform: rotate(30deg);
+  content: '';
+}
+
+.ck-home-intro > p {
+  max-width: 32ch;
+  font-size: clamp(1rem, 1.65vw, 1.25rem);
+  line-height: 1.45;
+}
+
+.ck-home-start {
+  position: relative;
+  max-width: 100%;
+  margin-block: 1.85rem 0.45rem;
+}
+
+.ck-home-start-mascot {
+  position: absolute;
+  inset-inline-end: 0.85rem;
+  top: clamp(-2.95rem, -3.3vw, -2.3rem);
+  width: clamp(4rem, 7vw, 6.25rem);
+  height: clamp(3rem, 4.3vw, 4rem);
+  object-fit: contain;
+  object-position: center bottom;
+  pointer-events: none;
+  transform-origin: center bottom;
+  transition: transform 260ms var(--home-spring);
+}
+
+.ck-home-start:has(button:not(:disabled):is(:hover, :focus-visible))
+  .ck-home-start-mascot {
+  transform: translateY(-5px) rotate(6deg);
+}
+
+.ck-home-start:has(button:not(:disabled):active) .ck-home-start-mascot {
+  transform: translateY(1px) scale(1.06, 0.93);
+}
+
+.ck-home-loading {
+  margin-block-start: 0.55rem;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.ck-home-invite-group > p {
+  margin-block-end: 0.4rem;
+  font-size: clamp(0.88rem, 1.35vw, 1.08rem);
+}
+
+.ck-home-invites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.ck-home-studio .ck-home-action {
+  --home-edge: #edb1c8;
+  --home-light: #fff4f8;
+  --home-face: #ffdaea;
+  --home-hover: #ffd0e5;
+  --button-secondary-text: var(--home-ink);
+  --button-primary-text: var(--home-ink);
+  min-height: 2.75rem;
+  border: 1px solid var(--home-edge);
+  border-radius: 0.95rem;
+  padding-inline: clamp(0.85rem, 1.45vw, 1.25rem);
+  background: linear-gradient(158deg, var(--home-light), var(--home-face));
+  box-shadow:
+    inset 0 1px 1px #fff9,
+    0 4px 9px #89335420;
+  font-weight: 800 !important;
+  transition:
+    transform 220ms var(--home-spring),
+    box-shadow 170ms ease;
+}
+
+.ck-home-studio .ck-home-action--join {
+  --home-edge: #e5bd75;
+  --home-light: #fff8e3;
+  --home-face: #ffe8ad;
+  --home-hover: #ffe09a;
+}
+
+.ck-home-studio .ck-home-action--main {
+  --home-edge: #e4789b;
+  --home-light: #ffd0e1;
+  --home-face: #ff9cba;
+  --home-hover: #ff91b4;
+  width: clamp(17rem, 27.2vw, 29.5rem);
+  max-width: 100%;
+  min-height: clamp(3.35rem, 9.2vh, 4.55rem);
+  border-radius: 1.45rem;
+  padding-inline: clamp(0.9rem, 2vw, 1.4rem);
+  box-shadow:
+    inset 0 2px 2px #fff9,
+    inset 0 -3px 5px #bc557332,
+    0 6px 12px #ad446947;
+  font-size: clamp(1.1rem, 1.86vw, 1.8rem) !important;
+}
+
+.ck-home-action--main .ck-button__content {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.ck-home-action--main svg {
+  flex: 0 0 auto;
+  width: clamp(1.4rem, 2.5vw, 2.25rem);
+  height: auto;
+}
+
+.ck-home-studio .ck-home-action:not(:disabled):is(:hover, :focus-visible) {
+  background: linear-gradient(158deg, var(--home-light), var(--home-hover));
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 2px 2px #fff9,
+    0 8px 15px #a13c6240;
+}
+
+.ck-home-studio .ck-home-action:not(:disabled):active {
+  transform: translateY(2px) scale(0.98, 0.96);
+  box-shadow:
+    inset 0 2px 5px #8d315626,
+    0 2px 5px #8d315626;
+}
+
+.ck-home-action[data-home-touched] .ck-home-glyph,
+.ck-home-shortcut[data-home-touched] .ck-home-shortcut-icon img {
+  transform: scale(0.92);
+}
+
+.ck-home-studio .ck-home-action:disabled {
+  background: #f4e9ed;
+  border-color: var(--color-border);
+  box-shadow: none;
+  color: var(--color-text-muted);
+}
+
+.ck-home-study {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-block-start: clamp(1.25rem, 4vh, 2.45rem);
+  border: 1px solid #e9cec5;
+  border-radius: 1.25rem;
+  background: #fffaf4ed;
+  box-shadow: 0 6px 16px #49233712;
+}
+
+.ck-home-shortcut {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(0.7rem, 1.8vw, 1.4rem);
+  padding: clamp(0.75rem, 2.8vh, 1.55rem) clamp(0.85rem, 2.6vw, 2.5rem);
+  border-radius: inherit;
+  color: var(--home-ink);
+  text-decoration: none;
+  transition: background var(--motion-fast) ease;
+}
+
+.ck-home-shortcut + .ck-home-shortcut {
+  position: relative;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+.ck-home-shortcut + .ck-home-shortcut::before {
+  position: absolute;
+  inset-block: 15%;
+  inset-inline-start: 0;
+  border-inline-start: 1px solid #e6c9bb;
+  content: '';
+}
+
+.ck-home-shortcut:first-child {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.ck-home-shortcut:is(:hover, :focus-visible) {
+  background: #ffeef4;
+}
+
+.ck-home-shortcut:active {
+  background: #ffdfec;
+}
+
+.ck-home-shortcut-icon {
+  display: grid;
+  place-items: center;
+  width: clamp(2.75rem, 5.15vw, 4.85rem);
+  aspect-ratio: 1.16;
+  border: 1px solid #cdd9bb;
+  border-radius: 0.95rem;
+  background: var(--home-mint);
+  box-shadow: inset 0 2px 3px #fff9;
+}
+
+.ck-home-shortcut + .ck-home-shortcut .ck-home-shortcut-icon {
+  background: #ffedbc;
+  border-color: #e9d398;
+}
+
+.ck-home-shortcut-icon img {
+  display: block;
+  width: 72%;
+  height: auto;
+}
+
+.ck-home-glyph,
+.ck-home-shortcut-icon img {
+  transition: transform 260ms var(--home-spring);
+}
+
+.ck-home-action:not(:disabled):is(:hover, :focus-visible) .ck-home-glyph,
+.ck-home-shortcut:is(:hover, :focus-visible) .ck-home-shortcut-icon img {
+  transform: translateY(-2px) rotate(-7deg) scale(1.1);
+}
+
+.ck-home-action--main:not(:disabled):is(:hover, :focus-visible)
+  .ck-home-glyph:last-child,
+.ck-home-shortcut:is(:hover, :focus-visible) > .ck-home-glyph {
+  transform: translateX(3px);
+}
+
+:is(.ck-home-action, .ck-home-shortcut)::after {
+  position: absolute;
+  z-index: 2;
+  inset-inline-start: 13%;
+  inset-block-start: 0;
+  width: 3rem;
+  height: 2.25rem;
+  background:
+    radial-gradient(circle, #fff8 0 4px, #c84e7b 4.5px 5.5px, transparent 6px)
+      3px 19px / 12px 12px no-repeat,
+    radial-gradient(circle, #fff9 0 6px, #d46a96 6.5px 7.5px, transparent 8px)
+      18px 1px / 16px 16px no-repeat,
+    radial-gradient(circle, #fff8 0 3px, #c84e7b 3.5px 4.5px, transparent 5px)
+      36px 16px / 10px 10px no-repeat;
+  opacity: 0;
+  pointer-events: none;
+  content: '';
+}
+
+:is(.ck-home-action:not(:disabled), .ck-home-shortcut):focus-visible::after {
+  animation: ck-home-bubbles 520ms ease-out both;
+}
+
+:is(.ck-home-action:not(:disabled), .ck-home-shortcut):is(
+    :active,
+    [data-home-touched]
+  )::after {
+  animation: ck-home-bubbles-press 380ms ease-out both;
+}
+
+@media (hover: hover) {
+  :is(.ck-home-action:not(:disabled), .ck-home-shortcut):hover:not(
+      :active,
+      [data-home-touched]
+    )::after {
+    animation: ck-home-bubbles 520ms ease-out both;
+  }
+}
+
+@keyframes ck-home-bubbles {
+  0% {
+    opacity: 0;
+    transform: translateY(5px) scale(0.4);
+  }
+
+  30% {
+    opacity: 0.92;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-28px) scale(1.12);
+  }
+}
+
+@keyframes ck-home-bubbles-press {
+  from {
+    opacity: 0.85;
+    transform: translateY(3px) scale(0.5);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(5px, -23px) scale(1.04);
+  }
+}
+
+.ck-home-shortcut strong,
+.ck-home-shortcut-description {
+  display: block;
+}
+
+.ck-home-shortcut strong {
+  font-size: clamp(1.08rem, 2.13vw, 1.95rem);
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.ck-home-shortcut-description {
+  margin-block-start: 0.15rem;
+  font-size: clamp(0.88rem, 1.37vw, 1.15rem);
+}
+.ck-home-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: 0.85rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--home-mint);
+}
+
+.ck-home-status h2 {
+  font-size: var(--font-size-body);
+}
+
+.ck-home-status p {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-label);
+}
+
+.ck-home-status--error {
+  background: var(--color-danger-bg);
+}
+
+@media (max-width: 900px) {
+  .ck-home-studio {
+    width: calc(100% - 2 * var(--learning-gutter, var(--page-gutter)));
+  }
+}
+
+@media (max-width: 680px) {
+  .ck-home-heading-accent::after {
+    display: none;
+  }
+
+  .ck-home-feature {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ck-home-studio .ck-home-intro h2 {
+    font-size: clamp(2rem, 9vw, 3rem);
+  }
+}
+
+@media (max-width: 520px) {
+  .ck-home-study {
+    grid-template-columns: minmax(0, 1fr);
+    margin-block-start: 1rem;
+  }
+
+  .ck-home-shortcut + .ck-home-shortcut {
+    position: relative;
+    border-inline-start: 0;
+    border-block-start: 1px solid #e6c9bb;
+    border-start-end-radius: 0;
+    border-end-start-radius: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ck-home-start-mascot,
+  .ck-home-glyph,
+  .ck-home-shortcut-icon img,
+  .ck-home-shortcut,
+  .ck-home-studio .ck-home-action {
+    transition: none;
+  }
+
+  .ck-home-studio {
+    .ck-home-start-mascot,
+    .ck-home-glyph,
+    .ck-home-shortcut-icon img,
+    .ck-home-action:not(:disabled) {
+      transform: none !important;
+    }
+
+    :is(.ck-home-action, .ck-home-shortcut)::after {
+      animation: none !important;
+    }
+  }
+}

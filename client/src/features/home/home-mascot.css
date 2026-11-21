@@ -1,0 +1,167 @@
+/* Lucian UX/UI Prompt #012 · MIT License (c) 2026 Seokwoooo · https://lucianlabs.dev/uxui-prompt/#012 */
+.ck-home-scene {
+  --ux-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: relative;
+  min-width: 0;
+}
+
+.ck-home-studio .ck-home-friends-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 1rem;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.ck-home-friends {
+  display: block;
+  width: 100%;
+  height: auto;
+  mask-image:
+    linear-gradient(to right, transparent, #000 7%, #000 89%, transparent),
+    linear-gradient(to bottom, transparent, #000 7%, #000 97%, transparent);
+  mask-composite: intersect;
+  transition: transform var(--motion-normal) var(--ux-ease);
+}
+
+.ck-home-friends-button:is(:hover, :focus-visible) .ck-home-friends {
+  transform: translateY(-2px);
+}
+
+.ck-home-greeting {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 1%;
+  inset-inline-start: 35%;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  width: max(28%, 7.6rem);
+  min-height: 23%;
+  padding: 0.4rem;
+  border: 2px solid var(--home-outline);
+  border-radius: 48% 50% 46% 47%;
+  background: #fffaf7;
+  box-shadow: 0 4px 7px #7842581c;
+  text-align: center;
+  line-height: 1.18;
+  transform: rotate(-4deg);
+  pointer-events: none;
+}
+
+.ck-home-greeting::after {
+  position: absolute;
+  inset-inline-start: 31%;
+  inset-block-end: -0.4rem;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-right: 2px solid var(--home-outline);
+  border-bottom: 2px solid var(--home-outline);
+  border-end-end-radius: 2px;
+  background: #fffaf7;
+  transform: skew(10deg) rotate(45deg);
+  content: '';
+}
+
+.ck-home-greeting strong {
+  font-size: clamp(0.9rem, 2.05vw, 1.72rem);
+  font-weight: 900;
+}
+
+.ck-home-greeting span {
+  margin-block-start: 0.14rem;
+  color: #694759;
+  font-size: clamp(0.7rem, 1.24vw, 1.05rem);
+}
+
+@media (min-width: 901px) {
+  .ck-home-scene {
+    justify-self: end;
+    width: 144%;
+    margin-inline-end: -11%;
+  }
+
+  .ck-home-intro {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .ck-home-greeting {
+    inset-inline-start: 30%;
+  }
+}
+
+.u012 .u012-confetti {
+  position: absolute;
+  top: 47%;
+  left: 50%;
+  pointer-events: none;
+}
+
+.u012 .u012-p {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 3px;
+  background: var(--c, #fff0bd);
+  animation: u012-burst 0.8s var(--ux-ease) forwards;
+}
+
+.u012 .u012-p:nth-child(1) {
+  --a: 0deg;
+}
+.u012 .u012-p:nth-child(2) {
+  --a: 45deg;
+  --c: #a03e65;
+}
+.u012 .u012-p:nth-child(3) {
+  --a: 90deg;
+  --c: #fffafa;
+}
+.u012 .u012-p:nth-child(4) {
+  --a: 135deg;
+  --c: #dbf2d3;
+}
+.u012 .u012-p:nth-child(5) {
+  --a: 180deg;
+}
+.u012 .u012-p:nth-child(6) {
+  --a: 225deg;
+  --c: #a03e65;
+}
+.u012 .u012-p:nth-child(7) {
+  --a: 270deg;
+  --c: #fffafa;
+}
+.u012 .u012-p:nth-child(8) {
+  --a: 315deg;
+  --c: #dbf2d3;
+}
+
+@keyframes u012-burst {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateY(-30px) scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(-92px) scale(1.1) rotate(160deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .u012 .u012-confetti {
+    display: none;
+  }
+
+  .ck-home-friends-button:is(:hover, :focus-visible, :active) .ck-home-friends {
+    transition: none;
+    transform: none;
+  }
+}
