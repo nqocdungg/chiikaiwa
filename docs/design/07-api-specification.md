@@ -153,7 +153,7 @@ Mã mời hiệu lực 10 phút, sinh từ 10 ký tự chữ hoa/số không gâ
 | GET /sessions/:id | M | — | 200 Session |
 | POST /sessions/:id/media-token | M | {} | 200 {url,token,expiresAt}; chỉ phòng/identity được cấp |
 | POST /sessions/:id/leave | M | {} | 200 Session ended; gọi lại không kết thúc lần hai |
-| GET /sessions/:id/deck-options | M | limit?,cursor? | 200 danh sách {id,versionId,title,level,description} |
+| GET /sessions/:id/deck-options | M | limit?,cursor? | 200 {items: [{id,versionId,title,level,description,scenarioCount}],nextCursor} |
 | POST /sessions/:id/deck-selection | M | {expectedVersion,deckVersionId} | 200 Session |
 | POST /sessions/:id/control/claim | M | {expectedVersion} | 200 Session; chuyển quyền cho người gọi |
 | POST /sessions/:id/draws | M | {expectedVersion,slot} | 200 Session |
@@ -167,7 +167,11 @@ Mã mời hiệu lực 10 phút, sinh từ 10 ký tự chữ hoa/số không gâ
 
 summary chỉ dành cho phiên ended; drawnCards gồm id, scenarioVersionId, title, status, drawnAt, finishedAt?; savedSources/quizAttempts chỉ của người gọi. Dữ liệu lớn lấy tiếp qua các danh sách cá nhân tại mục 8–9, không nhúng lịch sử ôn vào summary.
 
+`deck-options` trả các bộ đang xuất bản, với `scenarioCount` là số ID tình huống phân biệt trong revision đang xuất bản. Danh sách chỉ trả dữ liệu tóm tắt của bộ. Thành viên của phiên đã kết thúc nhận `409 SESSION_ENDED`. Nếu phiên đã đến hạn kết thúc, API ghi nhận kết thúc tại mốc hết hạn trước khi trả lỗi.
+
 Chọn bộ chỉ khi cả hai kết nối, đang chọn và còn trong 60 giây hoạt động. Hết hạn kết thúc phiên. Sau chọn, server lưu ánh xạ lá úp; draw chỉ nhận slot chưa bốc, không nhận scenario ID tùy ý. Chọn/bốc yêu cầu actorKey khớp controllerKey trong điều kiện ghi cùng expectedVersion. Lấy quyền và chọn/bốc cạnh tranh trên cùng version; request cũ nhận xung đột, không tự retry trên quyền mới.
+
+`deck-selection` trả `404 RESOURCE_NOT_FOUND` nếu ID hợp lệ về cú pháp nhưng không trỏ tới revision hiện đang xuất bản của một bộ có thể chọn mới. Quy tắc này áp dụng cả khi bộ đã ẩn, revision đã cũ hoặc ID thuộc loại học liệu khác.
 
 `control/claim` yêu cầu cả hai kết nối, phiên active và chưa hết hạn; không cần đối tác duyệt. Server lấy actor từ phiên xác thực, không nhận controllerKey trong body. Người đang giữ quyền gọi lại không chuyển cho đối tác; replay cùng Idempotency-Key không giành lại quyền đã chuyển về sau. Thiếu quyền chọn/bốc trả 403 CONTROL_REQUIRED; version cũ trả 409 VERSION_CONFLICT. Disconnect giữ controllerKey, khóa claim; reconnect không random lại.
 

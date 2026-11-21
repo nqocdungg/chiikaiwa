@@ -51,17 +51,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        '400': &a1
-          description: L?i theo ErrorResponse v? API specification
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '410': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
   /sessions/{id}/leave:
     post:
       tags:
@@ -95,17 +96,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SessionResponse'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '409': *a1
-        '410': *a1
-        '413': *a1
-        '415': *a1
-        '422': *a1
-        '429': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
   /sessions/{id}/media-token:
     post:
       tags:
@@ -149,17 +161,339 @@ paths:
                         format: date-time
                   meta:
                     $ref: '#/components/schemas/Meta'
-        '400': *a1
-        '401': *a1
-        '403': *a1
-        '404': *a1
-        '409': *a1
-        '410': *a1
-        '413': *a1
-        '415': *a1
-        '422': *a1
-        '429': *a1
-        '503': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+  /sessions/{id}/deck-options:
+    get:
+      tags: [Sessions]
+      operationId: listSessionDeckOptions
+      summary: Liệt kê bộ chủ đề có thể chọn
+      description: Chỉ thành viên của phiên chưa kết thúc được đọc danh sách.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - *a2
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 512 }
+      responses:
+        '200':
+          description: Danh sách bộ xuất bản và số tình huống của đúng revision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDeckOptionsResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          description: Phiên đã kết thúc (SESSION_ENDED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/deck-selection:
+    post:
+      tags: [Sessions]
+      operationId: selectSessionDeck
+      summary: Chọn và trải một bộ chủ đề
+      description: Trả 404 RESOURCE_NOT_FOUND nếu revision không thuộc bộ đang xuất bản hoặc không còn là revision được chọn mới.
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectSessionDeckRequest'
+      responses:
+        '200':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/control/claim:
+    post:
+      tags: [Sessions]
+      operationId: claimSessionControl
+      summary: Lấy quyền điều khiển phiên
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionVersionRequest'
+      responses:
+        '200':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/draws:
+    post:
+      tags: [Sessions]
+      operationId: drawSessionCard
+      summary: Bốc đúng lá ở slot được chọn
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DrawSessionCardRequest'
+      responses:
+        '200':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/cards/{cardId}/hints:
+    get:
+      tags: [Sessions]
+      operationId: getSessionCardHints
+      summary: Đọc gợi ý của lá đã bốc
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - *a2
+        - name: cardId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Gợi ý và kiến thức theo revision của lá
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionHintsResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/actions:
+    post:
+      tags: [Sessions]
+      operationId: proposeSessionCardAction
+      summary: Gửi đề nghị đồng thuận cho lá hiện tại
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeSessionCardActionRequest'
+      responses:
+        '201':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionActionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/actions/{actionId}/responses:
+    post:
+      tags: [Sessions]
+      operationId: respondToSessionCardAction
+      summary: Phản hồi đề nghị của đối tác
+      security: *a3
+      parameters:
+        - *a2
+        - name: actionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespondToSessionCardActionRequest'
+      responses:
+        '200':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
   /webhooks/livekit:
     post:
       tags: [System]
@@ -628,12 +962,16 @@ paths:
       responses:
         '204':
           description: Đổi mật khẩu thành công và thu hồi mọi phiên đăng nhập cũ
-        '400': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403': *a1
-        '413': *a1
-        '415': *a1
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -668,10 +1006,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PasswordResetRequestResponse'
-        '400': *a1
-        '403': *a1
-        '413': *a1
-        '415': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -701,10 +1043,14 @@ paths:
       responses:
         '204':
           description: Đặt lại mật khẩu thành công; không tự đăng nhập
-        '400': *a1
-        '403': *a1
-        '413': *a1
-        '415': *a1
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -1900,6 +2246,104 @@ components:
                   label:
                     enum: [Again, Hard, Good]
                   dueAt: *studyTime
+    SessionDeckOptionsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            nextCursor:
+              type: [string, 'null']
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  [id, versionId, title, level, description, scenarioCount]
+                properties:
+                  id:
+                    $ref: '#/components/schemas/ObjectId'
+                  versionId:
+                    $ref: '#/components/schemas/ObjectId'
+                  title: { type: string }
+                  level: { type: string, enum: [N5, N4, N3, N2, N1] }
+                  description: { type: string }
+                  scenarioCount: { type: integer, minimum: 0 }
+    SessionHintsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required: [hints, knowledge]
+          properties:
+            hints:
+              type: array
+              items: { type: string }
+            knowledge:
+              type: array
+              items:
+                $ref: '#/components/schemas/SessionHintKnowledge'
+    SessionActionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required: [session]
+          properties:
+            session:
+              $ref: '#/components/schemas/Session'
+    SessionVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+    SelectSessionDeckRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, deckVersionId]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        deckVersionId: { $ref: '#/components/schemas/ObjectId' }
+    DrawSessionCardRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, slot]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        slot: { type: integer, minimum: 0 }
+    ProposeSessionCardActionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, kind, cardId]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        kind: { enum: [swapRoles, skip, completeAndNext] }
+        cardId: { $ref: '#/components/schemas/ObjectId' }
+    RespondToSessionCardActionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, decision]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        decision: { enum: [accept, reject] }
     Session:
       type: object
       required:
@@ -2428,11 +2872,11 @@ components:
       type: object
       required: [id, versionId, type, expression, meaning, examples]
       properties:
-        id:
+        id: &knowledgeItemId
           $ref: '#/components/schemas/ObjectId'
-        versionId:
+        versionId: &knowledgeItemVersionId
           $ref: '#/components/schemas/ObjectId'
-        type:
+        type: &knowledgeItemType
           type: string
           enum: [vocabulary, grammar]
         expression:
@@ -2441,10 +2885,23 @@ components:
           type: string
         meaning:
           type: string
-        examples:
+        examples: &knowledgeItemExamples
           type: array
           items:
             $ref: '#/components/schemas/KnowledgeExample'
+      additionalProperties: false
+    SessionHintKnowledge:
+      type: object
+      required: [id, versionId, type, expression, meaning, examples, isSaved]
+      properties:
+        id: *knowledgeItemId
+        versionId: *knowledgeItemVersionId
+        type: *knowledgeItemType
+        expression: { type: string }
+        reading: { type: string }
+        meaning: { type: string }
+        examples: *knowledgeItemExamples
+        isSaved: { type: boolean }
       additionalProperties: false
     KnowledgeList:
       type: object
@@ -2956,6 +3413,12 @@ components:
           $ref: '#/components/schemas/Meta'
 
   responses:
+    RequestError:
+      description: L?i theo ErrorResponse v? API specification
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     Unauthorized:
       description: Thiếu hoặc không còn phiên xác thực hợp lệ
       content:
