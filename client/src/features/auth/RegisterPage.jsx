@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { hachiware } from '../../assets/mascots/mascots.js';
 import { Button } from '../../components/ui/controls.jsx';
 import { Input, PasswordInput } from '../../components/ui/forms.jsx';
 import { AuthSplitLayout } from './AuthSplitLayout.jsx';
 import { mapAuthApiError, validateRegisterForm } from './auth-validation.js';
 import { useAuth } from './use-auth.js';
+import registerScene from './register-scene.webp';
 
 export function RegisterPage() {
   const { register } = useAuth();
@@ -80,11 +80,11 @@ export function RegisterPage() {
   return (
     <AuthSplitLayout
       eyebrow="はじめまして"
-      title="Cùng bắt đầu luyện nói nhé!"
+      greetingTranslation="Rất vui được gặp bạn!"
+      title="Cùng luyện nói nhé!"
       accessibleTitle="Đăng ký"
       subtitle="Tạo tài khoản để lưu kiến thức và bắt đầu luyện tập."
-      mascot={hachiware}
-      mascotAlt="Mascot mèo Hachiware Chiikaiwa"
+      illustration={registerScene}
       footer={
         <p className="ck-auth-switch">
           <span>Đã có tài khoản? </span>
@@ -132,7 +132,7 @@ export function RegisterPage() {
               notice:
                 'Đăng ký tài khoản thành công! Vui lòng đăng nhập để bắt đầu.',
             }}
-            className="ck-button ck-button--primary ck-button--full"
+            className="ck-button ck-button--primary ck-button--sticker ck-button--full"
           >
             Đi tới trang đăng nhập
           </Link>
@@ -230,6 +230,7 @@ export function RegisterPage() {
             <Button
               type="submit"
               variant="primary"
+              appearance="sticker"
               fullWidth
               loading={isSubmitting}
             >

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { usagi } from '../../assets/mascots/mascots.js';
 import { Button } from '../../components/ui/controls.jsx';
 import { Input, PasswordInput } from '../../components/ui/forms.jsx';
 import { AuthSplitLayout } from './AuthSplitLayout.jsx';
@@ -10,6 +9,7 @@ import {
   validateLoginForm,
 } from './auth-validation.js';
 import { useAuth } from './use-auth.js';
+import loginScene from './login-scene.webp';
 
 export function LoginPage() {
   const { login, isLoginPending, authNotice, clearAuthNotice } = useAuth();
@@ -95,11 +95,11 @@ export function LoginPage() {
   return (
     <AuthSplitLayout
       eyebrow="おかえりなさい"
-      title="Chào mừng bạn trở lại!"
+      greetingTranslation="Mừng bạn trở lại!"
+      title="Chào mừng trở lại!"
       accessibleTitle="Đăng nhập"
       subtitle="Đăng nhập để tiếp tục những cuộc hội thoại của bạn."
-      mascot={usagi}
-      mascotAlt="Mascot thỏ Usagi Chiikaiwa"
+      illustration={loginScene}
       footer={
         <p className="ck-auth-switch">
           <span>Chưa có tài khoản? </span>
@@ -185,7 +185,13 @@ export function LoginPage() {
           </Link>
         </div>
 
-        <Button type="submit" variant="primary" fullWidth loading={isLoginBusy}>
+        <Button
+          type="submit"
+          variant="primary"
+          appearance="sticker"
+          fullWidth
+          loading={isLoginBusy}
+        >
           {isLoginBusy ? 'Đang đăng nhập...' : 'Đăng nhập'}
         </Button>
       </form>
