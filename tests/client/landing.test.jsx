@@ -92,6 +92,11 @@ describe('FE-002: SC-01 Public Landing Page', () => {
     expect(mascotImgs.length).toBeGreaterThanOrEqual(2);
     mascotImgs.forEach((img) => {
       expect(img).toHaveAttribute('alt', '');
+      expect(
+        img.parentElement?.querySelector(
+          'source[media="(prefers-reduced-motion: reduce)"]',
+        ),
+      ).toHaveAttribute('srcset', expect.stringMatching(/\.png$/));
     });
   });
 

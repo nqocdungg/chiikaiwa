@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import usagi from '../../assets/mascots/bouncing-usagi.gif';
+import { usagi } from '../../assets/mascots/mascots.js';
 import { Button } from '../../components/ui/controls.jsx';
 import { Input, PasswordInput } from '../../components/ui/forms.jsx';
 import { AuthSplitLayout } from './AuthSplitLayout.jsx';
@@ -98,7 +98,7 @@ export function LoginPage() {
       title="Chào mừng bạn trở lại!"
       accessibleTitle="Đăng nhập"
       subtitle="Đăng nhập để tiếp tục những cuộc hội thoại của bạn."
-      mascotSrc={usagi}
+      mascot={usagi}
       mascotAlt="Mascot thỏ Usagi Chiikaiwa"
       footer={
         <p className="ck-auth-switch">

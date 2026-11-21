@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import usagi from '../../assets/mascots/bouncing-usagi.gif';
+import { usagi } from '../../assets/mascots/mascots.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.jsx';
 import { Badge } from '../../components/ui/surfaces.jsx';
 
@@ -12,7 +12,7 @@ import { Badge } from '../../components/ui/surfaces.jsx';
  * @param {string} props.title Main Vietnamese heading displayed visually
  * @param {string} props.accessibleTitle Accessible heading name for screen readers & route tests
  * @param {string} props.subtitle Supporting subtitle below the heading
- * @param {string} [props.mascotSrc] Optional mascot image source
+ * @param {{ src: string, stillSrc: string }} [props.mascot] Optional mascot asset
  * @param {string} [props.mascotAlt] Optional mascot alt text
  * @param {import('react').ReactNode} props.children Form or confirmation content
  * @param {import('react').ReactNode} [props.footer] Bottom prompt link
@@ -22,7 +22,7 @@ export function AuthSplitLayout({
   title,
   accessibleTitle,
   subtitle,
-  mascotSrc = usagi,
+  mascot = usagi,
   mascotAlt = 'Mascot Chiikaiwa',
   children,
   footer,
@@ -33,7 +33,7 @@ export function AuthSplitLayout({
       data-screen-id="SC-02"
       aria-label={accessibleTitle}
     >
-      <AuthLayout mascotSrc={mascotSrc} mascotAlt={mascotAlt}>
+      <AuthLayout mascot={mascot} mascotAlt={mascotAlt}>
         <div className="ck-auth-card">
           <div className="ck-auth-panel__topbar">
             <Link to="/" className="ck-auth-back-link">

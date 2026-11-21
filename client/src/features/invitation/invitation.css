@@ -110,7 +110,6 @@
 
 .ck-invitation-form .ck-input {
   height: 3.625rem;
-  border-color: #dfc5ce;
   border-radius: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -203,7 +202,7 @@
 
 .ck-invitation-waiting__indicator::before {
   position: absolute;
-  animation: ck-invitation-waiting-pulse 1.8s ease-out infinite;
+  animation: ck-invitation-waiting-pulse 1.8s ease-out 2;
 }
 
 @keyframes ck-invitation-waiting-pulse {
@@ -231,7 +230,7 @@
 
 .ck-invitation-waiting small {
   margin-top: 0.0625rem;
-  color: #8e8387;
+  color: var(--color-text-muted);
   font-size: 0.6875rem;
   line-height: 1rem;
 }

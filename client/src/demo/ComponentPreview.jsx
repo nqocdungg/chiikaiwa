@@ -5,7 +5,7 @@ import { Button, Icon, IconButton } from '../components/ui/controls.jsx';
 import { Dialog } from '../components/ui/Dialog.jsx';
 import { Input, PasswordInput } from '../components/ui/forms.jsx';
 import { Avatar, Badge, Card } from '../components/ui/surfaces.jsx';
-import usagi from '../assets/mascots/bouncing-usagi.gif';
+import { usagi } from '../assets/mascots/mascots.js';
 import '../styles/component-preview.css';
 
 const longName = 'Nguyễn Hoàng Minh Anh với một cái tên rất dài';
@@ -162,7 +162,7 @@ export function ComponentPreview() {
 
         <PreviewSection title="AuthLayout">
           <div className="ck-preview__auth-frame">
-            <AuthLayout mascotSrc={usagi} mascotAlt="Mascot thỏ Chiikaiwa">
+            <AuthLayout mascot={usagi} mascotAlt="Mascot thỏ Chiikaiwa">
               <div className="ck-preview__auth-copy">
                 <Badge tone="accent">おかえりなさい</Badge>
                 <h2>Chào mừng bạn trở lại</h2>

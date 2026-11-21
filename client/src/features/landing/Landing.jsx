@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import chiiLogo from '../../assets/brand/chii-logo.svg';
-import usagiImg from '../../assets/mascots/bouncing-usagi.gif';
-import hachiwareImg from '../../assets/mascots/waving-hachiware.gif';
+import { hachiware, usagi } from '../../assets/mascots/mascots.js';
+import { Mascot } from '../../components/Mascot.jsx';
 import { PageContainer } from '../../components/layout/PageContainer.jsx';
 import { Icon } from '../../components/ui/controls.jsx';
 import { useAuth } from '../auth/use-auth.js';
@@ -90,8 +90,8 @@ export function Landing() {
                 いっしょに？
               </span>
             </div>
-            <img
-              src={usagiImg}
+            <Mascot
+              asset={usagi}
               alt=""
               className="ck-mascot-img"
               width="215"
@@ -156,8 +156,8 @@ export function Landing() {
                 話そう！
               </span>
             </div>
-            <img
-              src={hachiwareImg}
+            <Mascot
+              asset={hachiware}
               alt=""
               className="ck-mascot-img"
               width="215"

@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
+import { readFileSync } from 'node:fs';
 import { Button } from '../../client/src/components/ui/controls.jsx';
 import { Dialog } from '../../client/src/components/ui/Dialog.jsx';
 import { Input, PasswordInput } from '../../client/src/components/ui/forms.jsx';
@@ -15,12 +16,28 @@ afterEach(() => {
 describe('frontend foundation', () => {
   it('blocks repeated button actions while loading', () => {
     const onClick = vi.fn();
+    const foundationStyles = readFileSync(
+      'client/src/styles/foundation.css',
+      'utf8',
+    );
     render(
-      <Button variant="primary" loading onClick={onClick}>
-        Đang tìm bạn
-      </Button>,
+      <>
+        <style>
+          {
+            foundationStyles.match(
+              /\.ck-button__content--loading\s*\{[^}]+\}/,
+            )?.[0]
+          }
+        </style>
+        <Button variant="primary" loading onClick={onClick}>
+          Đang tìm bạn
+        </Button>
+      </>,
     );
 
+    expect(
+      globalThis.getComputedStyle(screen.getByText('Đang tìm bạn')).visibility,
+    ).toBe('visible');
     const button = screen.getByRole('button', { name: 'Đang tìm bạn' });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute('aria-busy', 'true');

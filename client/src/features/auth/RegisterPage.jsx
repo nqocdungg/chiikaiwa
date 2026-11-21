@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import hachiware from '../../assets/mascots/waving-hachiware.gif';
+import { hachiware } from '../../assets/mascots/mascots.js';
 import { Button } from '../../components/ui/controls.jsx';
 import { Input, PasswordInput } from '../../components/ui/forms.jsx';
 import { AuthSplitLayout } from './AuthSplitLayout.jsx';
@@ -83,7 +83,7 @@ export function RegisterPage() {
       title="Cùng bắt đầu luyện nói nhé!"
       accessibleTitle="Đăng ký"
       subtitle="Tạo tài khoản để lưu kiến thức và bắt đầu luyện tập."
-      mascotSrc={hachiware}
+      mascot={hachiware}
       mascotAlt="Mascot mèo Hachiware Chiikaiwa"
       footer={
         <p className="ck-auth-switch">

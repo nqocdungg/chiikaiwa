@@ -308,10 +308,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ck-learning-wave {
-    visibility: hidden;
-  }
-
   .ck-learning-header :is(.ck-nav-tab-link, .ck-nav-tab-mascot) {
     transition: none;
   }

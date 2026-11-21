@@ -1,9 +1,10 @@
 import logo from '../../assets/brand/chii-logo.svg';
+import { Mascot } from '../Mascot.jsx';
 
 /**
  * @param {{
  * children: import('react').ReactNode,
- * mascotSrc?: string,
+ * mascot?: { src: string, stillSrc: string },
  * mascotAlt?: string,
  * visual?: import('react').ReactNode,
  * className?: string,
@@ -11,7 +12,7 @@ import logo from '../../assets/brand/chii-logo.svg';
  */
 export function AuthLayout({
   children,
-  mascotSrc,
+  mascot,
   mascotAlt = '',
   visual,
   className = '',
@@ -20,10 +21,10 @@ export function AuthLayout({
     <div className={`ck-auth-layout ${className}`.trim()}>
       <div className="ck-auth-layout__visual" aria-hidden={!mascotAlt}>
         {visual ??
-          (mascotSrc ? (
-            <img
+          (mascot ? (
+            <Mascot
               className="ck-auth-layout__mascot"
-              src={mascotSrc}
+              asset={mascot}
               alt={mascotAlt}
             />
           ) : null)}
