@@ -15,6 +15,7 @@ import { createInvitationRouter } from './modules/invitations/invitation-router.
 import { createSavedItemRouter } from './modules/learning/saved-item-router.js';
 import { createStudyCardRouter } from './modules/learning/study-card-router.js';
 import { createQuizRouter } from './modules/quiz/quiz-router.js';
+import { createSafetyRouter } from './modules/safety/safety-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
 import {
   createLivekitWebhookHandler,
@@ -156,6 +157,7 @@ export function createApp({
   app.use('/api/v1/me/saved-items', createSavedItemRouter());
   app.use('/api/v1/study/cards', createStudyCardRouter());
   app.use('/api/v1', createQuizRouter());
+  app.use('/api/v1', createSafetyRouter());
 
   app.use((_request, response) => {
     response.status(404).json({
