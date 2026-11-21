@@ -30,10 +30,17 @@ import {
   readSession,
   reconcileSession,
 } from '../../server/modules/sessions/session-service.js';
+import {
+  createPairBlock,
+  lockUserAccount,
+} from '../../server/modules/safety/safety-service.js';
 import { cleanupSessionMedia } from '../../server/modules/sessions/media-cleanup-service.js';
 import { issueMediaToken } from '../../server/modules/sessions/media-token-service.js';
 import { createInvitation } from '../../server/modules/invitations/invitation-service.js';
-import { removeMediaParticipant } from '../../server/integrations/livekit/room-service.js';
+import {
+  removeMediaParticipant,
+  readMediaParticipant,
+} from '../../server/integrations/livekit/room-service.js';
 import { resolveIdentityFromCookies } from '../../server/modules/identity/identity-service.js';
 import {
   hashGuestCredential,
@@ -374,20 +381,406 @@ describe('BE-012 lifecycle on a real replica set', () => {
       endedAt: paused?.presence[0].reconnectUntil,
     });
   });
-  it('does not consume recovery events before the recovery consumer is integrated', async () => {
+  it('resumes before the deadline without resetting clocks, controller or statistics', async () => {
+    await start();
+    const started = await persisted();
+    at = new Date(at.getTime() + 20_000);
+    await process(event(0, 'participant_left'));
+    const paused = await persisted();
+    at = new Date(at.getTime() + 120_000);
+    const joining = event(0, 'participant_joined', 'PA_new');
+    await process(joining, { readParticipant: async () => 'PA_new' });
+    const resumed = await persisted();
+    expect(resumed).toMatchObject({
+      status: 'active',
+      startedAt: started?.startedAt,
+      controllerKey: started?.controllerKey,
+      activeSince: at,
+      selectionRunningSince: at,
+      activeDurationMs: 20_000,
+      selectionRemainingMs: 40_000,
+    });
+    expect(resumed?.presence[0]).toMatchObject({
+      connected: true,
+      connectionSid: 'PA_new',
+    });
+    expect(resumed?.presence[0]).not.toHaveProperty('reconnectUntil');
+    expect(
+      await db
+        .collection('statistics')
+        .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+    ).toMatchObject({ startedSessions: 1 });
+    await db.collection('webhook_receipts').deleteMany({});
+    await process(joining);
+    expect(await persisted()).toEqual(resumed);
+    // Even a delayed leave for the old SID must not pause the new connection.
+    await process(event(0, 'participant_left', 'PA_0'), {
+      readParticipant: async () => 'PA_new',
+    });
+    expect(await persisted()).toEqual(resumed);
+    at = new Date(at.getTime() + 10_000);
+    const result = await readSession({
+      sessionId: String(SESSION_ID),
+      getIdentity: identity,
+      now,
+    });
+    expect(result.data).toMatchObject({
+      activeDurationMs: 30_000,
+      selectionRemainingMs: 30_000,
+    });
+    expect(paused?.activeDurationMs).toBe(20_000);
+    at = new Date(at.getTime() + 30_000);
+    await reconcileSession(SESSION_ID, await identity(), now);
+    expect(await persisted()).toMatchObject({
+      status: 'ended',
+      endReason: 'selection_timeout',
+      activeDurationMs: 60_000,
+      selectionRemainingMs: 0,
+    });
+  });
+  it('waits for both participants and resumes only once for concurrent joins', async () => {
+    await start();
+    at = new Date(at.getTime() + 10_000);
+    await process(event(0, 'participant_left'));
+    at = new Date(at.getTime() + 10_000);
+    await process(event(1, 'participant_left'));
+    at = new Date(at.getTime() + 20_000);
+    const joins = [
+      event(0, 'participant_joined', 'PA_next_0'),
+      event(1, 'participant_joined', 'PA_next_1'),
+    ];
+    await Promise.all(
+      joins.map((joining) =>
+        process(joining, {
+          readParticipant: async (
+            /** @type {string} */ _room,
+            /** @type {string} */ actor,
+          ) => (actor === SESSION_ACTORS[0] ? 'PA_next_0' : 'PA_next_1'),
+        }),
+      ),
+    );
+    const resumed = await persisted();
+    expect(resumed).toMatchObject({
+      status: 'active',
+      activeSince: at,
+      activeDurationMs: 10_000,
+      selectionRemainingMs: 50_000,
+      controllerKey: SESSION_ACTORS[1],
+    });
+    expect(
+      resumed?.presence.every((/** @type {any} */ member) => member.connected),
+    ).toBe(true);
+    await Promise.all(joins.map((joining) => process(joining)));
+    expect(await persisted()).toEqual(resumed);
+    expect(
+      await db
+        .collection('statistics')
+        .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+    ).toMatchObject({ startedSessions: 1 });
+  });
+
+  it('keeps clocks paused while only the first of two disconnected members returns', async () => {
+    await start();
+    at = new Date(at.getTime() + 10_000);
+    await process(event(0, 'participant_left'));
+    await process(event(1, 'participant_left'));
+    const deadline = (await persisted())?.presence[1].reconnectUntil;
+    at = new Date(at.getTime() + 20_000);
+    await process(event(0, 'participant_joined', 'PA_first'), {
+      readParticipant: async () => 'PA_first',
+    });
+    const waiting = await persisted();
+    expect(waiting).toMatchObject({
+      status: 'reconnecting',
+      activeDurationMs: 10_000,
+      selectionRemainingMs: 50_000,
+    });
+    expect(waiting).not.toHaveProperty('activeSince');
+    expect(waiting?.presence[1].reconnectUntil).toEqual(deadline);
+    at = new Date(at.getTime() + 20_000);
+    await process(event(1, 'participant_joined', 'PA_second'), {
+      readParticipant: async () => 'PA_second',
+    });
+    expect(await persisted()).toMatchObject({
+      status: 'active',
+      activeSince: at,
+      activeDurationMs: 10_000,
+      selectionRemainingMs: 50_000,
+    });
+  });
+
+  it('keeps the selected deck, current card and roles without restarting selection', async () => {
+    await start();
+    const deckVersionId = new ObjectId();
+    const cardId = new ObjectId();
+    const card = {
+      _id: cardId,
+      sessionId: SESSION_ID,
+      scenarioVersionId: new ObjectId(),
+      slot: 0,
+      status: 'current',
+      roleAKey: SESSION_ACTORS[0],
+      roleBKey: SESSION_ACTORS[1],
+    };
+    await db.collection('session_cards').insertOne(card);
+    await db.collection('practice_sessions').updateOne(
+      { _id: SESSION_ID },
+      {
+        $set: {
+          deckVersionId,
+          currentCardId: cardId,
+          pendingAction: { id: 'old-action', kind: 'swapRoles' },
+        },
+        $unset: { selectionRunningSince: '' },
+      },
+    );
+    at = new Date(at.getTime() + 20_000);
+    await process(event(0, 'participant_left'));
+    expect(await persisted()).not.toHaveProperty('pendingAction');
+    at = new Date(at.getTime() + 120_000);
+    await process(event(0, 'participant_joined', 'PA_next'), {
+      readParticipant: async () => 'PA_next',
+    });
+    expect(await persisted()).toMatchObject({
+      status: 'active',
+      deckVersionId,
+      currentCardId: cardId,
+      controllerKey: SESSION_ACTORS[1],
+      activeDurationMs: 20_000,
+    });
+    expect(await persisted()).not.toHaveProperty('selectionRunningSince');
+    expect(await persisted()).not.toHaveProperty('pendingAction');
+    expect(
+      await db.collection('session_cards').findOne({ _id: cardId }),
+    ).toEqual(card);
+    at = new Date(at.getTime() + 120_000);
+    await reconcileSession(SESSION_ID, await identity(), now);
+    expect((await persisted())?.status).toBe('active');
+  });
+
+  it.each([-1, 0, 1])(
+    'checks the reconnect deadline at offset %i ms',
+    async (offset) => {
+      await start();
+      at = new Date(at.getTime() + 1000);
+      await process(event(0, 'participant_left'));
+      const deadline = (await persisted())?.presence[0].reconnectUntil;
+      at = new Date(deadline.getTime() + offset);
+      await process(event(0, 'participant_joined', 'PA_boundary'), {
+        readParticipant: async () => 'PA_boundary',
+      });
+      if (offset < 0) expect((await persisted())?.status).toBe('active');
+      else
+        expect(await persisted()).toMatchObject({
+          status: 'ended',
+          endReason: 'connection_timeout',
+          endedAt: deadline,
+        });
+    },
+  );
+
+  it('does not revive a session when media reconciliation crosses the deadline', async () => {
     await start();
     at = new Date(at.getTime() + 1000);
     await process(event(0, 'participant_left'));
-    const before = await persisted();
-    const joining = event(0, 'participant_joined', 'PA_new');
+    const deadline = (await persisted())?.presence[0].reconnectUntil;
+    at = new Date(deadline.getTime() - 1);
+    await process(event(0, 'participant_joined', 'PA_delayed'), {
+      readParticipant: async () => {
+        at = new Date(deadline.getTime() + 1);
+        return 'PA_delayed';
+      },
+    });
+    expect(await persisted()).toMatchObject({
+      status: 'ended',
+      endReason: 'connection_timeout',
+      endedAt: deadline,
+      activeDurationMs: 1000,
+    });
+  });
+
+  it('checks the returning member deadline even when the partner remains disconnected', async () => {
+    await start();
+    at = new Date(at.getTime() + 10_000);
+    await process(event(0, 'participant_left'));
+    const deadline = (await persisted())?.presence[0].reconnectUntil;
+    at = new Date(at.getTime() + 100_000);
+    await process(event(1, 'participant_left'));
+    at = new Date(deadline.getTime() - 1);
+    await process(event(0, 'participant_joined', 'PA_partial_late'), {
+      readParticipant: async () => {
+        at = new Date(deadline.getTime() + 1);
+        return 'PA_partial_late';
+      },
+    });
+    expect(await persisted()).toMatchObject({
+      status: 'ended',
+      endReason: 'connection_timeout',
+      endedAt: deadline,
+    });
+    at = new Date(deadline.getTime() + 50_000);
+    await process(event(1, 'participant_joined', 'PA_partner_late'), {
+      readParticipant: async () => 'PA_partner_late',
+    });
+    expect((await persisted())?.status).toBe('ended');
+  });
+
+  it.each(['block', 'lock'])(
+    'rechecks %s before resuming the session',
+    async (change) => {
+      await start();
+      at = new Date(at.getTime() + 1000);
+      await process(event(0, 'participant_left'));
+      if (change === 'block')
+        await db.collection('blocks').insertOne({
+          blockerKey: SESSION_ACTORS[1],
+          blockedKey: SESSION_ACTORS[0],
+        });
+      else
+        await db
+          .collection('users')
+          .updateOne(
+            { _id: SESSION_USERS[1]._id },
+            { $set: { status: 'locked' } },
+          );
+      at = new Date(at.getTime() + 1000);
+      await process(event(0, 'participant_joined', 'PA_forbidden'), {
+        readParticipant: async () => 'PA_forbidden',
+      });
+      expect(await persisted()).toMatchObject({
+        status: 'ended',
+        endReason: change === 'block' ? 'blocked' : 'account_locked',
+        activeDurationMs: 1000,
+      });
+      expect(
+        await db.collection('actor_states').countDocuments({ mode: 'idle' }),
+      ).toBe(2);
+    },
+  );
+
+  it('does not resume with an expired guest partner', async () => {
+    await start();
+    const guestId = new ObjectId();
+    const guestKey = `guest:${guestId}`;
+    const expiresAt = new Date(at.getTime() + 2000);
+    await db.collection('guest_sessions').insertOne({
+      _id: guestId,
+      credentialHash: 'reconnect-guest-fixture',
+      practiceSessionId: SESSION_ID,
+      status: 'active',
+      expiresAt,
+      version: 0,
+    });
+    await db.collection('practice_sessions').updateOne(
+      { _id: SESSION_ID },
+      {
+        $set: {
+          'members.1': { actorKey: guestKey, kind: 'guest' },
+          'presence.1.actorKey': guestKey,
+        },
+      },
+    );
+    at = new Date(at.getTime() + 1000);
+    await process(event(0, 'participant_left'));
+    at = expiresAt;
+    await process(event(0, 'participant_joined', 'PA_expired_guest'), {
+      readParticipant: async () => 'PA_expired_guest',
+    });
+    expect(await persisted()).toMatchObject({
+      status: 'ended',
+      activeDurationMs: 1000,
+    });
+  });
+
+  it('rolls back recovery and its receipt on failure, then retries without recounting start', async () => {
+    await start();
+    at = new Date(at.getTime() + 1000);
+    await process(event(0, 'participant_left'));
+    const paused = await persisted();
+    const joining = event(0, 'participant_joined', 'PA_retry');
     await expect(
-      process(joining, { readParticipant: async () => 'PA_new' }),
-    ).rejects.toMatchObject({ status: 503 });
-    expect(await persisted()).toEqual(before);
+      process(joining, {
+        readParticipant: async () => 'PA_retry',
+        onVerifiedPresence: async (
+          /** @type {Parameters<typeof consumer>[0]} */ input,
+        ) => {
+          await consumer(input);
+          throw new Error('after recovery');
+        },
+      }),
+    ).rejects.toThrow('after recovery');
+    expect(await persisted()).toEqual(paused);
     expect(
       await db.collection('webhook_receipts').findOne({ eventId: joining.id }),
     ).toBeNull();
+    await process(joining, { readParticipant: async () => 'PA_retry' });
+    expect((await persisted())?.status).toBe('active');
+    expect(
+      await db
+        .collection('statistics')
+        .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+    ).toMatchObject({ startedSessions: 1 });
   });
+
+  it.each(['block', 'lock'])(
+    'a recovery racing %s always ends the session and releases both actors',
+    async (change) => {
+      await start();
+      at = new Date(at.getTime() + 1000);
+      await process(event(0, 'participant_left'));
+      await Promise.all([
+        process(event(0, 'participant_joined', 'PA_block_race'), {
+          readParticipant: async () => 'PA_block_race',
+        }),
+        change === 'block'
+          ? createPairBlock({
+              blockerKey: SESSION_ACTORS[0],
+              blockedKey: SESSION_ACTORS[1],
+              now: at,
+            })
+          : lockUserAccount({ userId: String(SESSION_USERS[1]._id), now: at }),
+      ]);
+      expect(await persisted()).toMatchObject({
+        status: 'ended',
+        endReason: change === 'block' ? 'blocked' : 'account_locked',
+      });
+      expect(
+        await db.collection('actor_states').countDocuments({ mode: 'idle' }),
+      ).toBe(2);
+      expect(
+        await db
+          .collection('statistics')
+          .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+      ).toMatchObject({ startedSessions: 1 });
+    },
+  );
+
+  it('a recovery racing leave cannot revive the session', async () => {
+    await start();
+    at = new Date(at.getTime() + 1000);
+    await process(event(0, 'participant_left'));
+    await Promise.all([
+      process(event(0, 'participant_joined', 'PA_race'), {
+        readParticipant: async () => 'PA_race',
+      }),
+      leaveSession({
+        sessionId: String(SESSION_ID),
+        getIdentity: identity,
+        operationId: randomUUID(),
+        now,
+      }),
+    ]);
+    expect((await persisted())?.status).toBe('ended');
+    expect(
+      await db.collection('actor_states').countDocuments({ mode: 'idle' }),
+    ).toBe(2);
+    expect(
+      await db
+        .collection('statistics')
+        .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+    ).toMatchObject({ startedSessions: 1 });
+  });
+
   it('room_finished ignores an active new SID and pauses an actually empty room only once', async () => {
     await start();
     at = new Date(at.getTime() + 10_000);
@@ -610,6 +1003,38 @@ describe('BE-012 lifecycle on a real replica set', () => {
         .expect(204);
     }
     expect((await persisted())?.status).toBe('active');
+    const initial = await persisted();
+    at = new Date();
+    const disconnect = event(0, 'participant_left').toJsonString();
+    await request(app)
+      .post('/api/v1/webhooks/livekit')
+      .set('Content-Type', 'application/webhook+json')
+      .set('Authorization', await signWebhookBody(disconnect))
+      .send(disconnect)
+      .expect(204);
+    expect((await persisted())?.status).toBe('reconnecting');
+    at = new Date();
+    vi.mocked(readMediaParticipant).mockResolvedValueOnce('PA_http_new');
+    const reconnect = event(
+      0,
+      'participant_joined',
+      'PA_http_new',
+    ).toJsonString();
+    await request(app)
+      .post('/api/v1/webhooks/livekit')
+      .set('Content-Type', 'application/webhook+json')
+      .set('Authorization', await signWebhookBody(reconnect))
+      .send(reconnect)
+      .expect(204);
+    const restored = await request(app)
+      .get(`/api/v1/sessions/${SESSION_ID}`)
+      .set('Cookie', `ck_session=${cookies[0]}`)
+      .expect(200);
+    expect(restored.body.data).toMatchObject({
+      status: 'active',
+      controllerKey: initial?.controllerKey,
+    });
+    expect((await persisted())?.startedAt).toEqual(initial?.startedAt);
   });
   it('settles a disconnect at detection time even when media reconciliation crosses the selection deadline', async () => {
     await start();

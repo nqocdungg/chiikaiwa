@@ -329,3 +329,12 @@ export function generatePasswordResetToken() {
 export function hashPasswordResetToken(token) {
   return createHash('sha256').update(token, 'utf8').digest('hex');
 }
+
+/**
+ * Generates a cryptographically strong guest credential with at least 32 bytes of entropy.
+ * The raw credential must be sent to the client via HttpOnly cookie only and must never be logged.
+ * @returns {string} raw base64url credential
+ */
+export function generateGuestCredential() {
+  return randomBytes(32).toString('base64url');
+}

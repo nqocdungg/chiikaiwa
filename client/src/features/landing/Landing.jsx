@@ -1,10 +1,10 @@
 import { Link } from 'react-router';
+import chiiLogo from '../../assets/brand/chii-logo.svg';
+import usagiImg from '../../assets/mascots/bouncing-usagi.gif';
+import hachiwareImg from '../../assets/mascots/waving-hachiware.gif';
 import { PageContainer } from '../../components/layout/PageContainer.jsx';
 import { Icon } from '../../components/ui/controls.jsx';
 import { useAuth } from '../auth/use-auth.js';
-import chiiLogo from '../../assets/brand/chii-logo.svg';
-import usagiImg from '../../assets/mascots/usagi.png';
-import hachiwareImg from '../../assets/mascots/hachiware.png';
 
 /**
  * SC-01: Landing Page công khai của Chiikaiwa (04 §5.1, §3.2, docs/frontend/design-system.md).
@@ -22,7 +22,10 @@ export function Landing() {
 
   return (
     <div className="ck-landing">
-      <header className="ck-home-header" role="banner">
+      <header
+        className="flex shrink-0 items-center justify-between gap-3 border-b border-ui-border px-5 py-4 sm:gap-7 sm:px-[5%] sm:py-6"
+        role="banner"
+      >
         <Link
           className="ck-brand"
           to="/"
@@ -38,24 +41,32 @@ export function Landing() {
           <span className="ck-brand-text">Chiikaiwa</span>
         </Link>
         <h1 className="sr-only">Chiikaiwa</h1>
-        <nav aria-label="Điều hướng chính">
+        <nav className="flex items-center" aria-label="Điều hướng chính">
           {isLoading ? (
             <div
               className="flex items-center gap-3 opacity-0 pointer-events-none"
               aria-hidden="true"
             >
-              <span className="ck-nav-link">Đăng nhập</span>
+              <span className="inline-flex min-h-10 items-center px-1.5 text-sm font-semibold text-muted">
+                Đăng nhập
+              </span>
               <span className="ck-button ck-button--secondary text-xs !min-h-0 !py-1.5 !px-3.5 !rounded-full">
                 Đăng ký
               </span>
             </div>
           ) : isAuthenticated ? (
-            <Link to={ctaPath} className="ck-nav-link">
+            <Link
+              to={ctaPath}
+              className="inline-flex min-h-10 items-center px-1.5 text-sm font-semibold text-muted no-underline transition-colors hover:text-ink"
+            >
               {ctaNavLabel}
             </Link>
           ) : (
             <div className="flex items-center gap-3">
-              <Link to="/login" className="ck-nav-link">
+              <Link
+                to="/login"
+                className="inline-flex min-h-10 items-center px-1.5 text-sm font-semibold text-muted no-underline transition-colors hover:text-ink"
+              >
                 Đăng nhập
               </Link>
               <Link
@@ -95,10 +106,13 @@ export function Landing() {
               Không gian luyện nói <br /> tiếng Nhật 1-1
             </h2>
             <p className="ck-hero-subtitle">
-              Một câu chào, một câu chuyện mới.
-              <br />
-              Luyện hội thoại tiếng Nhật 1-1 cùng bạn học qua các tình huống{' '}
-              <span className="whitespace-nowrap">thực tế.</span>
+              <span className="ck-hero-subtitle__lead">
+                Một câu chào, một câu chuyện mới.
+              </span>
+              <span className="ck-hero-subtitle__detail">
+                Luyện hội thoại tiếng Nhật 1-1 cùng bạn học qua các tình huống{' '}
+                <span className="whitespace-nowrap">thực tế.</span>
+              </span>
             </p>
 
             <div className="ck-hero-primary-action">
@@ -121,7 +135,7 @@ export function Landing() {
 
             <div className="ck-hero-secondary-actions">
               <Link
-                to="/invitation"
+                to="/invitation?mode=join"
                 className="ck-button ck-button--secondary ck-hero-btn-pill"
               >
                 <Icon name="cards" size={16} />

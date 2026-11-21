@@ -289,6 +289,77 @@ export async function logoutSession({
 }
 
 /**
+ * Rejects a guest credential that is not attached to a usable invitation flow
+ * (`waiting`) or to the practice session it was accepted into (`active`/`summary`).
+ * Read-only: never extends the guest deadline.
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {any} guestDoc
+ * @param {string} actorKey
+ * @param {Date} now
+ */
+async function assertGuestScope(db, guestDoc, actorKey, now) {
+  const guestExpired = () =>
+    new AppError({
+      status: 410,
+      code: 'GUEST_EXPIRED',
+      message: 'Quyền truy cập tạm của khách đã hết hạn.',
+    });
+
+  if (guestDoc.status === 'waiting') {
+    const [request, invitation] = await Promise.all([
+      db.collection('invite_requests').findOne(
+        {
+          requesterKey: actorKey,
+          invitationId: guestDoc.invitationId,
+          status: 'pending',
+        },
+        { projection: { _id: 1 } },
+      ),
+      guestDoc.invitationId
+        ? db
+            .collection('invitations')
+            .findOne(
+              { _id: guestDoc.invitationId },
+              { projection: { status: 1, expiresAt: 1 } },
+            )
+        : null,
+    ]);
+    if (
+      !request ||
+      !invitation ||
+      invitation.status !== 'open' ||
+      !(invitation.expiresAt instanceof Date) ||
+      invitation.expiresAt <= now
+    ) {
+      throw guestExpired();
+    }
+    return;
+  }
+
+  if (guestDoc.status === 'active' || guestDoc.status === 'summary') {
+    if (!guestDoc.practiceSessionId) throw guestExpired();
+    if (
+      guestDoc.status === 'summary' &&
+      (!(guestDoc.expiresAt instanceof Date) || guestDoc.expiresAt <= now)
+    ) {
+      throw guestExpired();
+    }
+    const member = await db.collection('practice_sessions').findOne(
+      {
+        _id: guestDoc.practiceSessionId,
+        'members.actorKey': actorKey,
+      },
+      { projection: { _id: 1 } },
+    );
+    if (!member) throw guestExpired();
+    return;
+  }
+
+  throw guestExpired();
+}
+
+/**
  * Resolves the active caller identity (`user` or `guest`) from cookies and database state.
  * - When `ck_session` is present, account identity is evaluated exclusively:
  *   valid session -> `user`; invalid/expired/revoked/stale authVersion -> 401 `SESSION_EXPIRED`;
@@ -425,9 +496,12 @@ export async function resolveIdentityFromCookies({
     });
   }
 
+  const actorKey = `guest:${guestDoc._id.toHexString()}`;
+  await assertGuestScope(db, guestDoc, actorKey, now);
+
   return {
     kind: /** @type {const} */ ('guest'),
-    actorKey: `guest:${guestDoc._id.toHexString()}`,
+    actorKey,
     guestId: guestDoc._id,
     role: /** @type {const} */ ('guest'),
     guestSession: guestDoc,

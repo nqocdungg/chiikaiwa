@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { Button, Icon } from '../../components/ui/controls.jsx';
 import { Friends } from '../../components/Friends.jsx';
-import { knowledge } from '../../demo/kaiwa-fixtures.js';
 
-/** @param {{phase: import('../../demo/kaiwa-fixtures.js').Phase, scenarioTitle: string, outcomes: {title: string, result: string}[], note: string, noteStatus: string, saved: string[], onHome: () => void}} props */
+/** @param {{phase: import('../../demo/kaiwa-fixtures.js').Phase, scenarioTitle: string, outcomes: {title: string, result: string}[], note: string, noteStatus: string, saved: string[], knowledge: typeof import('../../demo/kaiwa-fixtures.js').knowledge, onHome: () => void}} props */
 export function SessionSummary({
   phase,
   scenarioTitle,
@@ -11,6 +10,7 @@ export function SessionSummary({
   note,
   noteStatus,
   saved,
+  knowledge,
   onHome,
 }) {
   const [message, setMessage] = useState('');

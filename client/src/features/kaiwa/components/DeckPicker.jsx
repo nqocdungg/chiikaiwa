@@ -1,36 +1,34 @@
 import { Icon } from '../../../components/ui/controls.jsx';
+import { Badge, Card } from '../../../components/ui/surfaces.jsx';
 
-/** @param {{decks: typeof import('../../../demo/kaiwa-fixtures.js').decks, disabled: boolean, onSelect: () => void}} props */
-export function DeckPicker({ decks, disabled, onSelect }) {
+/** @param {{decks: Array<{title: string, level: string, count: number, japaneseTitle?: string}>, disabled: boolean, onSelect: () => void, previewOnly?: boolean}} props */
+export function DeckPicker({ decks, disabled, onSelect, previewOnly = false }) {
   return (
     <>
-      <div className="ck-section-heading">
-        <h2>Hôm nay mình nói về…</h2>
-        <p>Chọn một bộ chủ đề.</p>
-      </div>
       <div className="ck-deck-list">
         {decks.map((deck, index) => (
-          <button
-            type="button"
+          <Card
             key={deck.title}
+            className="ck-conversation-set"
+            interactive={!previewOnly}
             disabled={disabled || index !== 0}
-            title={
-              index === 0
-                ? 'Chọn bộ cà phê'
-                : 'Chỉ minh họa, chưa có dữ liệu tình huống'
-            }
             onClick={onSelect}
           >
-            <Icon name="book" />
-            <span>
-              <strong>{deck.title}</strong>
-              <small>
-                {deck.level} · {deck.count} tình huống
-                {index === 0 ? '' : ' · Minh họa'}
-              </small>
-            </span>
-            <Icon name="arrow" size={17} />
-          </button>
+            <Badge>{deck.level}</Badge>
+            <div className="ck-deck-cover" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </div>
+            <h3 lang={deck.japaneseTitle ? 'ja' : undefined}>
+              {deck.japaneseTitle ?? deck.title}
+            </h3>
+            {deck.japaneseTitle && <p>{deck.title}</p>}
+            <div className="ck-deck-card-footer">
+              <strong>{deck.count} tình huống</strong>
+              <Icon name="arrow" size={16} />
+            </div>
+          </Card>
         ))}
       </div>
     </>

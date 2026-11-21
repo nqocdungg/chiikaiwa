@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import usagi from '../../assets/mascots/usagi.png';
+import usagi from '../../assets/mascots/bouncing-usagi.gif';
 import { AuthLayout } from '../../components/layout/AuthLayout.jsx';
 import { Badge } from '../../components/ui/surfaces.jsx';
 

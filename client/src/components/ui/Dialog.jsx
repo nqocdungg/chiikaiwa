@@ -15,12 +15,18 @@ const focusableSelector = [
  * open: boolean,
  * onClose: () => void,
  * title: string,
+ * headingAdornment?: import('react').ReactNode,
+ * eyebrow?: string,
  * description?: string,
  * children: import('react').ReactNode,
  * footer?: import('react').ReactNode,
  * size?: 'compact'|'form',
  * friendly?: boolean,
+ * align?: 'start'|'center',
+ * className?: string,
+ * footerClassName?: string,
  * closeLabel?: string,
+ * closeDisabled?: boolean,
  * closeOnBackdrop?: boolean,
  * initialFocusRef?: import('react').RefObject<HTMLElement|null>,
  * }} props
@@ -29,12 +35,18 @@ export function Dialog({
   open,
   onClose,
   title,
+  headingAdornment,
+  eyebrow,
   description,
   children,
   footer,
   size = 'compact',
   friendly = false,
+  align = 'start',
+  className = '',
+  footerClassName = '',
   closeLabel = 'Đóng hộp thoại',
+  closeDisabled = false,
   closeOnBackdrop = true,
   initialFocusRef,
 }) {
@@ -76,6 +88,8 @@ export function Dialog({
     'ck-dialog',
     size === 'form' ? 'ck-dialog--form' : '',
     friendly ? 'ck-dialog--friendly' : '',
+    align === 'center' ? 'ck-dialog--centered' : '',
+    className,
   ]
     .filter(Boolean)
     .join(' ');
@@ -84,7 +98,7 @@ export function Dialog({
   function handleKeyDown(event) {
     if (event.key === 'Escape') {
       event.preventDefault();
-      onClose();
+      if (!closeDisabled) onClose();
       return;
     }
     if (event.key !== 'Tab') return;
@@ -120,16 +134,27 @@ export function Dialog({
       aria-describedby={description ? descriptionId : undefined}
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        if (!closeDisabled) onClose();
       }}
       onClick={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget) onClose();
+        if (
+          closeOnBackdrop &&
+          !closeDisabled &&
+          event.target === event.currentTarget
+        )
+          onClose();
       }}
       onKeyDown={handleKeyDown}
     >
       <div className="ck-dialog__layout">
         <header className="ck-dialog__header">
           <div className="ck-dialog__heading">
+            {headingAdornment ? (
+              <div className="ck-dialog__heading-adornment">
+                {headingAdornment}
+              </div>
+            ) : null}
+            {eyebrow ? <p className="ck-dialog__eyebrow">{eyebrow}</p> : null}
             <h2 id={titleId} className="ck-dialog__title">
               {title}
             </h2>
@@ -145,11 +170,14 @@ export function Dialog({
             name="close"
             label={closeLabel}
             onClick={onClose}
+            disabled={closeDisabled}
           />
         </header>
         <div className="ck-dialog__body">{children}</div>
         {footer ? (
-          <footer className="ck-dialog__footer">{footer}</footer>
+          <footer className={`ck-dialog__footer ${footerClassName}`.trim()}>
+            {footer}
+          </footer>
         ) : null}
       </div>
     </dialog>

@@ -1,7 +1,13 @@
 /// <reference types="vite/client" />
 
 import { lazy, Suspense, useEffect } from 'react';
-import { Link, Route, Routes, useLocation } from 'react-router';
+import { SessionRoom } from './features/kaiwa/SessionRoom.jsx';
+import { Link, Outlet, Route, Routes, useLocation } from 'react-router';
+import { LearningLayout } from './components/layout/LearningLayout.jsx';
+import { LibraryLayout } from './features/library/LibraryLayout.jsx';
+import { SavedPage } from './features/library/SavedPage.jsx';
+import { TopicDetailPage } from './features/library/TopicDetailPage.jsx';
+import { TopicsPage } from './features/library/TopicsPage.jsx';
 import {
   InvitationRoute,
   ProtectedRoute,
@@ -14,7 +20,9 @@ import { LoginPage } from './features/auth/LoginPage.jsx';
 import { LogoutActionBar } from './features/auth/LogoutActionBar.jsx';
 import { RegisterPage } from './features/auth/RegisterPage.jsx';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage.jsx';
+import { useAuth } from './features/auth/use-auth.js';
 import { Home } from './features/home/Home.jsx';
+import { InvitationDialog } from './features/invitation/InvitationDialog.jsx';
 import { activeLocationRef } from './features/home/navigation-tracker.js';
 import { Landing } from './features/landing/Landing.jsx';
 import { ProfilePage } from './features/profile/ProfilePage.jsx';
@@ -27,16 +35,34 @@ const ComponentPreview = import.meta.env.DEV
     )
   : null;
 
+const RoomPreview = import.meta.env.DEV
+  ? lazy(() =>
+      import('./demo/RoomPreview.jsx').then((module) => ({
+        default: module.RoomPreview,
+      })),
+    )
+  : null;
+
 /**
  * Minimal route shell container for FE-001 routing hierarchy (SC-01–20).
  * Feature screens are mounted into these routes by their respective tasks.
  *
- * @param {{ screenId: string, title: string, description?: string, children?: import('react').ReactNode }} props
+ * @param {{ screenId: string, title: string, description?: string, children?: import('react').ReactNode, showLogout?: boolean }} props
  */
-function RouteShell({ screenId, title, description, children }) {
+function RouteShell({
+  screenId,
+  title,
+  description,
+  children,
+  showLogout = false,
+}) {
+  const { role } = useAuth();
   return (
-    <section data-screen-id={screenId} className="mx-auto max-w-4xl px-6 py-12">
-      <LogoutActionBar />
+    <section
+      data-screen-id={screenId}
+      className="ck-route-shell mx-auto max-w-4xl px-6 py-12"
+    >
+      {(showLogout || role === 'admin') && <LogoutActionBar />}
       <h1 className="text-2xl font-semibold text-ink">{title}</h1>
       {description ? <p className="mt-2 text-muted">{description}</p> : null}
       {children}
@@ -54,6 +80,15 @@ export function App({ skipInitialAuthCheck = false } = {}) {
   }, [location]);
   const { pathname } = location;
 
+  const isRoom = /^\/room\//u.test(pathname);
+  if (RoomPreview && pathname === '/__dev/room') {
+    return (
+      <Suspense fallback={null}>
+        <RoomPreview />
+      </Suspense>
+    );
+  }
+
   if (ComponentPreview && pathname === '/__dev/components') {
     return (
       <div className="ck-app">
@@ -64,35 +99,58 @@ export function App({ skipInitialAuthCheck = false } = {}) {
     );
   }
 
-  const hasPageLandmark = pathname === '/' || pathname === '/home';
-  const isFullBleedRoute =
-    hasPageLandmark ||
-    pathname === '/forgot-password' ||
-    pathname === '/reset-password';
-  const RouteContainer = hasPageLandmark ? 'div' : 'main';
-
   return (
     <AuthProvider skipInitialCheck={skipInitialAuthCheck}>
-      <div className="ck-app">
-        <RouteContainer
-          className={isFullBleedRoute ? 'w-full' : 'ck-page-container py-10'}
-        >
-          <Routes>
-            {/* SC-01: Public Landing */}
-            <Route path="/" element={<Landing />} />
+      <div className={`ck-app ${isRoom ? 'ck-app--room ck-room-view' : ''}`}>
+        <Routes>
+          {/* SC-01: Public Landing */}
+          <Route path="/" element={<Landing />} />
 
-            {/* SC-02: Public Only Auth routes */}
-            <Route element={<PublicOnlyRoute />}>
+          {/* SC-02: Public Only Auth routes */}
+          <Route element={<PublicOnlyRoute />}>
+            <Route
+              element={
+                <main className="ck-page-container py-10">
+                  <Outlet />
+                </main>
+              }
+            >
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+            </Route>
+            <Route
+              element={
+                <main className="w-full">
+                  <Outlet />
+                </main>
+              }
+            >
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
             </Route>
+          </Route>
 
+          <Route element={<SessionMemberRoute />}>
+            <Route
+              path="/room/:sessionId"
+              element={
+                <div className="ck-room-route">
+                  <SessionRoom />
+                </div>
+              }
+            />
+          </Route>
+
+          <Route element={<LearningLayout />}>
             {/* SC-03: Learner Home */}
-            <Route element={<ProtectedRoute learnerOnly />}>
-              <Route path="/home" element={<Home />} />
-            </Route>
+            <Route
+              path="/home"
+              element={
+                <ProtectedRoute learnerOnly>
+                  <Home />
+                </ProtectedRoute>
+              }
+            />
 
             {/* SC-04, SC-05, SC-13, SC-16, SC-18: User-only routes (U) */}
             <Route element={<ProtectedRoute allowedRoles={['U']} />}>
@@ -121,24 +179,19 @@ export function App({ skipInitialAuthCheck = false } = {}) {
 
             {/* SC-06: Invitation room — accessible to anonymous visitors (for POST /guest-trials), learners (U), and guests (G) */}
             <Route element={<InvitationRoute />}>
-              <Route
-                path="/invitation"
-                element={<RouteShell screenId="SC-06" title="Phòng mời" />}
-              />
+              <Route path="/invitation" element={<InvitationDialog />} />
             </Route>
 
             {/* SC-11, SC-12, SC-14, SC-15: Learner or Guest routes (U / G) */}
             <Route element={<ProtectedRoute allowedRoles={['U', 'G']} />}>
-              <Route
-                path="/topics"
-                element={<RouteShell screenId="SC-11" title="Kho chủ đề" />}
-              />
-              <Route
-                path="/saved"
-                element={
-                  <RouteShell screenId="SC-12" title="Kiến thức đã lưu" />
-                }
-              />
+              <Route element={<LibraryLayout />}>
+                <Route path="/topics" element={<TopicsPage />} />
+                <Route
+                  path="/topics/:topicVersionId"
+                  element={<TopicDetailPage />}
+                />
+                <Route path="/saved" element={<SavedPage />} />
+              </Route>
               <Route
                 path="/study"
                 element={
@@ -154,17 +207,19 @@ export function App({ skipInitialAuthCheck = false } = {}) {
             {/* SC-07, SC-08, SC-10: Session Member routes (M) — verified with backend */}
             <Route element={<SessionMemberRoute />}>
               <Route
-                path="/room/:sessionId"
-                element={
-                  <RouteShell screenId="SC-07" title="Phòng hội thoại" />
-                }
-              />
-              <Route
                 path="/sessions/:sessionId/summary"
                 element={<RouteShell screenId="SC-10" title="Tổng kết phiên" />}
               />
             </Route>
+          </Route>
 
+          <Route
+            element={
+              <main className="ck-page-container py-10">
+                <Outlet />
+              </main>
+            }
+          >
             {/* SC-19: Admin area (A) */}
             <Route element={<ProtectedRoute allowedRoles={['A']} />}>
               <Route
@@ -183,6 +238,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
                   screenId="SC-20"
                   title="Phiên làm việc đã kết thúc"
                   description="Quyền truy cập của bạn đã hết hạn."
+                  showLogout
                 >
                   <Link className="mt-4 inline-block underline" to="/">
                     Về trang chủ
@@ -195,15 +251,19 @@ export function App({ skipInitialAuthCheck = false } = {}) {
             <Route
               path="*"
               element={
-                <RouteShell screenId="SC-404" title="Không tìm thấy trang">
+                <RouteShell
+                  screenId="SC-404"
+                  title="Không tìm thấy trang"
+                  showLogout
+                >
                   <Link className="mt-4 inline-block underline" to="/">
                     Về trang chủ
                   </Link>
                 </RouteShell>
               }
             />
-          </Routes>
-        </RouteContainer>
+          </Route>
+        </Routes>
       </div>
     </AuthProvider>
   );

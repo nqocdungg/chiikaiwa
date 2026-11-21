@@ -46,7 +46,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Phòng mời' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Nhập mã mời' })).toBeVisible();
   });
 
   it('allows anonymous visitor to stay on /invitation after /auth/me returns 401', async () => {
@@ -59,7 +59,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Phòng mời' }),
+      await screen.findByRole('heading', { name: 'Nhập mã mời' }),
     ).toBeVisible();
   });
 
@@ -230,7 +230,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Phòng mời' }),
+      await screen.findByRole('heading', { name: 'Nhập mã mời' }),
     ).toBeVisible();
   });
 
@@ -260,6 +260,23 @@ describe('Route protection, direct URL navigation and refresh', () => {
         },
         meta: {},
         epoch: getIdentityEpoch(),
+      }))
+      .mockImplementation(async () => ({
+        data: {
+          id: '507f1f77bcf86cd799439011',
+          status: 'active',
+          version: 1,
+          members: [
+            { actorKey: 'user:u1', displayName: 'Test' },
+            { actorKey: 'user:u2', displayName: 'Partner' },
+          ],
+          activeDurationMs: 0,
+          selectionRemainingMs: 60000,
+          slots: [],
+          screenShare: { state: 'idle' },
+        },
+        meta: {},
+        epoch: getIdentityEpoch(),
       }));
 
     render(
@@ -269,7 +286,7 @@ describe('Route protection, direct URL navigation and refresh', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Phòng hội thoại' }),
+      await screen.findByRole('heading', { name: 'Sẵn sàng vào phòng?' }),
     ).toBeVisible();
     expect(getSpy).toHaveBeenCalledWith('/sessions/507f1f77bcf86cd799439011');
   });
