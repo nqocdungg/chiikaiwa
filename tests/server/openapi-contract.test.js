@@ -366,6 +366,9 @@ describe('OpenAPI contract', () => {
       schemas.SessionDeckOptionsResponse.properties.data.properties.items.items
         .required,
     ).toContain('scenarioCount');
+    expect(
+      document.paths['/sessions/{id}/deck-options'].get.responses['409'],
+    ).toMatchObject({ description: expect.stringContaining('SESSION_ENDED') });
     expect(schemas.SessionHintKnowledge).toMatchObject({
       required: expect.arrayContaining(['versionId', 'isSaved']),
       properties: {

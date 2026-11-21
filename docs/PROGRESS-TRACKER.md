@@ -470,12 +470,14 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ### BE-022 — Chọn bộ, bốc lá, gợi ý và đồng thuận trong phiên
 
-- Ngày cập nhật: 2026-11-15
-- Nhánh: `feature/BE-022-session-card-flow` cập nhật từ `develop@962f411`. Reviewer theo Task Tracker: Hạnh Nhi.
+- Ngày cập nhật: 2026-11-22
+- Trạng thái: Đã triển khai và kiểm chứng backend local. Chờ review nhóm và nghiệm thu tích hợp.
+- Nhánh: `feature/BE-022-session-card-flow`. Reviewer theo Task Tracker: Minh Xuân.
 - Đã làm: Bảy API cho thành viên phiên. Danh sách bộ xuất bản có số tình huống theo revision. Chọn bộ trong 60 giây hoạt động và cố định revision, xáo slot trên server. Lấy quyền, chọn bộ, bốc lá và đồng thuận dùng chung version phiên và ghi receipt cùng transaction. Bốc lá chỉ trả vai của người gọi. Gợi ý theo revision của lá đã bốc, kèm trạng thái lưu của người gọi. Đồng thuận hỗ trợ đổi vai, bỏ qua hoặc hoàn thành; người điều khiển chủ động bốc lá tiếp.
+- Contract: `deck-options` trả `409 SESSION_ENDED` cho thành viên khi phiên đã kết thúc. Nếu request phát hiện phiên đã quá hạn, server ghi nhận kết thúc tại đúng deadline trước khi trả lỗi. `deck-selection` trả `404 RESOURCE_NOT_FOUND` khi revision không còn được chọn mới. API specification §6 và OpenAPI mô tả `scenarioCount` và các phản hồi này.
 - File liên quan: [Service](../server/modules/sessions/session-card-service.js), [router](../server/modules/sessions/sessions-router.js), [OpenAPI](api/openapi.yaml), [kiểm thử tích hợp](../tests/integration/session-cards-api.test.js).
-- Kiểm chứng: `npm run check` đạt toàn bộ, gồm 312 ca unit/HTTP/component, 185 ca tích hợp, build ứng dụng và Storybook. Chín ca BE-022 dùng MongoDB 8.2.7 replica set tạm, kiểm cạnh tranh claim/draw, vai riêng, retry, hạn chọn bộ, hủy đề nghị khi mất kết nối và lưu kiến thức từ lá vừa bốc qua BE-016. LiveKit dùng mock ở ranh giới gọi dịch vụ. Storybook có cảnh báo kích thước chunk và thời gian plugin.
-- Tiếp theo: Nối phục hồi phiên với BE-017 và chạy nghiệm thu QA-006 trên hai client LiveKit. Đặc tả API §6 chưa liệt kê `scenarioCount`; contract OpenAPI bổ sung trường theo FR-CAR-01.
+- Kiểm chứng: `npm run openapi:check` đạt 13/13 ca. Suite BE-022 đạt 13/13, gồm claim cạnh tranh chọn bộ, chọn ngay trước và tại mốc 60 giây, kết thúc phiên quá hạn qua `deck-options`, lỗi revision không còn chọn được, và replay khi khách mất quyền mà controller/version không đổi. `npm run check` đạt format, lint, typecheck, 515 ca server/client, 302 ca integration và build. Kiểm thử dùng MongoDB 8.2.7 replica set tạm và mock LiveKit.
+- Tiếp theo: Review nhóm, nghiệm thu QA-006 và chạy AT-06/AT-07 trên hai client sau khi tích hợp FE-019 và phần phục hồi/tổng kết liên quan.
 
 ### QA-006 — Rà soát contract chọn bộ và manifest
 

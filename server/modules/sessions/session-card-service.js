@@ -82,8 +82,12 @@ export async function readDeckOptions({ sessionId, identity, limit, cursor }) {
     );
   }
   const db = await connectDatabase();
-  return withTransaction(async (session) => {
-    await authorizedSession(id, identity, new Date(), session);
+  const result = await withTransaction(async (session) => {
+    const at = new Date();
+    const doc = await authorizedSession(id, identity, at, session);
+    if (doc.status === 'ended') throw sessionEnded();
+    const current = await reconcileSessionDeadline(doc, at, session);
+    if (current.status === 'ended') return { endedSession: current };
     const { items, hasMore } = await queryPublishedTopics(
       db,
       { limit, cursor: decoded },
@@ -123,6 +127,11 @@ export async function readDeckOptions({ sessionId, identity, limit, cursor }) {
         : null,
     };
   });
+  if (result.endedSession) {
+    await finishSessionEffects(result.endedSession);
+    throw sessionEnded();
+  }
+  return result;
 }
 
 /** @param {{sessionId: string, cardId: string, identity: Identity}} input */

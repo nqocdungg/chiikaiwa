@@ -130,6 +130,24 @@ function select(expectedVersion, key) {
   });
 }
 
+/** @param {number} expectedVersion @param {Date} at @param {string} operationId */
+function selectAt(expectedVersion, at, operationId) {
+  return changeSessionCards(
+    {
+      sessionId: String(SESSION_ID),
+      operationId,
+      now: () => at,
+      getIdentity: () =>
+        resolveIdentityFromCookies({
+          authCookie: account('learnerA'),
+          guestCookie: undefined,
+          now: at,
+        }),
+    },
+    { kind: 'select', expectedVersion, deckVersionId: String(deckVersion) },
+  );
+}
+
 /** @param {number} expectedVersion @param {number} slot @param {string} [key] */
 function draw(expectedVersion, slot, key) {
   return api('post', '/draws', 'learnerA', key).send({ expectedVersion, slot });
@@ -306,10 +324,14 @@ it('returns the same published deck counts and scopes the cursor and writes to m
   await api('get', '/deck-options', 'admin').expect(404);
   const version = (await sessionDoc())?.version;
   await claim(version, 'admin').expect(404);
-  for (const revision of [oldDeckVersion, hiddenDeckVersion]) {
-    await api('post', '/deck-selection')
-      .send({ expectedVersion: version, deckVersionId: String(revision) })
-      .expect(404);
+  for (const revision of [oldDeckVersion, hiddenDeckVersion, scenarios[0]]) {
+    assertErrorEnvelope(
+      await api('post', '/deck-selection').send({
+        expectedVersion: version,
+        deckVersionId: String(revision),
+      }),
+      { expectedStatus: 404, expectedCode: 'RESOURCE_NOT_FOUND' },
+    );
   }
   const selected = await chooseDeck();
   expect(selected.deckVersionId).toBe(String(deckVersion));
@@ -373,6 +395,41 @@ it('keeps the selection deadline on claim, rejects a stale controller and never 
     [`session-${SESSION_ID}`, String(SESSION_ID), taken.version],
     [`session-${SESSION_ID}`, String(SESSION_ID), returned.version],
   ]);
+});
+
+it('commits either claim or selection at a shared version without resetting the selection clock', async () => {
+  const initial = await sessionDoc();
+  const [claimed, selected] = await Promise.all([
+    claim(initial?.version, 'learnerB'),
+    select(initial?.version),
+  ]);
+  expect([claimed.status, selected.status].sort()).toEqual([200, 409]);
+  const persisted = await sessionDoc();
+  expect(persisted?.version).toBe(initial?.version + 1);
+  const cardCount = await db
+    .collection('session_cards')
+    .countDocuments({ sessionId: SESSION_ID });
+  if (claimed.status === 200) {
+    assertVersionConflict(selected, {
+      expectedCurrentVersion: persisted?.version,
+    });
+    expect(persisted).toMatchObject({
+      controllerKey: SESSION_ACTORS[1],
+      selectionRunningSince: initial?.selectionRunningSince,
+      selectionRemainingMs: initial?.selectionRemainingMs,
+    });
+    expect(persisted).not.toHaveProperty('deckVersionId');
+    expect(cardCount).toBe(0);
+  } else {
+    assertVersionConflict(claimed, {
+      expectedCurrentVersion: persisted?.version,
+    });
+    expect(persisted).toMatchObject({
+      controllerKey: SESSION_ACTORS[0],
+      deckVersionId: deckVersion,
+    });
+    expect(cardCount).toBe(scenarios.length);
+  }
 });
 
 it('commits one draw when two slots race and shows each viewer only their assigned role', async () => {
@@ -567,30 +624,28 @@ it('applies only the partner response, preserves the rejected card and consumes 
   });
 });
 
+it('accepts selection one millisecond before the selection cutoff', async () => {
+  const version = (await sessionDoc())?.version;
+  const at = new Date(startedAt.getTime() + 59_999);
+  const result = await selectAt(version, at, createTestIdempotencyKey());
+  expect(result.data).toMatchObject({
+    status: 'active',
+    version: version + 1,
+    deckVersionId: String(deckVersion),
+    selectionRemainingMs: 1,
+    slots: scenarios.map((_, slot) => ({ slot, status: 'faceDown' })),
+  });
+  expect(await sessionDoc()).not.toHaveProperty('selectionRunningSince');
+});
+
 it('closes at the selection cutoff without storing a deck, card or receipt', async () => {
   const version = (await sessionDoc())?.version;
   const cutoff = new Date(startedAt.getTime() + 60_000);
   const operationId = createTestIdempotencyKey();
-  await expect(
-    changeSessionCards(
-      {
-        sessionId: String(SESSION_ID),
-        operationId,
-        now: () => cutoff,
-        getIdentity: () =>
-          resolveIdentityFromCookies({
-            authCookie: account('learnerA'),
-            guestCookie: undefined,
-            now: cutoff,
-          }),
-      },
-      {
-        kind: 'select',
-        expectedVersion: version,
-        deckVersionId: String(deckVersion),
-      },
-    ),
-  ).rejects.toMatchObject({ status: 409, code: 'SESSION_ENDED' });
+  await expect(selectAt(version, cutoff, operationId)).rejects.toMatchObject({
+    status: 409,
+    code: 'SESSION_ENDED',
+  });
   const ended = await sessionDoc();
   expect(ended).toMatchObject({
     status: 'ended',
@@ -609,6 +664,42 @@ it('closes at the selection cutoff without storing a deck, card or receipt', asy
   ).toBe(0);
 });
 
+it('refuses deck options in an ended session while preserving the membership check', async () => {
+  await api('post', '/leave').send({}).expect(200);
+  assertErrorEnvelope(await api('get', '/deck-options'), {
+    expectedStatus: 409,
+    expectedCode: 'SESSION_ENDED',
+  });
+  assertErrorEnvelope(await api('get', '/deck-options', 'admin'), {
+    expectedStatus: 404,
+    expectedCode: 'RESOURCE_NOT_FOUND',
+  });
+});
+
+it('ends an overdue session when deck options are the first request after the cutoff', async () => {
+  const cutoff = new Date(Date.now() - 1_000);
+  const since = new Date(cutoff.getTime() - 60_000);
+  await db.collection('practice_sessions').updateOne(
+    { _id: SESSION_ID },
+    {
+      $set: {
+        startedAt: since,
+        activeSince: since,
+        selectionRunningSince: since,
+      },
+    },
+  );
+  assertErrorEnvelope(await api('get', '/deck-options'), {
+    expectedStatus: 409,
+    expectedCode: 'SESSION_ENDED',
+  });
+  expect(await sessionDoc()).toMatchObject({
+    status: 'ended',
+    endedAt: cutoff,
+    endReason: 'selection_timeout',
+  });
+});
+
 it('cancels pending consent on verified disconnect and blocks card writes while reconnecting', async () => {
   const selected = await chooseDeck();
   const drawn = (await draw(selected.version, 0).expect(200)).body.data;
@@ -616,6 +707,7 @@ it('cancels pending consent on verified disconnect and blocks card writes while 
     .session;
   await presence(1, 'participant_left', new Date(startedAt.getTime() + 1000));
   const paused = (await api('get', '').expect(200)).body.data;
+  await api('get', '/deck-options').expect(200);
   expect(paused).toMatchObject({
     status: 'reconnecting',
     controllerKey: SESSION_ACTORS[0],
@@ -649,9 +741,10 @@ it('allows the guest trial member to take control and rechecks access before rep
   );
   await api('get', '/deck-options', 'guest').expect(200);
   const key = createTestIdempotencyKey();
-  expect(
-    (await claim(version, 'guest', key).expect(200)).body.data.controllerKey,
-  ).toBe(guestKey);
+  const claimed = (await claim(version, 'guest', key).expect(200)).body.data;
+  expect(claimed.controllerKey).toBe(guestKey);
+  const returned = (await claim(claimed.version, 'learnerA').expect(200)).body
+    .data;
   const otherSessionId = CONTENT_FIXTURES.sessionWithMembers._id;
   await db
     .collection('guest_sessions')
@@ -659,5 +752,28 @@ it('allows the guest trial member to take control and rechecks access before rep
       { _id: guestId },
       { $set: { practiceSessionId: otherSessionId } },
     );
-  await claim(version, 'guest', key).expect(404);
+  assertErrorEnvelope(await claim(version, 'guest', key), {
+    expectedStatus: 410,
+    expectedCode: 'GUEST_EXPIRED',
+  });
+
+  await db
+    .collection('practice_sessions')
+    .updateOne(
+      { _id: otherSessionId },
+      { $set: { 'members.1': { kind: 'guest', actorKey: guestKey } } },
+    );
+  assertErrorEnvelope(await claim(version, 'guest', key), {
+    expectedStatus: 404,
+    expectedCode: 'RESOURCE_NOT_FOUND',
+  });
+  expect(await sessionDoc()).toMatchObject({
+    controllerKey: SESSION_ACTORS[0],
+    version: returned.version,
+  });
+  expect(
+    await db
+      .collection('operation_receipts')
+      .countDocuments({ operationId: key }),
+  ).toBe(1);
 });
