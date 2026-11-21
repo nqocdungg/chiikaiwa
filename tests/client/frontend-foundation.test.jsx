@@ -5,7 +5,11 @@ import { useState } from 'react';
 import { readFileSync } from 'node:fs';
 import { Button } from '../../client/src/components/ui/controls.jsx';
 import { Dialog } from '../../client/src/components/ui/Dialog.jsx';
-import { Input, PasswordInput } from '../../client/src/components/ui/forms.jsx';
+import {
+  Input,
+  PasswordInput,
+  Select,
+} from '../../client/src/components/ui/forms.jsx';
 import { Avatar } from '../../client/src/components/ui/surfaces.jsx';
 
 afterEach(() => {
@@ -59,6 +63,32 @@ describe('frontend foundation', () => {
     );
   });
 
+  it('connects select help and errors to the native control', () => {
+    const { rerender } = render(
+      <Select label="Trình độ" helperText="Chọn trình độ của bạn">
+        <option value="N5">N5</option>
+      </Select>,
+    );
+
+    const select = screen.getByRole('combobox', { name: 'Trình độ' });
+    expect(select).toHaveValue('N5');
+    expect(select).toHaveAccessibleDescription('Chọn trình độ của bạn');
+    expect(select).not.toHaveAttribute('aria-invalid');
+
+    rerender(
+      <Select
+        label="Trình độ"
+        helperText="Chọn trình độ của bạn"
+        error="Trình độ không hợp lệ"
+      >
+        <option value="N5">N5</option>
+      </Select>,
+    );
+
+    expect(select).toHaveAccessibleDescription('Trình độ không hợp lệ');
+    expect(select).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('toggles password visibility without submitting', () => {
     render(
       <form>
@@ -68,12 +98,14 @@ describe('frontend foundation', () => {
 
     const input = screen.getByLabelText('Mật khẩu');
     expect(input).toHaveAttribute('type', 'password');
-    fireEvent.click(screen.getByRole('button', { name: 'Hiện mật khẩu' }));
+    const toggle = screen.getByRole('button', { name: 'Hiện mật khẩu' });
+    expect(toggle).toHaveAttribute('type', 'button');
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
     expect(input).toHaveAttribute('type', 'text');
-    expect(screen.getByRole('button', { name: 'Ẩn mật khẩu' })).toHaveAttribute(
-      'type',
-      'button',
-    );
+    expect(toggle).toHaveAccessibleName('Hiện mật khẩu');
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(toggle).toHaveAttribute('title', 'Ẩn mật khẩu');
   });
 
   it('closes a dialog with Escape and restores focus', () => {

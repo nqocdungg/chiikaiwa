@@ -122,10 +122,11 @@ export function Button({
   );
 }
 
-/** @param {{name: string, label: string, onClick?: import('react').MouseEventHandler<HTMLButtonElement>, pressed?: boolean, disabled?: boolean, type?: 'button'|'submit'|'reset', className?: string, buttonRef?: import('react').Ref<HTMLButtonElement>}} props */
+/** @param {{name: string, label: string, title?: string, onClick?: import('react').MouseEventHandler<HTMLButtonElement>, pressed?: boolean, disabled?: boolean, type?: 'button'|'submit'|'reset', className?: string, buttonRef?: import('react').Ref<HTMLButtonElement>}} props */
 export function IconButton({
   name,
   label,
+  title = label,
   onClick,
   pressed,
   disabled,
@@ -139,7 +140,7 @@ export function IconButton({
       type={type}
       className={`ck-icon-button ${className}`.trim()}
       aria-label={label}
-      title={label}
+      title={title}
       aria-pressed={typeof pressed === 'boolean' ? pressed : undefined}
       onClick={onClick}
       disabled={disabled}
