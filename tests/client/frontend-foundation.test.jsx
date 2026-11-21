@@ -18,36 +18,48 @@ afterEach(() => {
 });
 
 describe('frontend foundation', () => {
-  it('blocks repeated button actions while loading', () => {
-    const onClick = vi.fn();
-    const foundationStyles = readFileSync(
-      'client/src/styles/foundation.css',
-      'utf8',
-    );
-    render(
-      <>
-        <style>
-          {
-            foundationStyles.match(
-              /\.ck-button__content--loading\s*\{[^}]+\}/,
-            )?.[0]
-          }
-        </style>
-        <Button variant="primary" loading onClick={onClick}>
-          Đang tìm bạn
-        </Button>
-      </>,
-    );
+  it.each(['default', 'sticker'])(
+    'blocks repeated button actions while loading (%s)',
+    (appearance) => {
+      const onClick = vi.fn();
+      const foundationStyles = readFileSync(
+        'client/src/styles/foundation.css',
+        'utf8',
+      );
+      render(
+        <>
+          <style>
+            {
+              foundationStyles.match(
+                /\.ck-button__content--loading\s*\{[^}]+\}/,
+              )?.[0]
+            }
+          </style>
+          <Button
+            variant="primary"
+            appearance={/** @type {'default'|'sticker'} */ (appearance)}
+            loading
+            onClick={onClick}
+          >
+            Đang tìm bạn
+          </Button>
+        </>,
+      );
 
-    expect(
-      globalThis.getComputedStyle(screen.getByText('Đang tìm bạn')).visibility,
-    ).toBe('visible');
-    const button = screen.getByRole('button', { name: 'Đang tìm bạn' });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('aria-busy', 'true');
-    fireEvent.click(button);
-    expect(onClick).not.toHaveBeenCalled();
-  });
+      expect(
+        globalThis.getComputedStyle(screen.getByText('Đang tìm bạn'))
+          .visibility,
+      ).toBe('visible');
+      const button = screen.getByRole('button', { name: 'Đang tìm bạn' });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('aria-busy', 'true');
+      expect(button.classList.contains('ck-button--sticker')).toBe(
+        appearance === 'sticker',
+      );
+      fireEvent.click(button);
+      expect(onClick).not.toHaveBeenCalled();
+    },
+  );
 
   it('connects an input error to its control', () => {
     render(
@@ -108,34 +120,45 @@ describe('frontend foundation', () => {
     expect(toggle).toHaveAttribute('title', 'Ẩn mật khẩu');
   });
 
-  it('closes a dialog with Escape and restores focus', () => {
-    function Example() {
-      const [open, setOpen] = useState(false);
-      return (
-        <>
-          <button type="button" onClick={() => setOpen(true)}>
-            Mở xác nhận
-          </button>
-          <Dialog open={open} onClose={() => setOpen(false)} title="Xác nhận">
-            <p>Nội dung</p>
-          </Dialog>
-        </>
-      );
-    }
+  it.each(['default', 'sticker'])(
+    'closes a dialog with Escape and restores focus (%s)',
+    (appearance) => {
+      function Example() {
+        const [open, setOpen] = useState(false);
+        return (
+          <>
+            <button type="button" onClick={() => setOpen(true)}>
+              Mở xác nhận
+            </button>
+            <Dialog
+              open={open}
+              appearance={/** @type {'default'|'sticker'} */ (appearance)}
+              onClose={() => setOpen(false)}
+              title="Xác nhận"
+            >
+              <p>Nội dung</p>
+            </Dialog>
+          </>
+        );
+      }
 
-    render(<Example />);
-    const trigger = screen.getByRole('button', { name: 'Mở xác nhận' });
-    trigger.focus();
-    fireEvent.click(trigger);
-    expect(globalThis.document.body).toHaveStyle({ overflow: 'hidden' });
-    const dialog = screen.getByRole('dialog');
-    expect(
-      screen.getByRole('button', { name: 'Đóng hộp thoại' }),
-    ).toHaveFocus();
-    fireEvent.keyDown(dialog, { key: 'Escape' });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
-  });
+      render(<Example />);
+      const trigger = screen.getByRole('button', { name: 'Mở xác nhận' });
+      trigger.focus();
+      fireEvent.click(trigger);
+      expect(globalThis.document.body).toHaveStyle({ overflow: 'hidden' });
+      const dialog = screen.getByRole('dialog');
+      expect(dialog.classList.contains('ck-dialog--sticker')).toBe(
+        appearance === 'sticker',
+      );
+      expect(
+        screen.getByRole('button', { name: 'Đóng hộp thoại' }),
+      ).toHaveFocus();
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    },
+  );
 
   it('falls back to initials when an avatar image is missing', () => {
     render(

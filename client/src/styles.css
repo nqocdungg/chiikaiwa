@@ -3,6 +3,7 @@
 @import './styles/globals.css';
 @import './styles/ui.css';
 @import './styles/foundation.css';
+@import './components/ui/sticker-controls.css';
 
 @theme inline {
   --color-ui-background: var(--color-background);

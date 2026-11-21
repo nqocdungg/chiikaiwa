@@ -1,6 +1,6 @@
 import { Link, useNavigate, useOutletContext } from 'react-router';
 import { Button } from '../../components/ui/controls.jsx';
-import chiikawaPeek from './chiikawa-peek.webp';
+import chiikawaPeek from '../../assets/mascots/chiikawa-peek.webp';
 import hachiwareFace from './hachiware-face.webp';
 import usagiFace from './usagi-face.webp';
 import { HomeIcon } from './HomeIcon.jsx';

@@ -53,6 +53,7 @@ export function Icon({ name, size = 20, className }) {
  * children?: import('react').ReactNode,
  * onClick?: import('react').MouseEventHandler<HTMLButtonElement>,
  * variant?: 'primary'|'secondary'|'ghost'|'danger',
+ * appearance?: 'default'|'sticker',
  * size?: 'compact'|'default'|'hero',
  * disabled?: boolean,
  * loading?: boolean,
@@ -71,6 +72,7 @@ export function Button({
   children,
   onClick,
   variant = 'secondary',
+  appearance = 'default',
   size = 'default',
   disabled = false,
   loading = false,
@@ -87,6 +89,7 @@ export function Button({
   const classes = [
     'ck-button',
     `ck-button--${variant}`,
+    appearance === 'sticker' && variant !== 'ghost' ? 'ck-button--sticker' : '',
     size !== 'default' ? `ck-button--${size}` : '',
     fullWidth ? 'ck-button--full' : '',
     className,

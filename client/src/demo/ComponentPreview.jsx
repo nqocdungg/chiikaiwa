@@ -18,6 +18,7 @@ export function ComponentPreview() {
       ) === '1',
   );
   const [selectedCard, setSelectedCard] = useState(false);
+  const [stickerOpen, setStickerOpen] = useState(false);
 
   return (
     <main className="ck-preview">
@@ -30,6 +31,57 @@ export function ComponentPreview() {
             responsive trước khi dựng màn nghiệp vụ.
           </p>
         </header>
+
+        <PreviewSection title="Nút sticker">
+          <div className="ck-preview__row">
+            <Button appearance="sticker" variant="secondary" size="hero">
+              Để sau
+            </Button>
+            <Button
+              appearance="sticker"
+              variant="primary"
+              size="hero"
+              onClick={() => setStickerOpen(true)}
+            >
+              Bắt đầu luyện
+            </Button>
+            <Button appearance="sticker" variant="primary" loading>
+              Đang kết nối
+            </Button>
+            <Button appearance="sticker" disabled>
+              Chưa khả dụng
+            </Button>
+          </div>
+          <Dialog
+            open={stickerOpen}
+            onClose={() => setStickerOpen(false)}
+            appearance="sticker"
+            align="center"
+            title="Sẵn sàng luyện nói?"
+            footer={
+              <>
+                <Button
+                  appearance="sticker"
+                  onClick={() => setStickerOpen(false)}
+                >
+                  Để sau
+                </Button>
+                <Button
+                  appearance="sticker"
+                  variant="primary"
+                  onClick={() => setStickerOpen(false)}
+                >
+                  Bắt đầu
+                </Button>
+              </>
+            }
+          >
+            <div className="ck-preview__sticker-message">
+              <strong>Luyện hội thoại ở quán cà phê</strong>
+              <p>Bạn sẽ nhập vai khách hàng và thử gọi món bằng tiếng Nhật.</p>
+            </div>
+          </Dialog>
+        </PreviewSection>
 
         <PreviewSection title="Button và IconButton">
           <div className="ck-preview__row">
