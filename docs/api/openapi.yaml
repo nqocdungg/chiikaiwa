@@ -22,6 +22,7 @@ tags:
   - name: Learning Content
   - name: Flashcards
   - name: Quizzes
+  - name: Admin Operations
 
 paths:
   /sessions/{id}:
@@ -1806,6 +1807,284 @@ paths:
         '410': *studyGone
         '422': *studyInvalid
 
+  /admin/users:
+    get:
+      tags:
+        - Admin Operations
+      operationId: listAdminUsers
+      summary: Danh sách tài khoản người dùng cho quản trị viên (07 §10, BE-026)
+      description: >-
+        Trả danh sách tài khoản người dùng kèm phân trang cursor keyset, hỗ trợ
+        lọc theo trạng thái active hoặc locked.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, locked]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        '200':
+          description: Danh sách người dùng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListResponse'
+        '400':
+          description: Con trỏ giải mã thất bại (INVALID_CURSOR)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /admin/users/{id}/status:
+    patch:
+      tags:
+        - Admin Operations
+      operationId: updateAdminUserStatus
+      summary: Khóa hoặc mở khóa tài khoản người dùng (07 §10, BE-026, TX-05)
+      description: >-
+        Cập nhật trạng thái tài khoản (active hoặc locked) với kiểm soát phiên bản
+        CAS qua expectedVersion và cơ chế Idempotency-Key (retry cùng key trả trạng thái hiện hành).
+        Không cho phép khóa tài khoản có vai trò admin.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserStatusRequest'
+      responses:
+        '200':
+          description: Cập nhật trạng thái tài khoản thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserStatusResponse'
+        '400':
+          description: ID sai định dạng (MALFORMED_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          description: Payload vượt quá 1 MiB (PAYLOAD_TOO_LARGE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Không phải application/json (UNSUPPORTED_MEDIA_TYPE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /admin/reports:
+    get:
+      tags:
+        - Admin Operations
+      operationId: listAdminReports
+      summary: Danh sách báo cáo người dùng cho quản trị viên (07 §10, BE-026)
+      description: >-
+        Trả danh sách báo cáo vi phạm kèm phân trang cursor keyset, hỗ trợ lọc
+        theo trạng thái báo cáo (new, inProgress, resolved, rejected).
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ReportStatus'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        '200':
+          description: Danh sách báo cáo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportListResponse'
+        '400':
+          description: Con trỏ giải mã thất bại (INVALID_CURSOR)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /admin/reports/{id}:
+    get:
+      tags:
+        - Admin Operations
+      operationId: getAdminReport
+      summary: Chi tiết một báo cáo vi phạm (07 §10, BE-026)
+      description: Xem chi tiết báo cáo vi phạm theo ID.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+      responses:
+        '200':
+          description: Chi tiết báo cáo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '400':
+          description: ID sai định dạng (MALFORMED_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+    patch:
+      tags:
+        - Admin Operations
+      operationId: updateAdminReport
+      summary: Xử lý trạng thái và kết quả báo cáo (07 §10, BE-026)
+      description: >-
+        Cập nhật trạng thái và kết quả xử lý của báo cáo với kiểm soát phiên bản
+        CAS qua expectedVersion và Idempotency-Key (retry cùng key trả trạng thái hiện hành).
+        Cho phép mở lại báo cáo (status new/inProgress sau resolved/rejected); khi chuyển về new,
+        handledBy và handledAt được gỡ bỏ. Resolution chỉ thay đổi khi request gửi trường này;
+        nếu bỏ trường, giá trị đã lưu được giữ nguyên. Khi status là new, resolution có thể là
+        kết quả được lưu từ lần xử lý trước.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportUpdateRequest'
+      responses:
+        '200':
+          description: Cập nhật báo cáo thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '400':
+          description: ID sai định dạng (MALFORMED_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          description: Payload vượt quá 1 MiB (PAYLOAD_TOO_LARGE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Không phải application/json (UNSUPPORTED_MEDIA_TYPE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
 components:
   securitySchemes:
     livekitWebhookSignature:
@@ -3129,6 +3408,169 @@ components:
               type: [string, 'null']
         meta:
           $ref: '#/components/schemas/Meta'
+
+    AdminUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, displayName, status, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        status:
+          type: string
+          enum: [active, locked]
+        version:
+          type: integer
+          minimum: 0
+
+    AdminUserListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminUser'
+            nextCursor:
+              type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    AdminUserStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status, expectedVersion]
+      properties:
+        status:
+          type: string
+          enum: [active, locked]
+        expectedVersion:
+          type: integer
+          minimum: 0
+
+    AdminUserStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [id, status, version]
+          properties:
+            id:
+              $ref: '#/components/schemas/ObjectId'
+            status:
+              type: string
+              enum: [active, locked]
+            version:
+              type: integer
+              minimum: 0
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ReportStatus:
+      type: string
+      enum: [new, inProgress, resolved, rejected]
+
+    Report:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - reporterKey
+        - reportedKey
+        - sessionId
+        - reason
+        - status
+        - version
+        - createdAt
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        reporterKey:
+          type: string
+        reportedKey:
+          type: string
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+        reason:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          maxLength: 2000
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        resolution:
+          type: string
+          maxLength: 2000
+        handledBy:
+          $ref: '#/components/schemas/ObjectId'
+        handledAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+
+    ReportResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Report'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ReportListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Report'
+            nextCursor:
+              type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ReportUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [status, expectedVersion]
+      properties:
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        expectedVersion:
+          type: integer
+          minimum: 0
+        resolution:
+          type: string
+          minLength: 1
+          maxLength: 2000
 
   responses:
     RequestError:

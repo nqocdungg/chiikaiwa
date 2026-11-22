@@ -6,6 +6,10 @@ import {
   OPENAPI_SPEC_PATH,
   readOpenApiDocument,
 } from '../../server/openapi.js';
+import {
+  toAdminUserDto,
+  toReportDto,
+} from '../../server/modules/safety/admin-service.js';
 
 const expectedPaths = [
   '/webhooks/livekit',
@@ -43,6 +47,10 @@ const expectedPaths = [
   '/quizzes/{id}',
   '/quizzes/{id}/submission',
   '/me/quizzes',
+  '/admin/users',
+  '/admin/users/{id}/status',
+  '/admin/reports',
+  '/admin/reports/{id}',
 ];
 
 const writeOperations = [
@@ -63,6 +71,8 @@ const writeOperations = [
   ['/sessions/{id}/actions/{actionId}/responses', 'post'],
   ['/quizzes', 'post'],
   ['/quizzes/{id}/submission', 'post'],
+  ['/admin/users/{id}/status', 'patch'],
+  ['/admin/reports/{id}', 'patch'],
 ];
 
 describe('OpenAPI contract', () => {
@@ -431,5 +441,135 @@ describe('OpenAPI contract', () => {
     expect(document.components.schemas.Self.properties).not.toHaveProperty(
       'emailKey',
     );
+  });
+
+  it('documents Admin users and reports endpoints, idempotency, strict schemas and privacy isolation', () => {
+    expect(
+      document.tags.some(
+        (/** @type {any} */ tag) => tag.name === 'Admin Operations',
+      ),
+    ).toBe(true);
+
+    for (const path of [
+      '/admin/users',
+      '/admin/reports',
+      '/admin/reports/{id}',
+    ]) {
+      const operation = document.paths[path].get;
+      expect(operation.security).toEqual([{ sessionCookie: [] }]);
+      expect(operation.responses).toHaveProperty('401');
+      expect(operation.responses).toHaveProperty('403');
+    }
+
+    for (const path of ['/admin/users/{id}/status', '/admin/reports/{id}']) {
+      const operation = document.paths[path].patch;
+      expect(operation.security).toEqual([
+        { sessionCookie: [], csrfToken: [] },
+      ]);
+      expect(operation.responses).toHaveProperty('401');
+      expect(operation.responses).toHaveProperty('403');
+      expect(operation.responses).toHaveProperty('409');
+      expect(operation.parameters).toContainEqual({
+        $ref: '#/components/parameters/IdempotencyKey',
+      });
+    }
+
+    const schemas = document.components.schemas;
+    expect(schemas.AdminUser.additionalProperties).toBe(false);
+    for (const field of [
+      'passwordHash',
+      'authVersion',
+      'role',
+      'profile',
+      'emailKey',
+    ]) {
+      expect(schemas.AdminUser.properties).not.toHaveProperty(field);
+    }
+    expect(schemas.AdminUser.required).toEqual(
+      expect.arrayContaining([
+        'id',
+        'email',
+        'displayName',
+        'status',
+        'version',
+      ]),
+    );
+    expect(schemas.AdminUser.properties).not.toHaveProperty('createdAt');
+    expect(schemas.AdminUser.properties).not.toHaveProperty('avatarKey');
+    expect(
+      schemas.AdminUserStatusRequest.properties.expectedVersion.minimum,
+    ).toBe(0);
+    expect(
+      schemas.AdminUserStatusResponse.properties.data.properties.version
+        .minimum,
+    ).toBe(0);
+
+    expect(schemas.Report.additionalProperties).toBe(false);
+    expect(schemas.Report.required).toEqual(
+      expect.arrayContaining([
+        'id',
+        'reporterKey',
+        'reportedKey',
+        'sessionId',
+        'reason',
+        'status',
+        'version',
+        'createdAt',
+      ]),
+    );
+    expect(schemas.Report.properties.reason).not.toHaveProperty('enum');
+    expect(schemas.Report.properties.version.minimum).toBe(0);
+    expect(schemas.ReportUpdateRequest.properties.expectedVersion.minimum).toBe(
+      0,
+    );
+    expect(schemas.ReportUpdateRequest.properties.resolution.maxLength).toBe(
+      2000,
+    );
+  });
+
+  it('ensures toAdminUserDto and toReportDto match OpenAPI schema properties and required fields', () => {
+    const schemas = document.components.schemas;
+
+    const sampleUserDoc = {
+      _id: { toHexString: () => '507f1f77bcf86cd799439011' },
+      email: 'test@example.com',
+      displayName: 'Test User',
+      status: 'active',
+      version: 0,
+      role: 'learner',
+      passwordHash: 'secret',
+      authVersion: 1,
+    };
+    const userDto = toAdminUserDto(sampleUserDoc);
+    const userDtoKeys = Object.keys(userDto);
+    const adminUserSchemaPropKeys = Object.keys(schemas.AdminUser.properties);
+    expect(userDtoKeys.sort()).toEqual(adminUserSchemaPropKeys.sort());
+    for (const reqField of schemas.AdminUser.required) {
+      expect(userDto).toHaveProperty(reqField);
+    }
+
+    const sampleReportDoc = {
+      _id: { toHexString: () => '507f1f77bcf86cd799439022' },
+      reporterKey: 'user:507f1f77bcf86cd799439011',
+      reportedKey: 'user:507f1f77bcf86cd799439012',
+      sessionId: { toHexString: () => '507f1f77bcf86cd799439033' },
+      reason: 'Harassment',
+      description: 'Detail text',
+      status: 'inProgress',
+      resolution: 'Resolved note',
+      handledBy: { toHexString: () => '507f1f77bcf86cd799439099' },
+      handledAt: new Date(),
+      version: 0,
+      createdAt: new Date(),
+    };
+    const reportDto = toReportDto(sampleReportDoc);
+    const reportDtoKeys = Object.keys(reportDto);
+    const reportSchemaPropKeys = Object.keys(schemas.Report.properties);
+    for (const key of reportDtoKeys) {
+      expect(reportSchemaPropKeys).toContain(key);
+    }
+    for (const reqField of schemas.Report.required) {
+      expect(reportDto).toHaveProperty(reqField);
+    }
   });
 });

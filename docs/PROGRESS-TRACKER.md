@@ -493,6 +493,63 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Tiếp theo: Nhờ reviewer Yến Nhi và nhóm chốt các câu hỏi Q1–Q4 (đặc biệt là bổ sung `scenarioCount` vào `07 §6` và `openapi.yaml`), duyệt `tests/fixtures/deck-selection-fixtures.js`, sau đó cập nhật `07-api-specification.md`/`openapi.yaml` theo phạm vi được thống nhất trước khi merge `BE-022`.
 - Lưu ý/blocker: Chưa ghi `Done` vì contract `scenarioCount` trong `GET /sessions/:id/deck-options` còn thiếu ở `07 §6` & `openapi.yaml` và chưa có xác nhận của reviewer. Không tự sửa thiết kế 01–07 hoặc code chức năng.
 
+### BE-026 — API xử lý báo cáo và quản trị tài khoản
+
+- Ngày cập nhật: 2026-11-19
+- Trạng thái: Đã hoàn thiện toàn diện, giải quyết đầy đủ review M1–M4, S1–S5, N1–N4; self-test đạt 100%; sẵn sàng mở PR về `develop` để reviewer Ngọc Dung rà soát.
+- PR: Chưa có. Nhánh `feature/BE-026-admin-reports-and-accounts` từ `develop`.
+- Đã làm:
+  - **Validation & DTOs an toàn (`server/modules/safety/admin-validation.js`, `server/modules/safety/admin-service.js`)**:
+    - Chuẩn hóa phân trang phân định cursor base64url JSON với context chặt chẽ; `limit` trong khoảng [1, 50] (mặc định 20).
+    - Thống nhất xử lý `cursor`: bắt lỗi 400 `INVALID_CURSOR` khi cursor rỗng `""`, không phải chuỗi hoặc dài quá 512 ký tự theo `07 §12`. Hàm `encodeAdminCursor` nghiêm ngặt kiểm tra `createdAt` kiểu Date (ném 500 `INTERNAL_ERROR` nếu thiếu/sai kiểu); khởi tạo query lọc `{ createdAt: { $type: 'date' } }` loại bỏ an toàn các bản ghi hỏng mà không làm cụt chuỗi phân trang (R2).
+    - Lọc trạng thái `users` (`active`, `locked`) và `reports` (`new`, `inProgress`, `resolved`, `rejected`); từ chối giá trị lạ bằng 422 `VALIDATION_FAILED`.
+    - Body validation với `additionalProperties: false`, bắt buộc `expectedVersion >= 0` (hỗ trợ version khởi tạo 0 của user/report mới), `resolution` tối đa 2000 ký tự (giới hạn riêng của BE-026, không rỗng khi có mặt, từ chối `null`).
+    - DTO Whitelist chuẩn theo `07 §10`: `AdminUser` DTO gồm `{ id, email, displayName, status, version }`; `Report` DTO gồm `{ id, reporterKey, reportedKey, sessionId, reason, description?, status, resolution?, handledBy?, handledAt?, version, createdAt }`. Bảo vệ tuyệt đối bí mật tài khoản và dữ liệu học tập riêng tư (`BR-29`, `DB-T16`, `AT-12`).
+  - **Quản trị trạng thái người dùng & Khóa phiên TX-05 (`PATCH /api/v1/admin/users/:id/status`, `GET /api/v1/admin/users`)**:
+    - Ngăn chặn Admin tự khóa chính mình và cấm khóa tài khoản có `role: 'admin'` qua API (403 `FORBIDDEN`, bảo vệ khỏi write-skew deadlock mất toàn bộ admin theo M4).
+    - Idempotency-Key bắt buộc qua `runIdempotentOperation`. Cùng key nhưng payload khác bị từ chối `409 IDEMPOTENCY_CONFLICT`; key mới với `expectedVersion` cũ bị từ chối `409 VERSION_CONFLICT`.
+    - Optimistic Concurrency Control (CAS) qua `expectedVersion`: sai version trả về 409 `VERSION_CONFLICT`.
+    - Trạng thái không đổi (no-op) với đúng `expectedVersion` trả về 200 `{ id, status, version }` mà không tăng version.
+    - Chấp nhận COLLSCAN khi list/filter `users` ở quy mô MVP theo `06 §10.1` (Danh sách index) và `06 §11.2` (TX-05), không thêm migration hay index mới ngoài thiết kế (S2).
+    - Tích hợp `lockUserAccountWithinSession`: chuyển `status: 'locked'`, tăng `version`, tăng `authVersion`, thu hồi toàn bộ `auth_sessions`, giải phóng `actor_states` (inviting, searching, busy), kết thúc `practice_sessions` đang hoạt động (`endReason: 'account_locked'`), kích hoạt hiệu ứng dọn phòng LiveKit sau commit; nếu hiệu ứng thất bại, log warning `ACCOUNT_LOCK_EFFECTS_FAILED` để vận hành điều tra (S3).
+    - Mở khóa tài khoản: chuyển `status: 'active'`, tăng `version`, bảo toàn `authVersion` để người dùng không bị hủy phiên sau mở khóa.
+  - **Xử lý báo cáo vi phạm (`GET /api/v1/admin/reports`, `GET /api/v1/admin/reports/:id`, `PATCH /api/v1/admin/reports/:id`)**:
+    - Truy vấn danh sách và chi tiết báo cáo độc lập hoàn toàn với `blocks` hay trạng thái tài khoản người dùng (`PB-28 AC3`).
+    - Cập nhật trạng thái và kết quả giải quyết báo cáo có kiểm soát version CAS và Idempotency-Key.
+    - Chuẩn hóa trạng thái xử lý: khi `status === 'new'`, tự động gỡ `handledBy` và `handledAt` bằng `$unset`; `resolution` chỉ được cập nhật khi request gửi giá trị hợp lệ và được giữ nguyên nếu request bỏ trường này. Khi chuyển sang `inProgress`, `resolved`, `rejected`, cập nhật `handledBy` (ObjectId Admin) và `handledAt` (thời điểm cập nhật). Cho phép mở lại báo cáo để tái điều tra theo nhu cầu vận hành.
+  - **Bảo mật và Phân quyền (`server/modules/safety/admin-router.js`, `server/app.js`)**:
+    - Áp dụng guard `requireAuth(['A'])` cho toàn bộ các route admin; learner ('L') và guest ('G') bị chặn 403 `FORBIDDEN`, chưa đăng nhập trả về 401 `AUTH_REQUIRED`.
+    - CSRF guard bắt buộc cho tất cả mutation requests (PATCH).
+    - Rate limit 120 req/phút theo `actorKey` của Admin (`enforceWriteRateLimit`).
+    - Header `Cache-Control: no-store` và bọc dữ liệu chuẩn trong envelope `{ data, meta }`.
+  - **Đặc tả OpenAPI (`docs/api/openapi.yaml`, `tests/server/openapi-contract.test.js`)**:
+    - Khai báo tag `Admin Operations`, 4 đường dẫn RESTful, và 9 schemas chuẩn OpenAPI 3.1.0 khớp chính xác với `07 §10` và DTO thật (M2).
+    - Bổ sung test tự động đối chiếu các khóa của `toAdminUserDto` và `toReportDto` với schema OpenAPI.
+- File liên quan:
+  - `server/modules/safety/admin-validation.js`
+  - `server/modules/safety/admin-service.js`
+  - `server/modules/safety/admin-router.js`
+  - `server/modules/safety/safety-service.js`
+  - `server/app.js`
+  - `docs/api/openapi.yaml`
+  - `tests/server/admin-validation.test.js`
+  - `tests/server/admin-http.test.js`
+  - `tests/integration/admin-users.integration.test.js`
+  - `tests/integration/admin-reports.integration.test.js`
+  - `tests/server/openapi-contract.test.js`
+- Kiểm chứng:
+  - `npm run format:check`: PASS (All matched files use Prettier code style).
+  - `npm run lint`: PASS (0 errors, 0 warnings trên toàn bộ workspace).
+  - `npm run typecheck`: PASS (0 errors trên client, server và root jsconfigs).
+  - `npm run openapi:check`: PASS (14/14 tests pass).
+  - `npm test`: PASS (40/40 test files, 563/563 tests pass; gồm `tests/server/admin-validation.test.js` 26/26 tests, `tests/server/admin-http.test.js` 21/21 tests, `tests/server/openapi-contract.test.js` 14/14 tests).
+  - `npm run test:integration`: PASS (22/22 test files, 328/328 tests pass); trong đó:
+    - `tests/integration/admin-users.integration.test.js`: 25/25 tests pass (IU-01..IU-07, IL-01..IL-24, DB-T04, TX-05, M4 admin lock protection, S3 post-commit effect log, S5 cursor error, R2 invalid date skip).
+    - `tests/integration/admin-reports.integration.test.js`: 14/14 tests pass (IR-01..IR-19, IP-01..IP-04, DB-T16 privacy; IR-17 giữ resolution khi mở lại report và IR-19 xác nhận resolution hợp lệ được chấp nhận khi status là new).
+  - `npm run build`: PASS (Vite client production build thành công, node check `server/app.js` và `api/index.js` hợp lệ).
+- Tiếp theo: Trình người dùng cho phép commit và push branch `feature/BE-026-admin-reports-and-accounts`, mở PR về `develop` để reviewer Ngọc Dung rà soát.
+- Lưu ý/blocker: Giữ nguyên thiết kế DB và OpenAPI contract đã chốt, không tự ý commit/push khi chưa có lệnh từ người dùng.
+
 ## Sprint 3
 
 Chưa có cập nhật.

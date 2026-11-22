@@ -416,6 +416,12 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         expect(screen.getByLabelText('Tên hiển thị *')).toHaveValue('Tên Cũ');
       });
 
+      await waitFor(() => {
+        const levelSelect = screen.getByLabelText('Trình độ tiếng Nhật');
+        expect(levelSelect).toBeEnabled();
+        expect(levelSelect.querySelector('option[value="N2"]')).not.toBeNull();
+      });
+
       // User edits displayName and level
       fireEvent.change(screen.getByLabelText('Tên hiển thị *'), {
         target: { value: 'Tên Đang Nhập' },
