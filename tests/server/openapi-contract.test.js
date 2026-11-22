@@ -32,6 +32,13 @@ const expectedPaths = [
   '/me/saved-items/{id}/sources',
   '/study/cards/query',
   '/study/cards/reveal',
+  '/sessions/{id}/deck-options',
+  '/sessions/{id}/deck-selection',
+  '/sessions/{id}/control/claim',
+  '/sessions/{id}/draws',
+  '/sessions/{id}/cards/{cardId}/hints',
+  '/sessions/{id}/actions',
+  '/sessions/{id}/actions/{actionId}/responses',
   '/quizzes',
   '/quizzes/{id}',
   '/quizzes/{id}/submission',
@@ -49,6 +56,11 @@ const writeOperations = [
   ['/admin/content/{id}/hide', 'post'],
   ['/me/saved-items', 'post'],
   ['/me/saved-items/{id}', 'delete'],
+  ['/sessions/{id}/deck-selection', 'post'],
+  ['/sessions/{id}/control/claim', 'post'],
+  ['/sessions/{id}/draws', 'post'],
+  ['/sessions/{id}/actions', 'post'],
+  ['/sessions/{id}/actions/{actionId}/responses', 'post'],
   ['/quizzes', 'post'],
   ['/quizzes/{id}/submission', 'post'],
 ];
@@ -147,7 +159,7 @@ describe('OpenAPI contract', () => {
     ).toMatchObject({ in: 'header', name: 'Authorization' });
   });
 
-  it('parses the OpenAPI document and includes the implemented BE-009 paths', () => {
+  it('parses the OpenAPI document and includes the expected paths', () => {
     expect(document.openapi).toBe('3.1.0');
     expect(document.servers).toContainEqual(
       expect.objectContaining({ url: '/api/v1' }),
@@ -157,7 +169,7 @@ describe('OpenAPI contract', () => {
     );
   });
 
-  it('uses unique operation IDs and documents idempotency for every BE-009 write', () => {
+  it('uses unique operation IDs and documents idempotency for the listed writes', () => {
     const operationIds = Object.values(document.paths).flatMap(
       (/** @type {Record<string, any>} */ pathItem) =>
         Object.values(pathItem)
@@ -347,6 +359,31 @@ describe('OpenAPI contract', () => {
     expect(
       document.components.schemas.SessionSlot.properties,
     ).not.toHaveProperty('scenarioVersionId');
+  });
+  it('documents deck counts, per-viewer saved status and the action creation envelope', () => {
+    const schemas = document.components.schemas;
+    expect(
+      schemas.SessionDeckOptionsResponse.properties.data.properties.items.items
+        .required,
+    ).toContain('scenarioCount');
+    expect(
+      document.paths['/sessions/{id}/deck-options'].get.responses['409'],
+    ).toMatchObject({ description: expect.stringContaining('SESSION_ENDED') });
+    expect(schemas.SessionHintKnowledge).toMatchObject({
+      required: expect.arrayContaining(['versionId', 'isSaved']),
+      properties: {
+        versionId: expect.any(Object),
+        isSaved: { type: 'boolean' },
+      },
+      additionalProperties: false,
+    });
+    expect(
+      document.paths['/sessions/{id}/actions'].post.responses['201'].content[
+        'application/json'
+      ].schema,
+    ).toEqual({
+      $ref: '#/components/schemas/SessionActionResponse',
+    });
   });
 
   it('documents PATCH /me/profile with optional X-Expected-Actor header, 409 conflict, and safe Self projection', () => {
