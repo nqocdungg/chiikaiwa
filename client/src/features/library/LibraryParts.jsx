@@ -1,20 +1,27 @@
-import { Link } from 'react-router';
+import chiikawaPeek from '../../assets/mascots/chiikawa-peek.webp';
+import usagiFace from '../../assets/mascots/usagi-face.webp';
 import { Button } from '../../components/ui/controls.jsx';
 import { Badge, Card } from '../../components/ui/surfaces.jsx';
 import searchIcon from './assets/search.svg';
 import { libraryError } from './library-hooks.js';
 
-/** @param {{saved?: boolean}} props */
-export function LibraryIntro({ saved = false }) {
+export function SavedIntro() {
   return (
     <div className="ck-library-intro">
-      <p lang="ja">{saved ? '復習' : '会話ライブラリ'}</p>
-      <h1>{saved ? 'Ôn cá nhân' : 'Kho chủ đề'}</h1>
-      <p>
-        {saved
-          ? 'Ôn lại từ vựng và mẫu câu đã lưu. Bỏ lưu vẫn giữ tiến độ ôn tập.'
-          : 'Khám phá bộ hội thoại và học từ vựng, mẫu câu theo chủ đề.'}
-      </p>
+      <div className="ck-library-intro__copy">
+        <h1>Ôn cá nhân</h1>
+        <p>Mở sổ tay để ôn lại từ vựng và mẫu câu đã lưu.</p>
+      </div>
+      <div className="ck-library-intro__art">
+        <span className="ck-library-intro__stamp" lang="ja">
+          復習
+        </span>
+        <div className="ck-library-intro__mascots" aria-hidden="true">
+          <img className="ck-library-intro__friend" src={chiikawaPeek} alt="" />
+          <img className="ck-library-intro__mascot" src={usagiFace} alt="" />
+          <span className="ck-library-intro__sparkle">✦</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -38,50 +45,25 @@ export function LibrarySearch({ id, name, label, placeholder, defaultValue }) {
   );
 }
 
-/** @param {{topic: import('./library-api.js').Topic}} props */
-export function TopicCard({ topic }) {
-  return (
-    <Card className="ck-library-topic">
-      <div className="ck-library-topic__body">
-        <span className="ck-library-topic__mark" aria-hidden="true" lang="ja">
-          話
-        </span>
-        <div>
-          <h2>{topic.title}</h2>
-          {topic.description && <p>{topic.description}</p>}
-        </div>
-      </div>
-      <div className="ck-library-topic__footer">
-        <Badge tone="accent">{topic.level}</Badge>
-        <Link
-          className="ck-library-text-link"
-          to={`/topics/${encodeURIComponent(topic.versionId)}`}
-          aria-label={`Xem học liệu: ${topic.title}`}
-        >
-          Xem học liệu <span aria-hidden="true">›</span>
-        </Link>
-      </div>
-    </Card>
-  );
-}
-
 /** @param {{item: import('./library-api.js').Knowledge, children?: import('react').ReactNode, examples?: boolean}} props */
 export function LibraryKnowledge({ item, children, examples = false }) {
   return (
     <Card className="ck-library-knowledge">
-      <Badge tone="accent">
-        {item.type === 'grammar' ? 'Mẫu câu' : 'Từ vựng'}
-      </Badge>
-      <h2 lang="ja">{item.expression}</h2>
-      {item.reading && (
-        <p className="ck-library-reading" lang="ja">
-          {item.reading}
-        </p>
-      )}
-      <p>{item.meaning}</p>
+      <div className="ck-library-knowledge__copy">
+        <Badge tone="accent">
+          {item.type === 'grammar' ? 'Mẫu câu' : 'Từ vựng'}
+        </Badge>
+        <h3 lang="ja">{item.expression}</h3>
+        {item.reading && (
+          <p className="ck-library-reading" lang="ja">
+            {item.reading}
+          </p>
+        )}
+        <p>{item.meaning}</p>
+      </div>
       {examples && item.examples.length > 0 && (
         <div className="ck-library-examples">
-          <h3>Ví dụ</h3>
+          <h4>Ví dụ</h4>
           <ul>
             {item.examples.map((example, index) => (
               <li key={index}>

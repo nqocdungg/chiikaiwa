@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { Button } from '../../components/ui/controls.jsx';
+import { Button, Icon, IconButton } from '../../components/ui/controls.jsx';
 import { Dialog } from '../../components/ui/Dialog.jsx';
 import { ApiError } from '../../services/errors.js';
 import {
@@ -13,11 +13,11 @@ import {
 } from './library-api.js';
 import { useLibraryPage, useLibraryWrite } from './library-hooks.js';
 import {
-  LibraryIntro,
   LibraryKnowledge,
   LibraryMore,
   LibrarySearch,
   LibraryStatus,
+  SavedIntro,
 } from './LibraryParts.jsx';
 
 /** @typedef {import('./library-api.js').SavedItem} SavedItem */
@@ -31,7 +31,7 @@ export function SavedPage() {
 
   return (
     <section data-screen-id="SC-12">
-      <LibraryIntro saved />
+      <SavedIntro />
       <form
         className="ck-library-saved-search"
         onSubmit={(event) => {
@@ -93,17 +93,30 @@ function SavedItems({ filter }) {
   }
 
   return (
-    <>
-      <div className="ck-library-section-heading">
-        <h2 className="ck-library-section-title" ref={heading} tabIndex={-1}>
-          Kiến thức đã lưu
-        </h2>
+    <section className="ck-library-journal" aria-labelledby="saved-heading">
+      <div className="ck-library-journal__heading">
+        <span className="ck-library-journal__tab" aria-hidden="true">
+          <Icon name="note" size={22} />
+        </span>
+        <div>
+          <h2
+            className="ck-library-section-title"
+            id="saved-heading"
+            ref={heading}
+            tabIndex={-1}
+          >
+            Kiến thức đã lưu
+          </h2>
+          {page.data?.length ? <p>Bỏ lưu vẫn giữ tiến độ ôn tập.</p> : null}
+        </div>
         {page.data?.length ? (
           <Link
-            className="ck-button ck-button--primary"
+            className="ck-button ck-button--primary ck-button--sticker"
             to="/study?scope=saved&mode=all"
           >
-            Bắt đầu ôn tập
+            <span className="ck-button__content">
+              <Icon name="cards" size={20} /> Bắt đầu ôn tập
+            </span>
           </Link>
         ) : null}
       </div>
@@ -117,17 +130,18 @@ function SavedItems({ filter }) {
             : 'Bạn chưa lưu mục kiến thức nào.'
         }
       >
-        <div className="ck-library-grid">
+        <ul className="ck-library-journal__entries">
           {page.data?.map((item) => (
-            <SavedCard
-              key={item.id}
-              item={item}
-              onSources={() => setSource(item)}
-              remove={() => remove(item.id)}
-              refresh={page.reload}
-            />
+            <li key={item.id}>
+              <SavedEntry
+                item={item}
+                onSources={() => setSource(item)}
+                remove={() => remove(item.id)}
+                refresh={page.reload}
+              />
+            </li>
           ))}
-        </div>
+        </ul>
       </LibraryStatus>
       {!page.pending &&
         !page.error &&
@@ -146,24 +160,22 @@ function SavedItems({ filter }) {
           onClose={() => setSource(null)}
         />
       )}
-    </>
+    </section>
   );
 }
 
 /** @param {{item: SavedItem, onSources: () => void, remove: () => void, refresh: () => void}} props */
-function SavedCard({ item, onSources, remove, refresh }) {
+function SavedEntry({ item, onSources, remove, refresh }) {
   const { write, pending, error } = useLibraryWrite();
   return (
     <LibraryKnowledge item={item.knowledge}>
       <div className="ck-library-card-actions">
-        <Button
-          variant="ghost"
-          size="compact"
-          aria-label={`Xem nguồn: ${item.knowledge.expression}`}
+        <IconButton
+          name="book"
+          label={`Xem nguồn: ${item.knowledge.expression}`}
+          className="ck-library-icon-action"
           onClick={onSources}
-        >
-          Xem nguồn
-        </Button>
+        />
         <Button
           variant="secondary"
           size="compact"
@@ -283,7 +295,9 @@ function SourceDialog({ item, onClose }) {
               </div>
               {source.title && (
                 <Link
-                  className="ck-library-text-link"
+                  className="ck-icon-button ck-library-icon-action"
+                  aria-label="Xem bản nguồn"
+                  title={`Xem bản nguồn: ${source.title}`}
                   to={libraryPath(
                     `/topics/${encodeURIComponent(source.deckVersionId)}`,
                     {
@@ -292,7 +306,7 @@ function SourceDialog({ item, onClose }) {
                     },
                   )}
                 >
-                  Xem bản nguồn <span aria-hidden="true">›</span>
+                  <Icon name="arrow" />
                 </Link>
               )}
             </li>

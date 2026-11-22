@@ -95,7 +95,9 @@ it('switches the catalog filter without reusing the previous cursor', async () =
   expect(
     await screen.findByRole('heading', { name: topic.title }),
   ).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Xem thêm' })).toBeEnabled();
+  expect(
+    screen.getByRole('button', { name: 'Nhóm chủ đề tiếp theo' }),
+  ).toBeEnabled();
   fireEvent.change(screen.getByLabelText('Trình độ'), {
     target: { value: 'N4' },
   });
@@ -107,6 +109,28 @@ it('switches the catalog filter without reusing the previous cursor', async () =
   expect(
     screen.getByRole('link', { name: 'Xem học liệu: Tìm đường đến nhà ga' }),
   ).toHaveAttribute('href', '/topics/deck-version');
+});
+
+it('opens the topic detail from the island station title', async () => {
+  vi.spyOn(api, 'get').mockImplementation(async (path) => {
+    if (path === '/auth/me') return response(user);
+    if (path === '/topics') return response({ items: [topic] });
+    if (path === '/topic-versions/deck-version') return response(detail);
+    if (path === '/topic-versions/deck-version/knowledge')
+      return response({ items: [word] });
+    if (path === '/me/saved-items') return response({ items: [] });
+    throw new Error(`Unexpected GET ${path}`);
+  });
+
+  open('/topics');
+  fireEvent.click(
+    await screen.findByRole('link', { name: `Xem học liệu: ${topic.title}` }),
+  );
+
+  expect(
+    await screen.findByRole('heading', { name: topic.title, level: 1 }),
+  ).toBeVisible();
+  expect(await screen.findByText(word.meaning)).toBeVisible();
 });
 
 it('keeps one learner header mounted when navigating from home to library and history', async () => {
