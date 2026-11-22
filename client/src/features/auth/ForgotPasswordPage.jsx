@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import usagi from '../../assets/mascots/bouncing-usagi.gif';
+import { usagi } from '../../assets/mascots/mascots.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.jsx';
 import { Button } from '../../components/ui/controls.jsx';
 import { Input } from '../../components/ui/forms.jsx';
@@ -118,7 +118,7 @@ export function ForgotPasswordPage() {
 
   return (
     <section data-screen-id="SC-02">
-      <AuthLayout mascotSrc={usagi} mascotAlt="Mascot thỏ Chiikaiwa">
+      <AuthLayout mascot={usagi} mascotAlt="Mascot thỏ Chiikaiwa">
         <div className="ck-account-page">
           <header className="ck-account-header">
             <div>

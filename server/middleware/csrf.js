@@ -43,10 +43,10 @@ export function issueCsrfToken(request, response, { secure }) {
  * Middleware that enforces Origin allowlist and X-CSRF-Token matching on all browser mutating requests.
  * Webhook and maintenance routes use their own server-to-server verification and are excluded.
  *
- * @param {{ getOrigin: () => string }} options
+ * @param {{ getOrigins: () => string[] }} options
  * @returns {import('express').RequestHandler}
  */
-export function createCsrfMiddleware({ getOrigin }) {
+export function createCsrfMiddleware({ getOrigins }) {
   return (request, _response, next) => {
     if (!MUTATING_METHODS.has(request.method.toUpperCase())) {
       return next();
@@ -64,15 +64,15 @@ export function createCsrfMiddleware({ getOrigin }) {
       return next();
     }
 
-    let allowedOrigin;
+    let allowedOrigins;
     try {
-      allowedOrigin = getOrigin();
+      allowedOrigins = getOrigins();
     } catch (err) {
       return next(err);
     }
 
     const originHeader = request.get('origin');
-    if (!originHeader || originHeader !== allowedOrigin) {
+    if (!originHeader || !allowedOrigins.includes(originHeader)) {
       return next(
         new AppError({
           status: 403,

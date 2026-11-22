@@ -139,7 +139,7 @@ export function createApp({
   app.use(
     '/api/v1',
     createCsrfMiddleware({
-      getOrigin: () => readAuthEnv().origin,
+      getOrigins: () => readAuthEnv().csrfOrigins,
     }),
   );
 

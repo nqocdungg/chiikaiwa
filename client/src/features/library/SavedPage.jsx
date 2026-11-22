@@ -99,7 +99,10 @@ function SavedItems({ filter }) {
           Kiến thức đã lưu
         </h2>
         {page.data?.length ? (
-          <Link className="ck-library-cta" to="/study?scope=saved&mode=all">
+          <Link
+            className="ck-button ck-button--primary"
+            to="/study?scope=saved&mode=all"
+          >
             Bắt đầu ôn tập
           </Link>
         ) : null}
