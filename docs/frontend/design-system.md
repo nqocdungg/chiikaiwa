@@ -199,6 +199,7 @@ Không scale toàn bộ UI, không dùng absolute cho các khối nội dung ch�
 ### 7.1. Button và IconButton
 
 - Button variants: primary, secondary, ghost, danger. Primary/secondary theo mẫu mới; danger là baseline bổ sung.
+- `appearance="sticker"` dành cho primary, secondary và danger. Dáng viên kẹo có viền trắng và bóng đáy, nhãn vẫn hiện khi loading.
 - Size default 48px, padding ngang 24px (16px nếu footer hai nút cần gọn), gap 8px, radius 14, icon 20px.
 - Size compact 44px; hero 56px là đề xuất, chỉ dùng khi layout cần.
 - Không dùng mỗi màn một loại button. API gợi ý: variant, size, loading, disabled, leadingIcon, trailingIcon, fullWidth.
@@ -221,6 +222,7 @@ Không scale toàn bộ UI, không dùng absolute cho các khối nội dung ch�
 ### 7.3. Modal/Dialog
 
 - Một primitive, variants compact 480px và form 680px.
+- `appearance="sticker"` dùng thanh tiêu đề hồng phấn và thân kem. Truyền các nút sticker qua `footer` để dùng cùng kiểu hiển thị.
 - Cấu trúc: overlay → dialog → header → body → footer. Body cuộn khi dài; header/footer vẫn dùng được.
 - Không gắn min-height 400 cho mọi trạng thái; search có thể giữ vùng ổn định nếu cần, phải qua review.
 - Popup match: người luyện ở một hàng, avatar 48px cố định; timer ở hàng riêng; điểm chung; footer hai nút gap 12px, secondary trái/primary phải.

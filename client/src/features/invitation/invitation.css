@@ -110,7 +110,6 @@
 
 .ck-invitation-form .ck-input {
   height: 3.625rem;
-  border-color: #dfc5ce;
   border-radius: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -144,10 +143,10 @@
   top: 0.55rem;
   left: 1rem;
   padding: 0.25rem 0.5rem;
-  border: 1px solid #ead6a0;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
   border-radius: var(--radius-pill);
-  background: #fff5cf;
-  color: #826a3f;
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
   font-size: 0.625rem;
   font-weight: 700;
   line-height: 0.9rem;
@@ -158,9 +157,9 @@
   padding: 0.625rem 0.75rem;
   border: 0;
   border-radius: 0.6875rem;
-  background: #e7f3f7;
+  background: var(--color-info-bg);
   box-shadow: none;
-  color: #527b8a !important;
+  color: var(--color-info-text) !important;
   font-size: 0.75rem !important;
 }
 
@@ -203,7 +202,7 @@
 
 .ck-invitation-waiting__indicator::before {
   position: absolute;
-  animation: ck-invitation-waiting-pulse 1.8s ease-out infinite;
+  animation: ck-invitation-waiting-pulse 1.8s ease-out 2;
 }
 
 @keyframes ck-invitation-waiting-pulse {
@@ -231,7 +230,7 @@
 
 .ck-invitation-waiting small {
   margin-top: 0.0625rem;
-  color: #8e8387;
+  color: var(--color-text-muted);
   font-size: 0.6875rem;
   line-height: 1rem;
 }
@@ -248,15 +247,15 @@
   align-items: center;
   gap: 0.875rem;
   padding: 1rem 1.125rem;
-  border: 1px solid #cce2ea;
+  border: 1px solid color-mix(in srgb, var(--color-info-text) 24%, transparent);
   border-radius: 1.125rem;
-  background: #f1f9fc;
+  background: var(--color-info-bg);
 }
 
 .ck-invitation-request-card .ck-avatar {
-  border-color: #9bc9d8;
-  background: #dff1f7;
-  color: #527b8a;
+  border-color: color-mix(in srgb, var(--color-info-text) 35%, transparent);
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
 }
 
 .ck-invitation-request-card__identity {
@@ -305,7 +304,7 @@
 }
 
 .ck-invitation-request-waiting [role='timer'] {
-  color: #826a3f;
+  color: var(--color-warning);
   font-size: 0.75rem;
   font-weight: 700;
 }

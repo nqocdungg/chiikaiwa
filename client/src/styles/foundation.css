@@ -4,6 +4,10 @@
   background: var(--color-background);
 }
 
+.ck-mascot-picture {
+  display: contents;
+}
+
 .ck-button {
   position: relative;
   display: inline-flex;
@@ -149,7 +153,7 @@
 }
 
 .ck-button__content--loading {
-  visibility: hidden;
+  opacity: 0;
 }
 
 .ck-button__spinner {
@@ -231,7 +235,7 @@
   min-width: 0;
   height: var(--control-height);
   padding: calc(var(--space-3) - 1px) var(--space-4);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-input);
   background: var(--color-surface-raised);
   color: var(--color-text);
@@ -247,7 +251,7 @@
   border-color: color-mix(
     in srgb,
     var(--color-accent) 55%,
-    var(--color-border)
+    var(--color-control-border)
   );
 }
 
@@ -259,7 +263,7 @@
 
 .ck-input::placeholder {
   color: var(--color-text-muted);
-  opacity: 0.78;
+  opacity: 1;
 }
 
 .ck-input:disabled {
