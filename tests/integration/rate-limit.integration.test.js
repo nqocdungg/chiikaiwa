@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import request from 'supertest';
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -164,6 +165,9 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  // Freeze Date only; MongoDB/network timers must keep running normally.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date());
   for (const name of [
     'users',
     'auth_sessions',
@@ -179,6 +183,10 @@ beforeEach(async () => {
   ]) {
     await collection(name).deleteMany({});
   }
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('BE-038 Request Rate Limits', () => {

@@ -1,10 +1,6 @@
 import { randomInt } from 'node:crypto';
 import mongoose from 'mongoose';
 import { AppError } from '../../middleware/http-error.js';
-import {
-  INVITATION_CODE_RATE_LIMIT_MAX,
-  INVITATION_CODE_RATE_LIMIT_WINDOW_MS,
-} from '../../middleware/rate-limit.js';
 import { assertPairNotBlocked } from '../safety/safety-service.js';
 import { reconcileActorSessionMedia } from '../sessions/media-cleanup-service.js';
 import {
@@ -21,9 +17,6 @@ import {
 } from '../identity/crypto.js';
 
 export const INVITATION_TTL_MS = 10 * 60 * 1000;
-export const INVITATION_CODE_LOOKUP_WINDOW_MS =
-  INVITATION_CODE_RATE_LIMIT_WINDOW_MS;
-export const INVITATION_CODE_LOOKUP_MAX = INVITATION_CODE_RATE_LIMIT_MAX;
 const CODE_LENGTH = 10;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const { ObjectId } = mongoose.Types;

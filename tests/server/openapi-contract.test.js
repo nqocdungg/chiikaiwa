@@ -137,12 +137,15 @@ describe('OpenAPI contract', () => {
     expect(schemas.SubmitQuizAnswerItem.properties.text.maxLength).toBe(500);
   });
 
-  it('documents RateLimited (429) on admin content publish and hide endpoints', () => {
-    for (const path of [
-      '/admin/content/{id}/publish',
-      '/admin/content/{id}/hide',
+  it('documents RateLimited (429) on admin content and invitation mutations', () => {
+    for (const [path, method] of [
+      ['/admin/content/{id}/publish', 'post'],
+      ['/admin/content/{id}/hide', 'post'],
+      ['/invitations/{invitationId}', 'delete'],
+      ['/invitation-requests/{requestId}', 'delete'],
+      ['/invitation-requests/{requestId}/responses', 'post'],
     ]) {
-      expect(document.paths[path].post.responses['429']).toEqual({
+      expect(document.paths[path][method].responses['429']).toEqual({
         $ref: '#/components/responses/RateLimited',
       });
     }

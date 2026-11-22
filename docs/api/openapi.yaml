@@ -667,6 +667,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /invitations/{invitationId}/requests:
     get:
@@ -791,6 +793,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /invitation-requests/{requestId}/responses:
     post:
@@ -845,6 +849,8 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /guest-trials:
     post:
