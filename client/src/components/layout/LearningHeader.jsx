@@ -174,13 +174,22 @@ export function LearningHeader({
             {isDropdownOpen && (
               <div id={menuId} className="ck-profile-dropdown">
                 {!guestView && (
-                  <Link
-                    to="/profile"
-                    className="ck-profile-dropdown-item"
-                    onClick={() => setMenuLocation(null)}
-                  >
-                    <span>Hồ sơ của tôi</span>
-                  </Link>
+                  <>
+                    <Link
+                      to="/profile"
+                      className="ck-profile-dropdown-item"
+                      onClick={() => setMenuLocation(null)}
+                    >
+                      <span>Hồ sơ của tôi</span>
+                    </Link>
+                    <Link
+                      to="/blocks"
+                      className="ck-profile-dropdown-item"
+                      onClick={() => setMenuLocation(null)}
+                    >
+                      <span>Danh sách chặn</span>
+                    </Link>
+                  </>
                 )}
                 <button
                   type="button"
