@@ -585,7 +585,7 @@ describe('Admin Reports and Privacy Integration Suite (BE-026, IR-01 - IR-18, IP
       expect(resPatch.body.data.status).toBe('inProgress');
     });
 
-    it('IR-17: Chuyển status về new: gỡ handledBy, handledAt và resolution ($unset) (S1, R3)', async () => {
+    it('IR-17: Chuyển status về new: gỡ handledBy, handledAt nhưng giữ resolution nếu request bỏ trường đó (S1, R3)', async () => {
       const { cookie: adminCookie } = await createAuthHeader(admin1Id);
       const reportId = new ObjectId();
       const now = new Date();
@@ -618,14 +618,14 @@ describe('Admin Reports and Privacy Integration Suite (BE-026, IR-01 - IR-18, IP
       expect(resPatch.body.data.status).toBe('new');
       expect(resPatch.body.data.handledBy).toBeUndefined();
       expect(resPatch.body.data.handledAt).toBeUndefined();
-      expect(resPatch.body.data.resolution).toBeUndefined();
+      expect(resPatch.body.data.resolution).toBe('Đã xử lý trước đó');
       expect(resPatch.body.data.version).toBe(2);
 
       const inDb = await db.collection('reports').findOne({ _id: reportId });
       expect(inDb?.status).toBe('new');
       expect(inDb?.handledBy).toBeUndefined();
       expect(inDb?.handledAt).toBeUndefined();
-      expect(inDb?.resolution).toBeUndefined();
+      expect(inDb?.resolution).toBe('Đã xử lý trước đó');
       expect(inDb?.version).toBe(2);
     });
 
@@ -638,7 +638,7 @@ describe('Admin Reports and Privacy Integration Suite (BE-026, IR-01 - IR-18, IP
       expect(res.body.error.code).toBe('INVALID_CURSOR');
     });
 
-    it('IR-19: Gửi status: new kèm resolution bị từ chối 422 VALIDATION_FAILED, không đổi version, không tạo receipt (R3)', async () => {
+    it('IR-19: Chấp nhận resolution hợp lệ khi chuyển report về new và lưu kết quả', async () => {
       const { cookie: adminCookie } = await createAuthHeader(admin1Id);
       const reportId = new ObjectId();
       const now = new Date();
@@ -666,24 +666,28 @@ describe('Admin Reports and Privacy Integration Suite (BE-026, IR-01 - IR-18, IP
         .send({
           expectedVersion: 1,
           status: 'new',
-          resolution: 'Không hợp lệ khi đặt new',
+          resolution: 'Đã cập nhật kết quả điều tra',
         })
-        .expect(422);
+        .expect(200);
 
-      expect(res.body.error.code).toBe('VALIDATION_FAILED');
-      expect(res.body.error.details.fields[0].path).toBe('resolution');
-      expect(res.body.error.details.fields[0].code).toBe('INVALID_RESOLUTION');
+      expect(res.body.data.status).toBe('new');
+      expect(res.body.data.resolution).toBe('Đã cập nhật kết quả điều tra');
+      expect(res.body.data.handledBy).toBeUndefined();
+      expect(res.body.data.handledAt).toBeUndefined();
+      expect(res.body.data.version).toBe(2);
 
-      // Khẳng định document trong DB giữ nguyên version và không tạo receipt
+      // Khẳng định document trong DB giữ kết quả mới và trạng thái đã commit
       const inDb = await db.collection('reports').findOne({ _id: reportId });
-      expect(inDb?.version).toBe(1);
-      expect(inDb?.status).toBe('inProgress');
-      expect(inDb?.resolution).toBe('Đang theo dõi');
+      expect(inDb?.version).toBe(2);
+      expect(inDb?.status).toBe('new');
+      expect(inDb?.resolution).toBe('Đã cập nhật kết quả điều tra');
+      expect(inDb?.handledBy).toBeUndefined();
+      expect(inDb?.handledAt).toBeUndefined();
 
       const receipt = await db.collection('operation_receipts').findOne({
         operationId: 'c1111111-0000-4000-8000-000000000019',
       });
-      expect(receipt).toBeNull();
+      expect(receipt).not.toBeNull();
     });
   });
 

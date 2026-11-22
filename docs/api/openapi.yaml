@@ -2016,7 +2016,9 @@ paths:
         Cập nhật trạng thái và kết quả xử lý của báo cáo với kiểm soát phiên bản
         CAS qua expectedVersion và Idempotency-Key (retry cùng key trả trạng thái hiện hành).
         Cho phép mở lại báo cáo (status new/inProgress sau resolved/rejected); khi chuyển về new,
-        các trường handledBy, handledAt và resolution sẽ được gỡ bỏ (cấm gửi resolution khi đặt trạng thái new).
+        handledBy và handledAt được gỡ bỏ. Resolution chỉ thay đổi khi request gửi trường này;
+        nếu bỏ trường, giá trị đã lưu được giữ nguyên. Khi status là new, resolution có thể là
+        kết quả được lưu từ lần xử lý trước.
       security:
         - sessionCookie: []
           csrfToken: []

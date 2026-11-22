@@ -324,18 +324,6 @@ export function validateAdminReportUpdateBody(body) {
     }
   }
 
-  if (
-    rawStatus === 'new' &&
-    'resolution' in body &&
-    body.resolution !== undefined
-  ) {
-    fields.push({
-      path: 'resolution',
-      code: 'INVALID_RESOLUTION',
-      message: 'Không được gửi resolution khi đặt trạng thái new.',
-    });
-  }
-
   if (fields.length > 0) {
     throw createValidationError(fields);
   }

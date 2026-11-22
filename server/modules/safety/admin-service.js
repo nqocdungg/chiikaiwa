@@ -1,8 +1,5 @@
 import mongoose from 'mongoose';
-import {
-  AppError,
-  createValidationError,
-} from '../../middleware/http-error.js';
+import { AppError } from '../../middleware/http-error.js';
 import { connectDatabase } from '../../persistence/database.js';
 import { runIdempotentOperation } from '../coordination/coordination-service.js';
 import { finishSessionEffects } from '../sessions/media-cleanup-service.js';
@@ -602,16 +599,6 @@ export async function updateAdminReport({
         });
       }
 
-      if (status === 'new' && resolution !== undefined) {
-        throw createValidationError([
-          {
-            path: 'resolution',
-            code: 'INVALID_RESOLUTION',
-            message: 'Không được gửi resolution khi đặt trạng thái new.',
-          },
-        ]);
-      }
-
       /** @type {Record<string, any>} */
       const setFields = { status, updatedAt: now };
       /** @type {Record<string, any>} */
@@ -619,7 +606,6 @@ export async function updateAdminReport({
       if (status === 'new') {
         unsetFields.handledBy = '';
         unsetFields.handledAt = '';
-        unsetFields.resolution = '';
       } else {
         setFields.handledBy = new ObjectId(identity.userId);
         setFields.handledAt = now;

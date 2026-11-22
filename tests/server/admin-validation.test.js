@@ -355,19 +355,18 @@ describe('Admin Validation Unit Tests (BE-026, V-01 - V-10)', () => {
       expect('resolution' in result).toBe(false);
     });
 
-    it('từ chối 422 INVALID_RESOLUTION khi gửi resolution kèm status new (R3)', () => {
-      try {
-        validateAdminReportUpdateBody({
-          expectedVersion: 0,
-          status: 'new',
-          resolution: 'Không hợp lệ',
-        });
-        expect.unreachable();
-      } catch (/** @type {any} */ err) {
-        expect(err.status).toBe(422);
-        expect(err.details?.fields[0]?.path).toBe('resolution');
-        expect(err.details?.fields[0]?.code).toBe('INVALID_RESOLUTION');
-      }
+    it('chấp nhận resolution hợp lệ khi status là new theo contract PATCH', () => {
+      const result = validateAdminReportUpdateBody({
+        expectedVersion: 0,
+        status: 'new',
+        resolution: 'Kết quả xử lý được cập nhật',
+      });
+
+      expect(result).toEqual({
+        expectedVersion: 0,
+        status: 'new',
+        resolution: 'Kết quả xử lý được cập nhật',
+      });
     });
   });
 
