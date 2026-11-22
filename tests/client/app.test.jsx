@@ -12,7 +12,11 @@ it('renders the application entry point', () => {
       <App />
     </MemoryRouter>,
   );
-  expect(screen.getByRole('heading', { name: 'Chiikaiwa' })).toBeVisible();
+  expect(
+    screen.getByRole('heading', {
+      name: 'Không gian luyện nói tiếng Nhật 1-1',
+    }),
+  ).toBeVisible();
 });
 
 it('provides a way home from an unknown route', () => {

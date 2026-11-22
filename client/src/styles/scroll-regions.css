@@ -1,0 +1,52 @@
+html:has(.ck-dialog[open]) {
+  overflow: hidden;
+}
+
+:is(.ck-auth-layout__scroll, .ck-dialog__body, .ck-dialog__layout) {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(223 136 171 / 24%) transparent;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  :is(.ck-auth-layout__scroll, .ck-dialog__body, .ck-dialog__layout) {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+
+    &::-webkit-scrollbar {
+      width: 3px;
+      height: 3px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: rgb(223 136 171 / 24%);
+    }
+
+    &::-webkit-scrollbar-button {
+      display: none;
+    }
+  }
+}
+
+.ck-dialog__body {
+  margin-inline-end: 0.5rem;
+}
+
+@media (max-height: 500px) {
+  .ck-dialog .ck-dialog__layout {
+    display: block;
+    overflow-y: auto;
+    margin-inline-end: 0.5rem;
+    overscroll-behavior: contain;
+    scroll-padding-block: 0.65rem;
+  }
+
+  .ck-dialog .ck-dialog__body {
+    overflow-y: visible;
+    margin-inline-end: 0;
+  }
+}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import hachiware from '../../assets/mascots/waving-hachiware.gif';
+import { hachiware } from '../../assets/mascots/mascots.js';
 import { AuthLayout } from '../../components/layout/AuthLayout.jsx';
 import { Button } from '../../components/ui/controls.jsx';
 import { PasswordInput } from '../../components/ui/forms.jsx';
@@ -145,7 +145,7 @@ function ResetPasswordContent({ normalizedToken }) {
     return (
       <section data-screen-id="SC-02">
         <AuthLayout
-          mascotSrc={hachiware}
+          mascot={hachiware}
           mascotAlt="Mascot mèo Hachiware Chiikaiwa"
         >
           <div className="ck-account-page">
@@ -199,7 +199,7 @@ function ResetPasswordContent({ normalizedToken }) {
     return (
       <section data-screen-id="SC-02">
         <AuthLayout
-          mascotSrc={hachiware}
+          mascot={hachiware}
           mascotAlt="Mascot mèo Hachiware Chiikaiwa"
         >
           <div className="ck-account-page">
@@ -250,10 +250,7 @@ function ResetPasswordContent({ normalizedToken }) {
 
   return (
     <section data-screen-id="SC-02">
-      <AuthLayout
-        mascotSrc={hachiware}
-        mascotAlt="Mascot mèo Hachiware Chiikaiwa"
-      >
+      <AuthLayout mascot={hachiware} mascotAlt="Mascot mèo Hachiware Chiikaiwa">
         <div className="ck-account-page">
           <header className="ck-account-header">
             <div>

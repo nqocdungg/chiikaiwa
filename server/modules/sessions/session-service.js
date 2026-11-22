@@ -29,7 +29,7 @@ export function sessionObjectId(id) {
 }
 
 /** @param {any} id @param {Identity} identity @param {Date} at @param {import('mongoose').ClientSession} [session] */
-async function authorizedSession(id, identity, at, session) {
+export async function authorizedSession(id, identity, at, session) {
   const db = await connectDatabase();
   const doc = await db
     .collection('practice_sessions')
