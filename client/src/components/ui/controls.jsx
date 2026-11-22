@@ -55,6 +55,7 @@ export function Icon({ name, size = 20, className }) {
  * children?: import('react').ReactNode,
  * onClick?: import('react').MouseEventHandler<HTMLButtonElement>,
  * variant?: 'primary'|'secondary'|'ghost'|'danger',
+ * appearance?: 'default'|'sticker',
  * size?: 'compact'|'default'|'hero',
  * disabled?: boolean,
  * loading?: boolean,
@@ -73,6 +74,7 @@ export function Button({
   children,
   onClick,
   variant = 'secondary',
+  appearance = 'default',
   size = 'default',
   disabled = false,
   loading = false,
@@ -89,6 +91,7 @@ export function Button({
   const classes = [
     'ck-button',
     `ck-button--${variant}`,
+    appearance === 'sticker' && variant !== 'ghost' ? 'ck-button--sticker' : '',
     size !== 'default' ? `ck-button--${size}` : '',
     fullWidth ? 'ck-button--full' : '',
     className,
@@ -124,10 +127,11 @@ export function Button({
   );
 }
 
-/** @param {{name: string, label: string, onClick?: import('react').MouseEventHandler<HTMLButtonElement>, pressed?: boolean, disabled?: boolean, type?: 'button'|'submit'|'reset', className?: string, buttonRef?: import('react').Ref<HTMLButtonElement>}} props */
+/** @param {{name: string, label: string, title?: string, onClick?: import('react').MouseEventHandler<HTMLButtonElement>, pressed?: boolean, disabled?: boolean, type?: 'button'|'submit'|'reset', className?: string, buttonRef?: import('react').Ref<HTMLButtonElement>}} props */
 export function IconButton({
   name,
   label,
+  title = label,
   onClick,
   pressed,
   disabled,
@@ -141,7 +145,7 @@ export function IconButton({
       type={type}
       className={`ck-icon-button ${className}`.trim()}
       aria-label={label}
-      title={label}
+      title={title}
       aria-pressed={typeof pressed === 'boolean' ? pressed : undefined}
       onClick={onClick}
       disabled={disabled}

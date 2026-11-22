@@ -1,7 +1,8 @@
 import { Link } from 'react-router';
-import usagi from '../../assets/mascots/bouncing-usagi.gif';
 import { AuthLayout } from '../../components/layout/AuthLayout.jsx';
-import { Badge } from '../../components/ui/surfaces.jsx';
+import { GreetingBubble } from '../../components/ui/GreetingBubble.jsx';
+import '../../components/ui/study-studio.css';
+import './auth-study.css';
 
 /**
  * Shared 2-column split layout for SC-02 (/login and /register)
@@ -9,31 +10,43 @@ import { Badge } from '../../components/ui/surfaces.jsx';
  *
  * @param {Object} props
  * @param {string} props.eyebrow Japanese greeting above the heading
+ * @param {string} props.greetingTranslation Vietnamese translation
  * @param {string} props.title Main Vietnamese heading displayed visually
  * @param {string} props.accessibleTitle Accessible heading name for screen readers & route tests
  * @param {string} props.subtitle Supporting subtitle below the heading
- * @param {string} [props.mascotSrc] Optional mascot image source
- * @param {string} [props.mascotAlt] Optional mascot alt text
+ * @param {string} props.illustration Decorative mascot scene
  * @param {import('react').ReactNode} props.children Form or confirmation content
  * @param {import('react').ReactNode} [props.footer] Bottom prompt link
  */
 export function AuthSplitLayout({
   eyebrow,
+  greetingTranslation,
   title,
   accessibleTitle,
   subtitle,
-  mascotSrc = usagi,
-  mascotAlt = 'Mascot Chiikaiwa',
+  illustration,
   children,
   footer,
 }) {
   return (
     <section
-      className="ck-auth-screen"
+      className="ck-auth-screen ck-auth-screen--study"
       data-screen-id="SC-02"
       aria-label={accessibleTitle}
     >
-      <AuthLayout mascotSrc={mascotSrc} mascotAlt={mascotAlt}>
+      <AuthLayout
+        scrollable
+        visual={
+          <div className="ck-auth-study-scene">
+            <GreetingBubble
+              className="ck-auth-study-scene__greeting"
+              japanese={eyebrow}
+              translation={greetingTranslation}
+            />
+            <img src={illustration} width="840" height="560" alt="" />
+          </div>
+        }
+      >
         <div className="ck-auth-card">
           <div className="ck-auth-panel__topbar">
             <Link to="/" className="ck-auth-back-link">
@@ -43,9 +56,6 @@ export function AuthSplitLayout({
           </div>
 
           <header className="ck-auth-card__header">
-            <Badge tone="accent">
-              <span lang="ja">{eyebrow}</span>
-            </Badge>
             <h1 className="ck-auth-title" aria-label={accessibleTitle}>
               {title}
             </h1>

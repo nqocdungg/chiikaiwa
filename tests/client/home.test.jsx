@@ -1,6 +1,12 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import { useState } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { LearningLayout } from '../../client/src/components/layout/LearningLayout.jsx';
@@ -71,6 +77,23 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
       mockLogout: defaultAuth.logout,
     };
   }
+
+  it('changes the mascot greeting when activated', async () => {
+    vi.spyOn(api, 'get').mockResolvedValueOnce({
+      data: { mode: 'idle', version: 1 },
+      meta: {},
+      epoch: getIdentityEpoch(),
+    });
+    renderHome();
+    await screen.findByRole('button', { name: 'Tìm bạn luyện nói' });
+    const mascot = screen.getByRole('button', {
+      name: 'Đổi lời chào của mascot',
+    });
+    expect(screen.getByText('こんにちは！')).toBeVisible();
+    fireEvent.click(mascot);
+    expect(screen.getByText('やっほー！')).toBeVisible();
+    expect(mascot).toHaveAccessibleName('Đổi lời chào của mascot');
+  });
 
   it('renders real authenticated user information in header (07 §5.1)', async () => {
     vi.spyOn(api, 'get').mockResolvedValueOnce({
@@ -174,29 +197,37 @@ describe('FE-002: SC-03 Trang chính (Home) Integration Suite', () => {
 
     renderHome();
 
-    expect(screen.getByRole('link', { name: 'Kho chủ đề' })).toHaveAttribute(
+    const mainNav = within(
+      screen.getByRole('navigation', { name: 'Điều hướng chính' }),
+    );
+    expect(mainNav.getByRole('link', { name: 'Kho chủ đề' })).toHaveAttribute(
       'href',
       '/topics',
     );
-    expect(screen.getByRole('link', { name: 'Ôn cá nhân' })).toHaveAttribute(
+    expect(mainNav.getByRole('link', { name: 'Ôn cá nhân' })).toHaveAttribute(
       'href',
       '/saved',
     );
-    expect(screen.getByRole('link', { name: 'Lịch sử' })).toHaveAttribute(
+    expect(mainNav.getByRole('link', { name: 'Lịch sử' })).toHaveAttribute(
       'href',
       '/history',
     );
 
-    // 3 chip chủ đề hiển thị đầy đủ text Nhật - Việt mà không dùng aria-label lệch (B1)
+    const shortcuts = within(
+      screen.getByRole('navigation', { name: 'Lối tắt học tập' }),
+    );
     expect(
-      screen.getByRole('link', { name: /カフェで.*Ở quán cà phê/i }),
+      shortcuts.getByRole('link', {
+        name: 'Kho chủ đề',
+        description: 'Chọn tình huống để luyện nói.',
+      }),
     ).toHaveAttribute('href', '/topics');
     expect(
-      screen.getByRole('link', { name: /道を聞く.*Hỏi đường/i }),
-    ).toHaveAttribute('href', '/topics');
-    expect(
-      screen.getByRole('link', { name: /アルバイト.*Việc làm thêm/i }),
-    ).toHaveAttribute('href', '/topics');
+      shortcuts.getByRole('link', {
+        name: 'Ôn cá nhân',
+        description: 'Ôn lại các câu đã lưu.',
+      }),
+    ).toHaveAttribute('href', '/saved');
 
     // Chờ coordination check hoàn tất và chuyển sang trạng thái rảnh (idle)
     const inviteBtn = screen.getByRole('button', { name: 'Nhập mã' });

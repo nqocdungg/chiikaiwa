@@ -227,7 +227,7 @@ export function KaiwaRoom({
         size="compact"
         leadingIcon={<Icon name={actualMic ? 'mic' : 'micOff'} />}
         loading={media?.pendingDevices.has('microphone')}
-        aria-label={actualMic ? 'Tắt micro' : 'Bật micro'}
+        aria-label="Micro"
         aria-pressed={actualMic}
         disabled={
           !!live && (!connected || media?.pendingDevices.has('microphone'))
@@ -245,7 +245,7 @@ export function KaiwaRoom({
         size="compact"
         leadingIcon={<Icon name={actualCamera ? 'camera' : 'cameraOff'} />}
         loading={media?.pendingDevices.has('camera')}
-        aria-label={actualCamera ? 'Tắt camera' : 'Bật camera'}
+        aria-label="Camera"
         aria-pressed={actualCamera}
         disabled={!!live && (!connected || media?.pendingDevices.has('camera'))}
         onClick={() => {

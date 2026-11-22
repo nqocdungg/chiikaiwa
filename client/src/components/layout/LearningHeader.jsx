@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import chiiLogo from '../../assets/brand/chii-logo.svg';
 import tabMascot from '../../assets/mascots/header-chiikawa.png';
-import wavingMascot from '../../assets/mascots/waving-chiikawa.gif';
+import { chiikawa } from '../../assets/mascots/mascots.js';
+import { Mascot } from '../Mascot.jsx';
 import { useAuth } from '../../features/auth/use-auth.js';
 import { PillMotion } from '../ui/PillMotion.jsx';
 import { Avatar, Badge } from '../ui/surfaces.jsx';
@@ -112,8 +113,8 @@ export function LearningHeader({
             className="ck-learning-logo"
           />
           <span className="ck-brand-text">Chiikaiwa</span>
-          <img
-            src={wavingMascot}
+          <Mascot
+            asset={chiikawa}
             alt=""
             width="36"
             height="35"
