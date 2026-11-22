@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../server/app.js';
 import { getClientIp } from '../../server/middleware/rate-limit.js';
@@ -46,6 +46,37 @@ describe('BE-001 Authentication unit & HTTP contract checks', () => {
       expect(cookieStr).toContain('Path=/');
       expect(cookieStr).not.toContain('Domain=');
     });
+
+    it.each([
+      [DEFAULT_ORIGIN, 'http://localhost:5173'],
+      ['http://localhost:5173', DEFAULT_ORIGIN],
+    ])(
+      'accepts the local development alias of %s',
+      async (configured, alias) => {
+        vi.stubEnv('NODE_ENV', 'development');
+        vi.stubEnv('APP_ORIGIN', configured);
+        try {
+          const { csrfToken, cookieHeader } = await fetchCsrf(app);
+          /** @param {string} origin */
+          const sendRequest = (origin, token = csrfToken) =>
+            request(app)
+              .post('/api/v1/auth/password-change')
+              .set('Origin', origin)
+              .set('Cookie', cookieHeader)
+              .set('X-CSRF-Token', token)
+              .send({});
+
+          await sendRequest(alias).expect(401);
+          await sendRequest('http://localhost:5174').expect(403);
+          await sendRequest(alias, '0'.repeat(64)).expect(403);
+
+          vi.stubEnv('NODE_ENV', 'test');
+          await sendRequest(alias).expect(403);
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      },
+    );
 
     it('rejects mutating requests when Origin header is missing or not in allowlist', async () => {
       const { csrfToken, cookieHeader } = await fetchCsrf(app);

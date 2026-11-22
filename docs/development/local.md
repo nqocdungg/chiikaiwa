@@ -23,6 +23,8 @@ npm run dev
 
 Frontend: http://127.0.0.1:5173. API mặc định: http://127.0.0.1:3000/api/v1. Vite proxy `/api` tới backend. Health check `/api/v1/health` trả 503 khi database không sẵn sàng. Khởi động lại server sau khi đổi `.env`; không commit file này.
 
+Khi chạy ở chế độ development với `APP_ORIGIN` là HTTP trên `127.0.0.1` hoặc `localhost`, CSRF chấp nhận cả hai hostname trên đúng cổng đã cấu hình. Mở ứng dụng qua Vite để request API và cookie đi cùng origin.
+
 Swagger UI: http://127.0.0.1:3000/api/docs. OpenAPI YAML thô: http://127.0.0.1:3000/api/openapi.yaml. Xem [hướng dẫn OpenAPI](../api/README.md) trước khi thêm hoặc đổi endpoint.
 
 | Lệnh                       | Mục đích                                 |
