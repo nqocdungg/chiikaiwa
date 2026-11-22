@@ -837,25 +837,13 @@ export async function listPublishedTopics({ level, limit, cursor }) {
     cursor: decodedCursor,
   });
 
-  const versionIds = items
-    .map((item) => item.publishedVersionId)
-    .filter(Boolean);
-  const versions =
-    versionIds.length > 0 ? await findContentVersionsByIds(db, versionIds) : [];
-  const versionMap = new Map(versions.map((v) => [v._id.toHexString(), v]));
-
   const nextCursor =
     hasMore && items.length > 0
-      ? encodeContentCursor(items[items.length - 1], filters)
+      ? encodeContentCursor(items[items.length - 1].item, filters)
       : null;
 
   return {
-    items: items.map((item) => {
-      const v = item.publishedVersionId
-        ? versionMap.get(item.publishedVersionId.toHexString())
-        : null;
-      return toTopicSummaryDto(item, v);
-    }),
+    items: items.map(({ item, version }) => toTopicSummaryDto(item, version)),
     nextCursor,
   };
 }
