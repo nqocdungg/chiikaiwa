@@ -9,6 +9,8 @@ export const LOGIN_RATE_LIMIT_MAX = 10;
 export const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 export const PASSWORD_RESET_EMAIL_RATE_LIMIT_MAX = 3;
 export const PASSWORD_RESET_IP_RATE_LIMIT_MAX = 20;
+export const INVITATION_CODE_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+export const INVITATION_CODE_RATE_LIMIT_MAX = 20;
 export const WRITE_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 export const WRITE_RATE_LIMIT_MAX = 120;
 
@@ -226,6 +228,30 @@ export async function enforcePasswordResetRequestRateLimit({
       now,
     });
   }
+}
+
+/**
+ * Enforces invitation-code / guest-trial lookup rate limits: 20 requests / 5 minutes per IP (07 §11).
+ *
+ * @param {Object} params
+ * @param {import('mongoose').mongo.Db} [params.db]
+ * @param {string} params.ip
+ * @param {Date} [params.now]
+ */
+export async function enforceInvitationCodeRateLimit({
+  db,
+  ip,
+  now = new Date(),
+}) {
+  const database = db ?? (await connectDatabase());
+  await consumeRateLimit({
+    db: database,
+    scope: 'invitation-code-ip',
+    subjectKey: ip,
+    limit: INVITATION_CODE_RATE_LIMIT_MAX,
+    windowMs: INVITATION_CODE_RATE_LIMIT_WINDOW_MS,
+    now,
+  });
 }
 
 /**

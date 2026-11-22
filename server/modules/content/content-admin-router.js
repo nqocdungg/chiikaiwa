@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
 import { AppError } from '../../middleware/http-error.js';
+import { enforceWriteRateLimit } from '../../middleware/rate-limit.js';
 import {
   createDraftContent,
   getContentItemDetail,
@@ -42,6 +43,9 @@ export function createAdminContentRouter() {
 
   router.post('/', async (request, response, next) => {
     try {
+      await enforceWriteRateLimit({
+        actorOrIpKey: response.locals.identity.actorKey,
+      });
       const rawKey = request.get('Idempotency-Key');
       const idempotencyKey = typeof rawKey === 'string' ? rawKey.trim() : '';
 
@@ -98,6 +102,9 @@ export function createAdminContentRouter() {
 
   router.patch('/:id', async (request, response, next) => {
     try {
+      await enforceWriteRateLimit({
+        actorOrIpKey: response.locals.identity.actorKey,
+      });
       const rawKey = request.get('Idempotency-Key');
       const idempotencyKey = typeof rawKey === 'string' ? rawKey.trim() : '';
 
@@ -140,6 +147,9 @@ export function createAdminContentRouter() {
 
   router.post('/:id/publish', async (request, response, next) => {
     try {
+      await enforceWriteRateLimit({
+        actorOrIpKey: response.locals.identity.actorKey,
+      });
       const rawKey = request.get('Idempotency-Key');
       const idempotencyKey = typeof rawKey === 'string' ? rawKey.trim() : '';
 
@@ -180,6 +190,9 @@ export function createAdminContentRouter() {
 
   router.post('/:id/hide', async (request, response, next) => {
     try {
+      await enforceWriteRateLimit({
+        actorOrIpKey: response.locals.identity.actorKey,
+      });
       const rawKey = request.get('Idempotency-Key');
       const idempotencyKey = typeof rawKey === 'string' ? rawKey.trim() : '';
 

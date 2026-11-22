@@ -137,6 +137,17 @@ describe('OpenAPI contract', () => {
     expect(schemas.SubmitQuizAnswerItem.properties.text.maxLength).toBe(500);
   });
 
+  it('documents RateLimited (429) on admin content publish and hide endpoints', () => {
+    for (const path of [
+      '/admin/content/{id}/publish',
+      '/admin/content/{id}/hide',
+    ]) {
+      expect(document.paths[path].post.responses['429']).toEqual({
+        $ref: '#/components/responses/RateLimited',
+      });
+    }
+  });
+
   it('documents LiveKit signature auth, raw content type and response statuses without browser auth', () => {
     const webhook = document.paths['/webhooks/livekit'].post;
     expect(webhook.security).toEqual([{ livekitWebhookSignature: [] }]);
