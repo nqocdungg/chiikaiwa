@@ -497,17 +497,22 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ### QA-006 — Rà soát contract chọn bộ và manifest
 
-- Ngày cập nhật: 2026-11-16
-- Trạng thái: Còn dở (đã hoàn tất đối chiếu và fixtures; chờ quyết định contract Q1–Q4 và reviewer Yến Nhi duyệt, chưa ghi Done)
-- PR: Chưa có; branch `test/QA-006-review-deck-selection-manifest`, base `origin/develop@93f1593` (tại worktree riêng `D:\cn web\worktree-qa006`, giữ nguyên repo `BE-008`).
+- Ngày cập nhật: 2026-11-22
+- Trạng thái: Còn dở (PR #52 đã merge tài liệu đối chiếu và fixtures; chưa tìm thấy quyết định chính thức cho Q1, Q2b, Q3 nên chưa ghi Done)
+- PR:
+  - PR #52 (`test(sessions): review deck selection contract and manifest [QA-006]`) đã **MERGED** vào `develop` tại commit `7250727` (`7250727c2859e5f5feddbabbcc5e66b5a406bd15`) ngày `2026-11-16`; có `APPROVED` hợp lệ từ tài khoản GitHub `nt-thuyr` (body trống, chưa suy diễn là quyết định cho từng Q1/Q2b/Q3).
+  - Cập nhật bằng chứng rà soát tiếp trên nhánh `docs/QA-006-update-review-evidence` từ `origin/develop@5d89d8c`.
 - Đã làm:
-  - Đối chiếu contract chọn bộ chủ đề & manifest giữa `02-srs.md` (`FR-CAR-01/02`, `BR-12`), `04-ui-ux-design.md` (`SC-08`, `UF-05`), `06-database-design.md` (`§6.1–6.2`, `§7.1–7.2`, `TX-07`, `§12.1`), `07-api-specification.md` (`§6`, `§7`, `§12`), `docs/api/openapi.yaml` và source trên `origin/develop`.
-  - Lập biên bản đối chiếu chi tiết tại `docs/qa/QA-006-deck-selection-manifest-review.md`, phân loại rõ Q1 (`scenarioCount` — blocker sai khác SRS/UI vs API), Q2a (`level?` filter — đề xuất không blocker), Q2b (điều kiện trạng thái phiên cho `deck-options`), Q3 (khoảng trống mã lỗi `deck-selection` cho bộ `hidden`/`draft`/revision cũ/sai loại theo bảng lỗi hiện có) và Q4 (truy vết `toTopicSummaryDto` — rủi ro phòng thủ cần xác minh, chưa có đường lộ thực tế).
-  - Chuẩn bị bộ fixtures kiểm thử tại `tests/fixtures/deck-selection-fixtures.js` cho các ca `published`, `hidden`, `draft`, `empty`, tách riêng `CONTRACT_DECK_OPTION_PROJECTIONS` (theo `07 §6` hiện hành) và `PROPOSED_DECK_OPTION_EXTENSIONS` (chờ chốt Q1).
+  - Đối chiếu contract chọn bộ chủ đề & manifest giữa `02-srs.md` (`FR-CAR-01/02`, `BR-12`), `04-ui-ux-design.md` (`SC-08`, `UF-05`), `06-database-design.md` (`§6.1–6.2`, `§7.1–7.2`, `TX-07`, `§12.1`), `07-api-specification.md` (`§6`, `§7`, `§12`), `docs/api/openapi.yaml` và source trên `origin/develop@5d89d8c`.
+  - Xác minh đầu ra đã merge ở PR #52 (`docs/qa/QA-006-deck-selection-manifest-review.md`, `tests/fixtures/deck-selection-fixtures.js`) và phân biệt rõ phần đã merge trên `origin/develop@5d89d8c` (FE-004 `DeckPicker.jsx` đã hiển thị `{deck.count} tình huống`; chưa có các endpoint `deck-options`/`deck-selection`/`control/claim` trên `develop`; `toTopicSummaryDto` vẫn còn fallback `draftPayload`) với phần chỉ có trên nhánh chưa merge `origin/feature/BE-022-session-card-flow@a173c8e` (PR #59 `OPEN`, 0 review).
+  - Xác nhận fixtures `published`, `hidden`, `draft`, `empty` tại `tests/fixtures/deck-selection-fixtures.js` vẫn bám đúng contract hiện hành trên `origin/develop` (`CONTRACT_DECK_OPTION_PROJECTIONS` giữ 5 trường theo `07 §6`, tách riêng `PROPOSED_DECK_OPTION_EXTENSIONS` chờ chốt Q1).
+  - Giữ rõ phân loại: Q1, Q2b, Q3 chưa có quyết định chính thức; Q2a là đề xuất tùy chọn; Q4 là rủi ro phòng thủ chưa chứng minh được đường lộ trong vận hành bình thường.
 - File liên quan: `docs/qa/QA-006-deck-selection-manifest-review.md`, `tests/fixtures/deck-selection-fixtures.js`, `docs/PROGRESS-TRACKER.md`.
-- Kiểm chứng: `corepack npm ci` và `corepack npm run check` **Pass 100%** trên `Node v24.22.1` + `npm@11.21.1`: `format:check`, `lint` (0 warnings), `typecheck` (0 errors), `test` (25 files, 349/349), `test:integration` (16 files, 183/183 trên MongoDB replica set tạm), `build` và `build-storybook` (cảnh báo chunk > 500 kB, không chặn build). `git diff --check` không có lỗi whitespace; working tree còn 3 file QA-006 chưa commit.
-- Tiếp theo: Nhờ reviewer Yến Nhi và nhóm chốt các câu hỏi Q1–Q4 (đặc biệt là bổ sung `scenarioCount` vào `07 §6` và `openapi.yaml`), duyệt `tests/fixtures/deck-selection-fixtures.js`, sau đó cập nhật `07-api-specification.md`/`openapi.yaml` theo phạm vi được thống nhất trước khi merge `BE-022`.
-- Lưu ý/blocker: Chưa ghi `Done` vì contract `scenarioCount` trong `GET /sessions/:id/deck-options` còn thiếu ở `07 §6` & `openapi.yaml` và chưa có xác nhận của reviewer. Không tự sửa thiết kế 01–07 hoặc code chức năng.
+- Kiểm chứng:
+  - PR #52 đã chạy `corepack npm ci` và `corepack npm run check` pass (349 unit/HTTP/component tests, 183 integration tests trên MongoDB replica set tạm, build và Storybook).
+  - Đợt cập nhật tài liệu này chỉ sửa Markdown: kiểm tra format (`prettier --check`), liên kết tương đối và `git diff --check` trên nhánh `docs/QA-006-update-review-evidence`. Không sửa `docs/design/01–07`, `openapi.yaml`, fixture hoặc code chức năng.
+- Tiếp theo: Xin nhóm và reviewer chốt chính thức Q1 (`scenarioCount`), Q2b (trạng thái phiên đọc `deck-options`) và Q3 (mã lỗi chọn bộ ẩn/nháp/revision cũ/sai loại) làm cơ sở review PR #59 (BE-022) và đồng bộ `07-api-specification.md`/`openapi.yaml` trước khi đóng QA-006.
+- Lưu ý/blocker: Chưa ghi `Done` vì Q1, Q2b, Q3 chưa có quyết định chính thức được ghi nhận. Approval body trống của `nt-thuyr` trên PR #52 là bằng chứng review hợp lệ cho PR nhưng không thay thế quyết định contract từng câu hỏi. Không tự sửa thiết kế 01–07 hoặc biến đề xuất thành contract đã chấp thuận.
 
 ### BE-021 — API ghi chú, tự đánh giá, tổng kết và lịch sử
 
