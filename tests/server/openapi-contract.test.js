@@ -36,6 +36,8 @@ const expectedPaths = [
   '/me/saved-items/{id}/sources',
   '/study/cards/query',
   '/study/cards/reveal',
+  '/study/reviews',
+  '/me/reviews',
   '/sessions/{id}/deck-options',
   '/sessions/{id}/deck-selection',
   '/sessions/{id}/control/claim',
@@ -43,6 +45,11 @@ const expectedPaths = [
   '/sessions/{id}/cards/{cardId}/hints',
   '/sessions/{id}/actions',
   '/sessions/{id}/actions/{actionId}/responses',
+  '/sessions/{id}/personal',
+  '/sessions/{id}/note',
+  '/sessions/{id}/self-assessment',
+  '/sessions/{id}/summary',
+  '/me/sessions',
   '/quizzes',
   '/quizzes/{id}',
   '/quizzes/{id}/submission',
@@ -64,11 +71,15 @@ const writeOperations = [
   ['/admin/content/{id}/hide', 'post'],
   ['/me/saved-items', 'post'],
   ['/me/saved-items/{id}', 'delete'],
+  ['/study/reviews', 'post'],
   ['/sessions/{id}/deck-selection', 'post'],
   ['/sessions/{id}/control/claim', 'post'],
   ['/sessions/{id}/draws', 'post'],
   ['/sessions/{id}/actions', 'post'],
   ['/sessions/{id}/actions/{actionId}/responses', 'post'],
+  ['/sessions/{id}/note', 'put'],
+  ['/sessions/{id}/note', 'delete'],
+  ['/sessions/{id}/self-assessment', 'put'],
   ['/quizzes', 'post'],
   ['/quizzes/{id}/submission', 'post'],
   ['/admin/users/{id}/status', 'patch'],
@@ -77,6 +88,38 @@ const writeOperations = [
 
 describe('OpenAPI contract', () => {
   const document = /** @type {Record<string, any>} */ (readOpenApiDocument());
+
+  it('documents owner-scoped personal session, summary and history APIs', () => {
+    for (const path of ['/sessions/{id}/personal', '/sessions/{id}/summary']) {
+      expect(document.paths[path].get.security).toEqual([
+        { sessionCookie: [] },
+        { guestCookie: [] },
+      ]);
+    }
+    expect(document.paths['/me/sessions'].get.security).toEqual([
+      { sessionCookie: [] },
+    ]);
+    for (const [path, method] of [
+      ['/sessions/{id}/note', 'put'],
+      ['/sessions/{id}/note', 'delete'],
+      ['/sessions/{id}/self-assessment', 'put'],
+    ]) {
+      const operation = document.paths[path][method];
+      expect(operation.security).toEqual([
+        { sessionCookie: [], csrfToken: [] },
+        { guestCookie: [], csrfToken: [] },
+      ]);
+      expect(operation.parameters).toContainEqual({
+        $ref: '#/components/parameters/IdempotencyKey',
+      });
+    }
+    expect(
+      document.components.schemas.PersonalSession.properties,
+    ).not.toHaveProperty('ownerKey');
+    expect(
+      document.components.schemas.SessionHistoryItem.properties,
+    ).not.toHaveProperty('currentCard');
+  });
 
   it('documents study-card rights and keeps answers out of the query projection', () => {
     for (const action of ['query', 'reveal']) {

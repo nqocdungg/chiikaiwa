@@ -20,6 +20,7 @@ import { createSavedItemRouter } from './modules/learning/saved-item-router.js';
 import { createStudyCardRouter } from './modules/learning/study-card-router.js';
 import { createQuizRouter } from './modules/quiz/quiz-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
+import { createSessionLearningRouter } from './modules/sessions/session-learning-router.js';
 import {
   createLivekitWebhookHandler,
   finishWebhookEffects,
@@ -155,12 +156,13 @@ export function createApp({
   app.use('/api/v1', createInvitationRouter({ assertPairCanEnterSession }));
 
   app.use('/api/v1/sessions', createSessionsRouter());
+  app.use('/api/v1', createSessionLearningRouter());
   app.use('/api/v1/admin/content', createAdminContentRouter());
   app.use('/api/v1/admin/users', createAdminUsersRouter());
   app.use('/api/v1/admin/reports', createAdminReportsRouter());
   app.use('/api/v1', createLearnerContentRouter());
   app.use('/api/v1/me/saved-items', createSavedItemRouter());
-  app.use('/api/v1/study/cards', createStudyCardRouter());
+  app.use('/api/v1', createStudyCardRouter());
   app.use('/api/v1', createQuizRouter());
 
   app.use((_request, response) => {

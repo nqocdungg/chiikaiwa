@@ -964,6 +964,348 @@ describe('BE-013: Content Publishing & Read Projections Integration Tests', () =
       expect(topic).not.toHaveProperty('correctOptionId');
     });
 
+    it('keeps learner list and level filter on the published revision after Admin edits the draft (BE-039)', async () => {
+      const sourceVersion = await db
+        .collection('content_versions')
+        .findOne({ _id: publishedDeckVersionId });
+      if (!sourceVersion)
+        throw new Error('Published source revision is missing');
+
+      const targetDeckId = new ObjectId();
+      const publishedVersionId = new ObjectId();
+      const publishedAt = new Date('2026-11-01T00:00:00.000Z');
+      const publishedPayload = {
+        ...sourceVersion.payload,
+        title: 'Giao tiếp công sở',
+        topicKey: 'office_communication',
+        level: 'N3',
+        description: 'Mô tả bản xuất bản A',
+      };
+      const draftPayload = {
+        ...publishedPayload,
+        title: 'Hội thoại nâng cao',
+        topicKey: 'advanced_conversation',
+        level: 'N1',
+        description: 'Mô tả bản nháp B',
+        scenarioVersionIds: publishedPayload.scenarioVersionIds.map(String),
+        knowledgeVersionIds: publishedPayload.knowledgeVersionIds.map(String),
+        questionVersionIds: publishedPayload.questionVersionIds.map(String),
+      };
+
+      await db.collection('content_items').insertOne({
+        _id: targetDeckId,
+        kind: 'deck',
+        status: 'published',
+        publishedVersionId,
+        latestRevision: 1,
+        version: 1,
+        title: publishedPayload.title,
+        level: publishedPayload.level,
+        draftPayload: publishedPayload,
+        createdBy: adminId,
+        createdAt: publishedAt,
+        updatedAt: publishedAt,
+      });
+      await db.collection('content_versions').insertOne({
+        _id: publishedVersionId,
+        contentId: targetDeckId,
+        kind: 'deck',
+        revision: 1,
+        payload: publishedPayload,
+        publishedAt,
+        publishedBy: adminId,
+      });
+
+      const adminCookie = createAuthCookie(adminId, adminSessionId);
+      const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
+      const { cookie: csrfCookie, token: csrfToken } = await fetchCsrfToken();
+      const patch = await request(app)
+        .patch(`/api/v1/admin/content/${targetDeckId.toHexString()}`)
+        .set('Origin', TEST_ORIGIN)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Cookie', [adminCookie, ...csrfCookie])
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: 1, draftPayload });
+
+      expect(patch.status).toBe(200);
+      expect(patch.body.data.draftPayload.title).toBe('Hội thoại nâng cao');
+      expect(patch.body.data.draftPayload.level).toBe('N1');
+
+      const adminDraft = await request(app)
+        .get(`/api/v1/admin/content/${targetDeckId.toHexString()}`)
+        .set('Cookie', adminCookie);
+      expect(adminDraft.status).toBe(200);
+      expect(adminDraft.body.data.draftPayload.title).toBe(
+        'Hội thoại nâng cao',
+      );
+
+      const n3 = await request(app)
+        .get('/api/v1/topics?level=N3')
+        .set('Cookie', learnerCookie);
+      const n1 = await request(app)
+        .get('/api/v1/topics?level=N1')
+        .set('Cookie', learnerCookie);
+      const topicN3 = n3.body.data.items.find(
+        /** @param {{ id: string }} item */
+        (item) => item.id === targetDeckId.toHexString(),
+      );
+      const topicN1 = n1.body.data.items.find(
+        /** @param {{ id: string }} item */
+        (item) => item.id === targetDeckId.toHexString(),
+      );
+
+      expect(n3.status).toBe(200);
+      expect(n1.status).toBe(200);
+      expect(topicN3).toEqual({
+        id: targetDeckId.toHexString(),
+        versionId: publishedVersionId.toHexString(),
+        title: 'Giao tiếp công sở',
+        level: 'N3',
+        description: 'Mô tả bản xuất bản A',
+      });
+      expect(topicN1).toBeUndefined();
+
+      const detail = await request(app)
+        .get(`/api/v1/topic-versions/${publishedVersionId.toHexString()}`)
+        .set('Cookie', learnerCookie);
+      expect(detail.status).toBe(200);
+      expect(topicN3).toMatchObject({
+        title: detail.body.data.title,
+        level: detail.body.data.level,
+        description: detail.body.data.description,
+        versionId: detail.body.data.id,
+      });
+
+      const immutableVersion = await db
+        .collection('content_versions')
+        .findOne({ _id: publishedVersionId });
+      expect(immutableVersion?.payload).toEqual(publishedPayload);
+
+      const incompleteDraftPayload = {
+        ...draftPayload,
+        scenarioVersionIds: [],
+      };
+      const invalidateDraft = await request(app)
+        .patch(`/api/v1/admin/content/${targetDeckId.toHexString()}`)
+        .set('Origin', TEST_ORIGIN)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Cookie', [adminCookie, ...csrfCookie])
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: 2, draftPayload: incompleteDraftPayload });
+      expect(invalidateDraft.status).toBe(200);
+
+      const failedPublish = await request(app)
+        .post(`/api/v1/admin/content/${targetDeckId.toHexString()}/publish`)
+        .set('Origin', TEST_ORIGIN)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Cookie', [adminCookie, ...csrfCookie])
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: 3 });
+      expect(failedPublish.status).toBe(422);
+      expect(failedPublish.body.error.code).toBe('CONTENT_INCOMPLETE');
+
+      const afterFailedPublish = await db
+        .collection('content_items')
+        .findOne({ _id: targetDeckId });
+      expect(afterFailedPublish?.publishedVersionId).toEqual(
+        publishedVersionId,
+      );
+      expect(afterFailedPublish?.latestRevision).toBe(1);
+      expect(afterFailedPublish?.version).toBe(3);
+      expect(
+        await db.collection('content_versions').countDocuments({
+          contentId: targetDeckId,
+        }),
+      ).toBe(1);
+      const stillPublished = await request(app)
+        .get('/api/v1/topics?level=N3')
+        .set('Cookie', learnerCookie);
+      expect(
+        stillPublished.body.data.items.find(
+          /** @param {{ id: string }} item */
+          (item) => item.id === targetDeckId.toHexString(),
+        ),
+      ).toMatchObject({
+        versionId: publishedVersionId.toHexString(),
+        title: 'Giao tiếp công sở',
+        level: 'N3',
+        description: 'Mô tả bản xuất bản A',
+      });
+
+      const restoreDraft = await request(app)
+        .patch(`/api/v1/admin/content/${targetDeckId.toHexString()}`)
+        .set('Origin', TEST_ORIGIN)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Cookie', [adminCookie, ...csrfCookie])
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: 3, draftPayload });
+      expect(restoreDraft.status).toBe(200);
+
+      const publish = await request(app)
+        .post(`/api/v1/admin/content/${targetDeckId.toHexString()}/publish`)
+        .set('Origin', TEST_ORIGIN)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Cookie', [adminCookie, ...csrfCookie])
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: 4 });
+      expect(publish.status).toBe(200);
+      const newPublishedVersionId = publish.body.data.publishedVersionId;
+
+      const afterPublishN3 = await request(app)
+        .get('/api/v1/topics?level=N3')
+        .set('Cookie', learnerCookie);
+      const afterPublishN1 = await request(app)
+        .get('/api/v1/topics?level=N1')
+        .set('Cookie', learnerCookie);
+      expect(
+        afterPublishN3.body.data.items.some(
+          /** @param {{ id: string }} item */
+          (item) => item.id === targetDeckId.toHexString(),
+        ),
+      ).toBe(false);
+      const republished = afterPublishN1.body.data.items.find(
+        /** @param {{ id: string }} item */
+        (item) => item.id === targetDeckId.toHexString(),
+      );
+      expect(republished).toEqual({
+        id: targetDeckId.toHexString(),
+        versionId: newPublishedVersionId,
+        title: 'Hội thoại nâng cao',
+        level: 'N1',
+        description: 'Mô tả bản nháp B',
+      });
+      const previousRevision = await db
+        .collection('content_versions')
+        .findOne({ _id: publishedVersionId });
+      expect(previousRevision?.payload).toEqual(publishedPayload);
+    });
+
+    it('omits learner catalog entries with missing, dangling, mismatched, draft, or hidden revisions (BE-039)', async () => {
+      const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
+      const draftId = new ObjectId();
+      const missingRevisionId = new ObjectId();
+      const danglingId = new ObjectId();
+      const mismatchedId = new ObjectId();
+      const hiddenId = new ObjectId();
+      const foreignVersionId = new ObjectId();
+      const danglingVersionId = new ObjectId();
+      const hiddenVersionId = new ObjectId();
+
+      await db.collection('content_items').insertMany([
+        {
+          _id: draftId,
+          kind: 'deck',
+          status: 'draft',
+          title: 'Draft title',
+          level: 'N1',
+          draftPayload: {
+            title: 'Draft title',
+            level: 'N1',
+            description: 'Draft',
+          },
+          createdAt: new Date('2026-11-04T00:00:00.000Z'),
+        },
+        {
+          _id: missingRevisionId,
+          kind: 'deck',
+          status: 'published',
+          title: 'Missing revision title',
+          level: 'N1',
+          draftPayload: {
+            title: 'Missing revision title',
+            level: 'N1',
+            description: 'Draft',
+          },
+          createdAt: new Date('2026-11-03T12:00:00.000Z'),
+        },
+        {
+          _id: danglingId,
+          kind: 'deck',
+          status: 'published',
+          publishedVersionId: danglingVersionId,
+          title: 'Dangling title',
+          level: 'N1',
+          draftPayload: {
+            title: 'Dangling title',
+            level: 'N1',
+            description: 'Draft',
+          },
+          createdAt: new Date('2026-11-03T00:00:00.000Z'),
+        },
+        {
+          _id: mismatchedId,
+          kind: 'deck',
+          status: 'published',
+          publishedVersionId: foreignVersionId,
+          title: 'Mismatched title',
+          level: 'N1',
+          draftPayload: {
+            title: 'Mismatched title',
+            level: 'N1',
+            description: 'Draft',
+          },
+          createdAt: new Date('2026-11-02T00:00:00.000Z'),
+        },
+        {
+          _id: hiddenId,
+          kind: 'deck',
+          status: 'hidden',
+          publishedVersionId: hiddenVersionId,
+          title: 'Hidden title',
+          level: 'N1',
+          draftPayload: {
+            title: 'Hidden title',
+            level: 'N1',
+            description: 'Draft',
+          },
+          createdAt: new Date('2026-11-01T00:00:00.000Z'),
+        },
+      ]);
+      await db.collection('content_versions').insertMany([
+        {
+          _id: foreignVersionId,
+          contentId: new ObjectId(),
+          kind: 'deck',
+          revision: 1,
+          payload: {
+            title: 'Foreign version',
+            level: 'N1',
+            description: 'Foreign',
+          },
+        },
+        {
+          _id: hiddenVersionId,
+          contentId: hiddenId,
+          kind: 'deck',
+          revision: 1,
+          payload: {
+            title: 'Hidden version',
+            level: 'N1',
+            description: 'Hidden',
+          },
+        },
+      ]);
+
+      const response = await request(app)
+        .get('/api/v1/topics?level=N1')
+        .set('Cookie', learnerCookie);
+
+      expect(response.status).toBe(200);
+      const listedIds = response.body.data.items.map(
+        /** @param {{ id: string }} item */
+        (item) => item.id,
+      );
+      for (const id of [
+        draftId,
+        missingRevisionId,
+        danglingId,
+        mismatchedId,
+        hiddenId,
+      ]) {
+        expect(listedIds).not.toContain(id.toHexString());
+      }
+    });
+
     it('validates limit parameter strictly on GET /topics and GET /topic-versions/:id/knowledge (07 §1, OpenAPI)', async () => {
       const learnerCookie = createAuthCookie(learnerId, learnerSessionId);
 
