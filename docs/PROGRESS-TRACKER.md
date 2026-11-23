@@ -468,6 +468,22 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ## Sprint 2
 
+### DATA-003 — Biên soạn dữ liệu seed tình huống và quiz N3
+
+- Ngày cập nhật: 2026-11-21
+- Trạng thái: Đã sửa theo review PR #51
+- PR: #51
+- Đã làm:
+  - Biên soạn bộ dữ liệu seed N3 nháp tại `server/persistence/seed/n3-content.js` theo Database Design §7.1–§7.2 và checklist PB-31 (giữ tách biệt khỏi luồng seed mặc định `seed-content.js` để chờ review):
+    - 01 bộ chủ đề Deck N3: `Giao tiếp Đời sống & Công sở Trung cấp` (`topicKey: daily_work_and_life_n3`, `level: N3`).
+    - 05 tình huống N3: nhờ đồng nghiệp kiểm tra tài liệu trước giờ họp; gọi điện xin đổi lịch hẹn khám nha khoa; liên hệ cửa hàng xử lý sản phẩm giao bị hỏng; thảo luận lịch trình và góp ý kế hoạch dã ngoại cuối tuần; nhắn tin/gọi điện xin nghỉ ốm và bàn giao việc trong ngày. Mỗi tình huống có `context`, `objective`, `roleA`/`roleB` phân biệt, `hints`, `knowledgeVersionIds` và 3 `questionVersionIds`.
+    - 10 mục kiến thức N3: 05 ngữ pháp (`〜ようにしている`, `〜てしまう`, `〜てある`, `〜ことにする`, `〜場合`) và 05 từ vựng (`確認`, `都合`, `交換`, `予定`, `連絡`) kèm `reading`, `meaning` tiếng Việt và `examples` song ngữ Nhật–Việt.
+    - 15 câu hỏi quiz N3 (3 câu/tình huống; kết hợp `multipleChoice` và `shortAnswer`), có đáp án đúng, giải thích tiếng Việt và `knowledgeVersionIds`.
+  - Bổ sung `tests/server/content-seed-n3.test.js` (7 ca) kiểm tra `validateSeedDataset`, ngưỡng PB-31, `reading` bắt buộc, phân biệt `roleA`/`roleB`, không có bản ghi mồ côi khỏi manifest/tình huống, không trùng nội dung lựa chọn/đáp án, phân bố vị trí đáp án đúng và không trùng ID/`topicKey` với `sampleDataset` và `n1Dataset`.
+- File liên quan: `server/persistence/seed/n3-content.js`, `tests/server/content-seed-n3.test.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng: Trên Node `v24.22.2` + `npm@11.21.1` (sau `npm ci`): `prettier --check` trên 3 file thay đổi pass; `eslint --max-warnings=0` trên 2 file JS thay đổi pass; `npm run typecheck` pass (0 lỗi); `npm test` pass 32 files / 436 tests (gồm 7/7 ca `tests/server/content-seed-n3.test.js`); `npm run test:integration` pass 18 files / 217 tests trên MongoDB replica set tạm; `npm run build` pass. Lưu ý: `npm run format:check` và `npm run lint` toàn repo hiện bị chặn tại local do thư mục untracked `storybook-static/` còn sót từ trước khi `develop` gỡ Storybook (không tự xóa file untracked). Chưa review chéo lại tiếng Nhật; kiểm tra tự động (bao gồm test so chuỗi không trùng) không thay thế xác nhận tính duy nhất về ngữ nghĩa theo PB-31 AC3.
+- Lưu ý/blocker: Task Handoff DATA-003 có mục `Deliverables` ghi `Nội dung N3/N2 để review` không thống nhất với tên task/Objective/AC N3 (N2 thuộc DATA-008); chỉ biên soạn phần N3 theo đúng phạm vi DATA-003. Không tự commit/push, sửa Tracker online hay đánh dấu Done.
+
 ### BE-022 — Chọn bộ, bốc lá, gợi ý và đồng thuận trong phiên
 
 - Ngày cập nhật: 2026-11-22
