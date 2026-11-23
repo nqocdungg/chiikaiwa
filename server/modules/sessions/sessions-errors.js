@@ -5,11 +5,17 @@ export function sessionEnded(message = 'Phiên đã kết thúc.') {
   return new AppError({ status: 409, code: 'SESSION_ENDED', message });
 }
 
-/** @param {string} [message] */
+/** @param {string} [message] @param {number} [currentVersion] */
 export function sessionVersionConflict(
   message = 'Quyền phiên đã thay đổi. Vui lòng thử lại.',
+  currentVersion,
 ) {
-  return new AppError({ status: 409, code: 'VERSION_CONFLICT', message });
+  return new AppError({
+    status: 409,
+    code: 'VERSION_CONFLICT',
+    message,
+    ...(currentVersion !== undefined && { details: { currentVersion } }),
+  });
 }
 
 /** @param {string} [message] */

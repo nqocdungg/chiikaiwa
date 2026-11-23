@@ -79,7 +79,7 @@ function TopicDetail({ versionId, knowledgeId, revision }) {
               <div className="ck-library-actions">
                 {topic.knowledgeCount > 0 && (
                   <Link
-                    className="ck-library-cta"
+                    className="ck-button ck-button--primary"
                     to={libraryPath('/study', {
                       scope: 'topic',
                       topicVersionId: versionId,
@@ -91,7 +91,7 @@ function TopicDetail({ versionId, knowledgeId, revision }) {
                 )}
                 {topic.questionCount > 0 && (
                   <Link
-                    className="ck-library-cta ck-library-cta--secondary"
+                    className="ck-button ck-button--secondary"
                     to={libraryPath('/quiz', { deckVersionId: versionId })}
                   >
                     Luyện quiz

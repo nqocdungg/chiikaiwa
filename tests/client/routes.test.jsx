@@ -22,7 +22,11 @@ describe('Route protection, direct URL navigation and refresh', () => {
         <App skipInitialAuthCheck />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('heading', { name: 'Chiikaiwa' })).toBeVisible();
+    expect(
+      screen.getByRole('heading', {
+        name: 'Không gian luyện nói tiếng Nhật 1-1',
+      }),
+    ).toBeVisible();
   });
 
   it('redirects unauthenticated user from protected /home to /login', async () => {
