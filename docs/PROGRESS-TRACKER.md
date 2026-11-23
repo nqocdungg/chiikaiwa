@@ -586,6 +586,15 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Tiếp theo: Trình người dùng cho phép commit và push branch `feature/BE-026-admin-reports-and-accounts`, mở PR về `develop` để reviewer Ngọc Dung rà soát.
 - Lưu ý/blocker: Giữ nguyên thiết kế DB và OpenAPI contract đã chốt, không tự ý commit/push khi chưa có lệnh từ người dùng.
 
+### BE-025 — Ghi nhận lượt ôn FSRS
+
+- Ngày cập nhật: 2026-11-23
+- Trạng thái: In Progress. Đã triển khai hai endpoint, chờ PR và review của Minh Xuân.
+- Nhánh: `feature/BE-025-record-fsrs-reviews` từ `develop`.
+- Đã làm: `POST /study/reviews` kiểm tra vé, quyền và version hiện hành, dùng FSRS-6 đã ghim, cập nhật tiến độ, log và `reviewCount` cùng transaction. Review log giữ revision đã mở và kết quả để trả lại khi retry. `GET /me/reviews` lọc theo chủ sở hữu và `cardKey`, phân trang theo thời điểm review và ID.
+- Kiểm chứng: `npm run check` đạt format, lint, typecheck, 570 ca server/client, 345 ca integration và build trên Node 24.22.3, npm 11.21.1, MongoDB 8.2.7 local. `npm run openapi:check` và suite flashcard đều đạt 15/15. Các ca bao phủ tiến độ dùng chung topic/saved, revision đã xem, replay sau khi vé hết hạn, stale version, rollback DB-T10, preview không ghi DB-T11, hết hạn khách và thẻ thủ công đang xóa.
+- Tiếp theo: Chạy CI trên PR và nghiệm thu AT-09 qua FE-017. Kiểm thử đầy đủ luồng bộ cá nhân sau khi tích hợp BE-035 trong Sprint 3.
+
 ## Sprint 3
 
 ### BE-039 — Sửa rò thông tin nháp trong danh mục học liệu learner
