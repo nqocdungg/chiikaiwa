@@ -160,7 +160,7 @@ export function createApp({
   app.use('/api/v1/admin/reports', createAdminReportsRouter());
   app.use('/api/v1', createLearnerContentRouter());
   app.use('/api/v1/me/saved-items', createSavedItemRouter());
-  app.use('/api/v1/study/cards', createStudyCardRouter());
+  app.use('/api/v1', createStudyCardRouter());
   app.use('/api/v1', createQuizRouter());
 
   app.use((_request, response) => {

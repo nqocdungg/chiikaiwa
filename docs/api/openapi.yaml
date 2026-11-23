@@ -1638,6 +1638,89 @@ paths:
           description: Cấu hình lịch ôn chưa sẵn sàng
           content: *studyError
 
+  /study/reviews:
+    post:
+      tags: [Flashcards]
+      operationId: submitStudyReview
+      summary: Ghi nhận một lượt ôn FSRS
+      description: Tính lại lịch theo giờ server. Cùng Idempotency-Key và payload trả lượt đã ghi nếu người gọi còn quyền; không ghi thêm tiến độ, log hoặc thống kê.
+      security: *studySecurity
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reviewTicket, rating]
+              properties:
+                reviewTicket: { type: string, minLength: 1, maxLength: 4096 }
+                rating: &studyRating { type: integer, enum: [1, 2, 3] }
+      responses:
+        '201':
+          description: Lượt ôn đã commit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyReviewResponse'
+        '400':
+          description: JSON lỗi
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '409':
+          description: REVIEW_TICKET_EXPIRED, VERSION_CONFLICT hoặc IDEMPOTENCY_CONFLICT
+          content: *studyError
+        '410': *studyGone
+        '413': *studyTooLarge
+        '415': *studyUnsupported
+        '422': *studyInvalid
+        '429':
+          description: Vượt giới hạn ghi
+          content: *studyError
+        '503':
+          description: Cấu hình lịch ôn chưa sẵn sàng
+          content: *studyError
+
+  /me/reviews:
+    get:
+      tags: [Flashcards]
+      operationId: listStudyReviews
+      summary: Đọc lịch sử lượt ôn của người gọi theo thẻ
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: cardKey
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/StudyCardKey'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 512 }
+      responses:
+        '200':
+          description: Lịch sử mới nhất trước, phân trang theo reviewedAt và id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyReviewHistoryResponse'
+        '400':
+          description: Limit hoặc cursor không hợp lệ
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '410': *studyGone
+        '422': *studyInvalid
+
   /quizzes:
     post:
       tags: [Quizzes]
@@ -2256,6 +2339,51 @@ components:
           minimum: 0
         lapses: *studyCount
         version: *studyCount
+    StudyReviewResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [cardKey, progress, reviewedAt]
+          properties:
+            cardKey:
+              $ref: '#/components/schemas/StudyCardKey'
+            progress:
+              $ref: '#/components/schemas/StudyProgress'
+            reviewedAt: *studyTime
+        meta:
+          $ref: '#/components/schemas/Meta'
+    StudyReviewHistoryResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [id, cardKey, rating, reviewedAt, nextDueAt]
+                properties:
+                  id:
+                    $ref: '#/components/schemas/ObjectId'
+                  cardKey:
+                    $ref: '#/components/schemas/StudyCardKey'
+                  rating: *studyRating
+                  reviewedAt: *studyTime
+                  previousDueAt: *studyTime
+                  nextDueAt: *studyTime
+            nextCursor: { type: [string, 'null'] }
+        meta:
+          $ref: '#/components/schemas/Meta'
     StudyQueryResponse:
       type: object
       additionalProperties: false
