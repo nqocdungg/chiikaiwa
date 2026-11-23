@@ -493,6 +493,21 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Tiếp theo: Nhờ reviewer Yến Nhi và nhóm chốt các câu hỏi Q1–Q4 (đặc biệt là bổ sung `scenarioCount` vào `07 §6` và `openapi.yaml`), duyệt `tests/fixtures/deck-selection-fixtures.js`, sau đó cập nhật `07-api-specification.md`/`openapi.yaml` theo phạm vi được thống nhất trước khi merge `BE-022`.
 - Lưu ý/blocker: Chưa ghi `Done` vì contract `scenarioCount` trong `GET /sessions/:id/deck-options` còn thiếu ở `07 §6` & `openapi.yaml` và chưa có xác nhận của reviewer. Không tự sửa thiết kế 01–07 hoặc code chức năng.
 
+### BE-021 — API ghi chú, tự đánh giá, tổng kết và lịch sử
+
+- Ngày cập nhật: 2026-11-23
+- Trạng thái: Đã triển khai; chưa chạy kiểm chứng theo yêu cầu của người thực hiện, chưa ghi Done.
+- PR: Chưa có; branch `feature/BE-021-session-personal-models`, base hiện tại `develop@9b2a674`.
+- Đã làm:
+  - Thêm API owner-scoped `GET /sessions/:id/personal`, `PUT/DELETE /sessions/:id/note` và `PUT /sessions/:id/self-assessment`; noteVersion và version tự đánh giá dùng CAS độc lập, mutation có Idempotency-Key, xóa note giữ self-assessment.
+  - Thêm `GET /sessions/:id/summary` chỉ cho phiên đã bắt đầu và kết thúc; tổng kết ghép lá đã bốc với note, nguồn đã lưu và quiz của đúng người gọi, không đưa dữ liệu riêng của đối tác vào projection.
+  - Thêm `GET /me/sessions` cho tài khoản, phân trang cursor theo `startedAt/_id`, loại phòng chưa bắt đầu và dùng Partner projection an toàn (đối tác guest hiển thị “Khách”).
+  - Giữ hạn dữ liệu guest 15 phút và cập nhật guest write guard trong cùng transaction; giới hạn note/comment theo Unicode code point.
+  - Cập nhật OpenAPI, contract test và integration test cho owner isolation, stale version, replay, xóa note, summary privacy và history.
+- File liên quan: `server/modules/sessions/session-learning-service.js`, `session-learning-router.js`, `session-projection.js`, `server/modules/learning/session-personal-model.js`, `server/app.js`, `docs/api/openapi.yaml`, `tests/integration/session-learning-api.test.js`, `tests/server/openapi-contract.test.js`.
+- Kiểm chứng: Chưa chạy test theo yêu cầu; chỉ đã chạy Prettier trên các file JavaScript thay đổi và `git diff --check` không báo whitespace error tại thời điểm review.
+- Tiếp theo: Người thực hiện chạy suite BE-021, OpenAPI check và `npm run check`; xử lý kết quả trước khi commit/push và mở PR về `develop`.
+
 ### BE-026 — API xử lý báo cáo và quản trị tài khoản
 
 - Ngày cập nhật: 2026-11-19
