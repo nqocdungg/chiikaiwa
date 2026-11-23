@@ -495,7 +495,6 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Kiểm chứng: `npm run openapi:check` đạt 13/13 ca. Suite BE-022 đạt 13/13, gồm claim cạnh tranh chọn bộ, chọn ngay trước và tại mốc 60 giây, kết thúc phiên quá hạn qua `deck-options`, lỗi revision không còn chọn được, và replay khi khách mất quyền mà controller/version không đổi. `npm run check` đạt format, lint, typecheck, 515 ca server/client, 302 ca integration và build. Kiểm thử dùng MongoDB 8.2.7 replica set tạm và mock LiveKit.
 - Tiếp theo: Review nhóm, nghiệm thu QA-006 và chạy AT-06/AT-07 trên hai client sau khi tích hợp FE-019 và phần phục hồi/tổng kết liên quan.
 
-
 ### QA-006 — Rà soát contract chọn bộ và manifest
 
 - Ngày cập nhật: 2026-11-16
