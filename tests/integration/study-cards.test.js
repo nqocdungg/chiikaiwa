@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { MongoMemoryReplSet } from 'mongodb-memory-server-core';
 import mongoose from 'mongoose';
 import request from 'supertest';
@@ -13,7 +14,10 @@ import {
 import { createApp } from '../../server/app.js';
 import { readAuthEnv } from '../../server/config/env.js';
 import { signJwt } from '../../server/modules/identity/crypto.js';
-import { verifyReviewTicket } from '../../server/modules/learning/review-ticket.js';
+import {
+  signReviewTicket,
+  verifyReviewTicket,
+} from '../../server/modules/learning/review-ticket.js';
 import {
   connectDatabase,
   disconnectDatabase,
@@ -42,6 +46,7 @@ import {
   queryStudyCards,
 } from '../../server/modules/learning/study-card-service.js';
 import { schedulerConfig } from '../../server/integrations/fsrs-config.js';
+import { reviewCard } from '../../server/integrations/fsrs.js';
 import { up as registerScheduler } from '../../server/persistence/migrations/20261115000100-register-fsrs-six-config.js';
 
 const ownerKey = 'user:657f1f77bcf86cd799439001';
@@ -123,6 +128,23 @@ function account(user = 'learnerA') {
   };
 }
 
+/** @param {unknown} reviewTicket @param {number} rating @param {string} [key] @param {{authCookie?: string, guestCookie?: string}} [cookies] */
+async function submitReview(
+  reviewTicket,
+  rating,
+  key = randomUUID(),
+  cookies = account(),
+) {
+  const { csrfCookie, csrfToken } = await fetchCsrfContext(app);
+  return request(app)
+    .post('/api/v1/study/reviews')
+    .set('Origin', origin)
+    .set('X-CSRF-Token', csrfToken)
+    .set('Idempotency-Key', key)
+    .set('Cookie', buildCookieHeader({ ...cookies, csrfCookie }))
+    .send({ reviewTicket, rating });
+}
+
 describe('BE-014 HTTP', () => {
   beforeEach(async () => {
     await seedContractFixtures(db);
@@ -168,6 +190,234 @@ describe('BE-014 HTTP', () => {
       isSaved: true,
       savedAt: new Date(),
     });
+  });
+
+  it('commits one review across topic and saved, replays it and isolates history by owner', async () => {
+    const opened = await studyRequest(
+      'reveal',
+      { scope: topic, cardKey: knowledgeKey },
+      account(),
+    );
+    expect(opened.status).toBe(200);
+    const { reviewTicket } = opened.body.data;
+    const key = randomUUID();
+    const updatedRevision = new ObjectId();
+    await db.collection('content_versions').insertOne({
+      ...CONTENT_FIXTURES.knowledgeVersion,
+      _id: updatedRevision,
+      revision: 3,
+    });
+    await db
+      .collection('content_items')
+      .updateOne(
+        { _id: CONTENT_FIXTURES.knowledgeVersion.contentId },
+        { $set: { publishedVersionId: updatedRevision } },
+      );
+    const review = await submitReview(reviewTicket, 3, key);
+    expect(review.status).toBe(201);
+    const { progress, reviewedAt } = review.body.data;
+    const expected = reviewCard(null, new Date(reviewedAt), 3).progress;
+    expect(progress).toMatchObject({
+      cardKey: knowledgeKey,
+      dueAt: expected.dueAt.toISOString(),
+      version: 1,
+    });
+    expect(await db.collection('review_logs').findOne()).toMatchObject({
+      ownerKey: learner,
+      operationId: key,
+      contentVersionId: latestId,
+      beforeState: { version: 0 },
+      afterState: { version: 1 },
+    });
+    const saved = await studyRequest(
+      'query',
+      { scope: { type: 'saved' }, mode: 'all' },
+      account(),
+    );
+    expect(saved.body.data.items[0].progress).toEqual(progress);
+    const replay = await submitReview(reviewTicket, 3, key);
+    expect(replay.status).toBe(201);
+    expect(replay.body.data).toEqual(review.body.data);
+    expect((await submitReview(reviewTicket, 1, key)).body.error.code).toBe(
+      'IDEMPOTENCY_CONFLICT',
+    );
+    expect(
+      (await submitReview('unrelated-ticket', 3, key)).body.error.code,
+    ).toBe('IDEMPOTENCY_CONFLICT');
+    expect((await submitReview(reviewTicket, 3)).body.error.code).toBe(
+      'VERSION_CONFLICT',
+    );
+    expect(await db.collection('review_logs').countDocuments()).toBe(1);
+    expect(await db.collection('statistics').findOne()).toMatchObject({
+      reviewCount: 1,
+    });
+
+    const history = await request(app)
+      .get('/api/v1/me/reviews')
+      .query({ cardKey: knowledgeKey })
+      .set('Cookie', buildCookieHeader(account()));
+    expect(history.status).toBe(200);
+    expect(history.body.data).toEqual({
+      items: [
+        {
+          id: expect.any(String),
+          cardKey: knowledgeKey,
+          rating: 3,
+          reviewedAt,
+          nextDueAt: progress.dueAt,
+        },
+      ],
+      nextCursor: null,
+    });
+    const foreign = await request(app)
+      .get('/api/v1/me/reviews')
+      .query({ cardKey: knowledgeKey })
+      .set('Cookie', buildCookieHeader(account('learnerB')));
+    expect(foreign.body.data).toEqual({ items: [], nextCursor: null });
+
+    const fresh = await studyRequest(
+      'reveal',
+      { scope: { type: 'saved' }, cardKey: knowledgeKey },
+      account(),
+    );
+    const nextReview = await submitReview(fresh.body.data.reviewTicket, 2);
+    expect(nextReview.status).toBe(201);
+    const list = '/api/v1/me/reviews';
+    const query = { cardKey: knowledgeKey, limit: 1 };
+    const cookie = buildCookieHeader(account());
+    const page1 = await request(app)
+      .get(list)
+      .query(query)
+      .set('Cookie', cookie);
+    expect(page1.body.data.items).toMatchObject([
+      { rating: 2, previousDueAt: progress.dueAt },
+    ]);
+    const { nextCursor } = page1.body.data;
+    expect(nextCursor).toEqual(expect.any(String));
+    const page2 = await request(app)
+      .get(list)
+      .query({ ...query, cursor: nextCursor })
+      .set('Cookie', cookie);
+    expect(page2.body.data).toEqual(history.body.data);
+    const foreignCursor = await request(app)
+      .get(list)
+      .query({ ...query, cursor: nextCursor })
+      .set('Cookie', buildCookieHeader(account('learnerB')));
+    expect(foreignCursor.body.error.code).toBe('INVALID_CURSOR');
+  });
+
+  it('replays the committed snapshot after the ticket expires and progress advances', async () => {
+    const opened = await studyRequest(
+      'reveal',
+      { scope: topic, cardKey: knowledgeKey },
+      account(),
+    );
+    expect(opened.status).toBe(200);
+    const { reviewTicket, ticketExpiresAt } = opened.body.data;
+    const key = randomUUID();
+    const committed = await submitReview(reviewTicket, 3, key);
+    expect(committed.status).toBe(201);
+
+    const fresh = await studyRequest(
+      'reveal',
+      { scope: topic, cardKey: knowledgeKey },
+      account(),
+    );
+    expect(fresh.status).toBe(200);
+    const newer = await submitReview(fresh.body.data.reviewTicket, 2);
+    expect(newer.status).toBe(201);
+    expect(newer.body.data.progress.version).toBe(2);
+
+    const progressRows = db.collection('card_progress');
+    const progressKey = { ownerKey: learner, cardKey: knowledgeKey };
+    const currentProgress = await progressRows.findOne(progressKey);
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date(Date.parse(ticketExpiresAt) + 1));
+      const replay = await submitReview(reviewTicket, 3, key);
+      expect(replay.status).toBe(201);
+      expect(replay.body.data).toEqual(committed.body.data);
+      const newOperation = await submitReview(reviewTicket, 3);
+      expect(newOperation.status).toBe(409);
+      expect(newOperation.body.error.code).toBe('REVIEW_TICKET_EXPIRED');
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(await progressRows.findOne(progressKey)).toEqual(currentProgress);
+    expect(await db.collection('review_logs').countDocuments()).toBe(2);
+    expect(await db.collection('statistics').findOne()).toMatchObject({
+      reviewCount: 2,
+    });
+  });
+
+  it('rejects invalid ratings and only commits one concurrent review based on the same version', async () => {
+    const opened = await studyRequest(
+      'reveal',
+      { scope: topic, cardKey: knowledgeKey },
+      account(),
+    );
+    const { reviewTicket } = opened.body.data;
+    expect((await submitReview(reviewTicket, 4)).status).toBe(422);
+    const results = await Promise.all([
+      submitReview(reviewTicket, 1),
+      submitReview(reviewTicket, 2),
+    ]);
+    expect(results.map(({ status }) => status).sort()).toEqual([201, 409]);
+    expect(results.find(({ status }) => status === 409)?.body.error.code).toBe(
+      'VERSION_CONFLICT',
+    );
+    expect(await db.collection('card_progress').countDocuments()).toBe(1);
+    expect(await db.collection('review_logs').countDocuments()).toBe(1);
+  });
+
+  it('rejects an expired or foreign ticket and rolls back progress and log when the counter update fails', async () => {
+    const opened = await studyRequest(
+      'reveal',
+      { scope: topic, cardKey: knowledgeKey },
+      account(),
+    );
+    const { reviewTicket } = opened.body.data;
+    const claims = verifyReviewTicket(
+      reviewTicket,
+      learner,
+      new Date(opened.body.meta.serverTime),
+    );
+    const expired = signReviewTicket({
+      ...claims,
+      expiresAt: new Date(0).toISOString(),
+    });
+    expect((await submitReview(expired, 1)).body.error.code).toBe(
+      'REVIEW_TICKET_EXPIRED',
+    );
+    expect(
+      (await submitReview(reviewTicket, 1, randomUUID(), account('learnerB')))
+        .status,
+    ).toBe(404);
+
+    await db.command({
+      collMod: 'statistics',
+      validator: { reviewCount: { $lte: 0 } },
+    });
+    const key = randomUUID();
+    try {
+      expect((await submitReview(reviewTicket, 1, key)).status).toBe(500);
+      expect(await db.collection('card_progress').countDocuments()).toBe(0);
+      expect(await db.collection('review_logs').countDocuments()).toBe(0);
+      expect(await db.collection('statistics').findOne()).toMatchObject({
+        reviewCount: 0,
+      });
+    } finally {
+      await db.command({ collMod: 'statistics', validator: {} });
+    }
+    const results = await Promise.all([
+      submitReview(reviewTicket, 1, key),
+      submitReview(reviewTicket, 1, key),
+    ]);
+    expect(results.map(({ status }) => status)).toEqual([201, 201]);
+    expect(results[0].body.data).toEqual(results[1].body.data);
+    expect(await db.collection('review_logs').countDocuments()).toBe(1);
   });
 
   it('serves the latest published revision in topic and saved, signs the shown revision and leaves DB-T11 data unchanged', async () => {
@@ -252,7 +502,7 @@ describe('BE-014 HTTP', () => {
     expect(await db.collection('statistics').findOne()).toEqual(statsBefore);
   });
 
-  it('requires the permitted deck and drops private cards owned by another account', async () => {
+  it('requires the permitted deck and stops manual-card replay when the card is deleting', async () => {
     const ownManual = `manual:${FIXTURE_CONTENT_IDS.cardOwnerA}`;
     const foreignManual = `manual:${FIXTURE_CONTENT_IDS.cardOwnerB}`;
     const personal = { type: 'personalDeck', deckId: String(deckId) };
@@ -286,6 +536,32 @@ describe('BE-014 HTTP', () => {
         )
       ).status,
     ).toBe(404);
+    const revealed = await studyRequest(
+      'reveal',
+      { scope: personal, cardKey: ownManual },
+      account(),
+    );
+    const { reviewTicket } = revealed.body.data;
+    const key = randomUUID();
+    const manualCards = db.collection('manual_cards');
+    const filter = { _id: new ObjectId(FIXTURE_CONTENT_IDS.cardOwnerA) };
+    const manual = await manualCards.findOne(filter);
+    expect(manual).not.toBeNull();
+    expect((await submitReview(reviewTicket, 3, key)).status).toBe(201);
+    expect(
+      await db.collection('review_logs').findOne({ cardKey: ownManual }),
+    ).toMatchObject({ manualVersion: manual?.version });
+    expect(await manualCards.findOne(filter)).toMatchObject({
+      version: manual?.version,
+      updatedAt: expect.any(Date),
+    });
+    await manualCards.updateOne(filter, { $set: { status: 'deleting' } });
+    expect((await submitReview(reviewTicket, 3, key)).status).toBe(404);
+    const history = await request(app)
+      .get('/api/v1/me/reviews')
+      .query({ cardKey: ownManual })
+      .set('Cookie', buildCookieHeader(account()));
+    expect(history.status).toBe(404);
     await db
       .collection('personal_decks')
       .updateOne({ _id: deckId }, { $set: { status: 'deleting' } });
@@ -442,12 +718,38 @@ describe('BE-014 HTTP', () => {
         )
       ).body.data.items,
     ).toEqual([]);
+    const operationId = randomUUID();
+    const guestReview = await submitReview(
+      hidden.body.data.reviewTicket,
+      3,
+      operationId,
+      cookie,
+    );
+    expect(guestReview.status).toBe(201);
+    expect(
+      await db.collection('review_logs').findOne({ ownerKey: guestKey }),
+    ).toMatchObject({ purgeAt: expiresAt });
     await db
       .collection('practice_sessions')
       .updateOne(
         { _id: trialId },
         { $set: { endedAt: new Date(Date.now() - 16 * 60 * 1000) } },
       );
+    expect(
+      (
+        await submitReview(
+          hidden.body.data.reviewTicket,
+          3,
+          operationId,
+          cookie,
+        )
+      ).body.error.code,
+    ).toBe('GUEST_EXPIRED');
+    const guestHistory = await request(app)
+      .get('/api/v1/me/reviews')
+      .query({ cardKey: knowledgeKey })
+      .set('Cookie', buildCookieHeader(cookie));
+    expect(guestHistory.body.error.code).toBe('GUEST_EXPIRED');
     expect(
       (await studyRequest('query', { scope: topic, mode: 'all' }, cookie)).body
         .error.code,

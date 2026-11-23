@@ -27,6 +27,7 @@ import { activeLocationRef } from './features/home/navigation-tracker.js';
 import { Landing } from './features/landing/Landing.jsx';
 import { MatchPage } from './features/matching/MatchPage.jsx';
 import { ProfilePage } from './features/profile/ProfilePage.jsx';
+import { SessionSummaryPage } from './features/session-summary/SessionSummaryPage.jsx';
 
 const ComponentPreview = import.meta.env.DEV
   ? lazy(() =>
@@ -222,7 +223,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
             <Route element={<SessionMemberRoute />}>
               <Route
                 path="/sessions/:sessionId/summary"
-                element={<RouteShell screenId="SC-10" title="Tổng kết phiên" />}
+                element={<SessionSummaryPage />}
               />
             </Route>
           </Route>

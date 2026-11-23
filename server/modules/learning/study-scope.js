@@ -13,6 +13,7 @@ import { listSavedItems } from './saved-item-repository.js';
 import { studyCardKeyPattern } from './study-card-service.js';
 
 /** @typedef {import('mongoose').mongo.Db} Db */
+/** @typedef {import('mongoose').ClientSession} ClientSession */
 /** @typedef {import('mongoose').Types.ObjectId} ObjectId */
 /** @typedef {Awaited<ReturnType<typeof import('../identity/identity-service.js').resolveIdentityFromCookies>>} Identity */
 /** @typedef {import('./study-card-service.js').StudyScope} StudyScope */
@@ -34,11 +35,11 @@ function studyNotFound() {
   });
 }
 
-/** @param {Db} db @param {Extract<Identity, {kind: 'guest'}>} identity @param {Date} now */
-async function readGuestTrial(db, identity, now) {
+/** @param {Db} db @param {Extract<Identity, {kind: 'guest'}>} identity @param {Date} now @param {ClientSession} [transaction] */
+async function readGuestTrial(db, identity, now, transaction) {
   const guest = await db
     .collection('guest_sessions')
-    .findOne({ _id: identity.guestId });
+    .findOne({ _id: identity.guestId }, { session: transaction });
   if (
     !guest ||
     guest.revokedAt ||
@@ -57,10 +58,12 @@ async function readGuestTrial(db, identity, now) {
   ) {
     throw studyNotFound();
   }
-  const session = await db.collection('practice_sessions').findOne({
-    _id: guest.practiceSessionId,
-    'members.actorKey': identity.actorKey,
-  });
+  const session = await db
+    .collection('practice_sessions')
+    .findOne(
+      { _id: guest.practiceSessionId, 'members.actorKey': identity.actorKey },
+      { session: transaction },
+    );
   if (!session?.deckVersionId) throw studyNotFound();
   const deadline =
     session.endedAt instanceof Date
@@ -80,15 +83,18 @@ async function readGuestTrial(db, identity, now) {
   return { deckVersionId: String(session.deckVersionId), expiresAt };
 }
 
-/** @param {Db} db @param {string} versionId @param {Identity} identity */
-async function readTopicKnowledge(db, versionId, identity) {
-  const deck = await findContentVersionById(db, versionId);
+/** @param {Db} db @param {string} versionId @param {Identity} identity @param {ClientSession} [session] */
+async function readTopicKnowledge(db, versionId, identity, session) {
+  const deck = await findContentVersionById(db, versionId, { session });
   if (deck?.kind !== 'deck') throw studyNotFound();
-  const parent = await db.collection('content_items').findOne({
-    _id: deck.contentId,
-    kind: 'deck',
-    status: { $in: ['published', 'hidden'] },
-  });
+  const parent = await db.collection('content_items').findOne(
+    {
+      _id: deck.contentId,
+      kind: 'deck',
+      status: { $in: ['published', 'hidden'] },
+    },
+    { session },
+  );
   if (!parent) throw studyNotFound();
   try {
     await assertDeckVersionSourceAccess(db, {
@@ -96,6 +102,7 @@ async function readTopicKnowledge(db, versionId, identity) {
       deckVersionId: deck._id,
       parentItem: parent,
       allowAdmin: false,
+      session,
     });
   } catch (error) {
     if (error instanceof AppError && error.code === 'FORBIDDEN')
@@ -103,7 +110,7 @@ async function readTopicKnowledge(db, versionId, identity) {
     throw error;
   }
   const refs = deck.payload?.knowledgeVersionIds ?? [];
-  return (await findContentVersionsByIds(db, refs)).filter(
+  return (await findContentVersionsByIds(db, refs, { session })).filter(
     (version) => version.kind === 'knowledge',
   );
 }
@@ -128,11 +135,11 @@ function knowledgeCard(knowledge, position) {
   };
 }
 
-/** @param {Db} db @param {Identity} identity @param {import('mongoose').mongo.WithId<import('mongoose').mongo.Document>} item */
-async function findReadableHiddenVersion(db, identity, item) {
+/** @param {Db} db @param {Identity} identity @param {import('mongoose').mongo.WithId<import('mongoose').mongo.Document>} item @param {ClientSession} [session] */
+async function findReadableHiddenVersion(db, identity, item, session) {
   const versions = db
     .collection('content_versions')
-    .find({ contentId: item._id, kind: 'knowledge' })
+    .find({ contentId: item._id, kind: 'knowledge' }, { session })
     .sort({ revision: -1 });
   for await (const version of versions) {
     try {
@@ -142,6 +149,7 @@ async function findReadableHiddenVersion(db, identity, item) {
         knowledgeVersionId: version._id,
         parentItem: item,
         allowAdmin: false,
+        session,
       });
       return version;
     } catch (error) {
@@ -157,23 +165,34 @@ async function findReadableHiddenVersion(db, identity, item) {
  * @param {Identity} identity
  * @param {ObjectId[]} knowledgeIds
  * @param {ReadonlyMap<string, StudyPosition>} positions
+ * @param {ClientSession} [session]
  */
-async function readKnowledgeCards(db, identity, knowledgeIds, positions) {
+async function readKnowledgeCards(
+  db,
+  identity,
+  knowledgeIds,
+  positions,
+  session,
+) {
   if (!knowledgeIds.length) return [];
   const items = await db
     .collection('content_items')
-    .find({
-      _id: { $in: knowledgeIds },
-      kind: 'knowledge',
-      status: { $in: ['published', 'hidden'] },
-      publishedVersionId: { $type: 'objectId' },
-    })
+    .find(
+      {
+        _id: { $in: knowledgeIds },
+        kind: 'knowledge',
+        status: { $in: ['published', 'hidden'] },
+        publishedVersionId: { $type: 'objectId' },
+      },
+      { session },
+    )
     .toArray();
   const versions = await findContentVersionsByIds(
     db,
     items
       .filter((item) => item.status === 'published')
       .map((item) => item.publishedVersionId),
+    { session },
   );
   const byVersionId = new Map(
     versions.map((version) => [String(version._id), version]),
@@ -183,7 +202,7 @@ async function readKnowledgeCards(db, identity, knowledgeIds, positions) {
   for (const item of items) {
     const version =
       item.status === 'hidden'
-        ? await findReadableHiddenVersion(db, identity, item)
+        ? await findReadableHiddenVersion(db, identity, item, session)
         : byVersionId.get(String(item.publishedVersionId));
     if (version?.kind !== 'knowledge' || !item._id.equals(version.contentId))
       continue;
@@ -195,10 +214,12 @@ async function readKnowledgeCards(db, identity, knowledgeIds, positions) {
   return cards;
 }
 
-/** @param {Db} db @param {string} ownerKey @param {string} deckId */
-async function readPersonalDeck(db, ownerKey, deckId) {
+/** @param {Db} db @param {string} ownerKey @param {string} deckId @param {ClientSession} [session] */
+async function readPersonalDeck(db, ownerKey, deckId, session) {
   const _id = new ObjectId(deckId);
-  const deck = await db.collection('personal_decks').findOne({ _id, ownerKey });
+  const deck = await db
+    .collection('personal_decks')
+    .findOne({ _id, ownerKey }, { session });
   if (deck?.status === 'deleting') {
     throw new AppError({
       status: 410,
@@ -211,7 +232,7 @@ async function readPersonalDeck(db, ownerKey, deckId) {
     .collection('deck_entries')
     .find(
       { ownerKey, deckId: _id },
-      { projection: { cardKey: 1, createdAt: 1 } },
+      { projection: { cardKey: 1, createdAt: 1 }, session },
     )
     .toArray();
   const positions = new Map(
@@ -229,11 +250,14 @@ async function readPersonalDeck(db, ownerKey, deckId) {
   const manual = manualIds.length
     ? await db
         .collection('manual_cards')
-        .find({
-          _id: { $in: manualIds },
-          ownerKey,
-          status: 'active',
-        })
+        .find(
+          {
+            _id: { $in: manualIds },
+            ownerKey,
+            status: 'active',
+          },
+          { session },
+        )
         .toArray()
     : [];
   return {
@@ -251,11 +275,13 @@ async function readPersonalDeck(db, ownerKey, deckId) {
   };
 }
 
-/** @param {Db} db @param {Identity} identity @param {StudyScope} scope @param {Date} now */
-export async function resolveStudySet(db, identity, scope, now) {
+/** @param {Db} db @param {Identity} identity @param {StudyScope} scope @param {Date} now @param {ClientSession} [session] */
+export async function resolveStudySet(db, identity, scope, now, session) {
   const ownerKey = identity.actorKey;
   const guest =
-    identity.kind === 'guest' ? await readGuestTrial(db, identity, now) : null;
+    identity.kind === 'guest'
+      ? await readGuestTrial(db, identity, now, session)
+      : null;
   if (
     guest &&
     (scope.type === 'personalDeck' ||
@@ -266,7 +292,7 @@ export async function resolveStudySet(db, identity, scope, now) {
   const topicVersionId =
     scope.type === 'topic' ? scope.topicVersionId : guest?.deckVersionId;
   const source = topicVersionId
-    ? await readTopicKnowledge(db, topicVersionId, identity)
+    ? await readTopicKnowledge(db, topicVersionId, identity, session)
     : [];
   const sourceContentIds = new Set(
     source.map((version) => String(version.contentId)),
@@ -281,6 +307,7 @@ export async function resolveStudySet(db, identity, scope, now) {
     knowledgeIds = source.map((version) => version.contentId);
   } else if (scope.type === 'saved') {
     const saved = await listSavedItems(ownerKey)
+      .session(session ?? null)
       .select('knowledgeId savedAt')
       .lean();
     const eligible = saved.filter(
@@ -295,9 +322,16 @@ export async function resolveStudySet(db, identity, scope, now) {
       db,
       ownerKey,
       scope.deckId,
+      session,
     ));
   }
-  const cards = await readKnowledgeCards(db, identity, knowledgeIds, positions);
+  const cards = await readKnowledgeCards(
+    db,
+    identity,
+    knowledgeIds,
+    positions,
+    session,
+  );
   return {
     ownerKey,
     scope,

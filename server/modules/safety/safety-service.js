@@ -504,10 +504,256 @@ export async function createPairBlock({
 }
 
 /**
- * TX-05 (Account Lock): Locks a user account, increments authVersion, revokes
- * active auth_sessions, contends on `actor_states`, revokes active coordination
- * or ends any active/preparing session, and triggers LiveKit media cleanup
- * after commit.
+ * Locks a user account within an existing MongoDB transaction session (TX-05).
+ * Revokes active auth_sessions and tears down any active coordination / practice session state.
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {import('mongoose').ClientSession} session
+ * @param {{
+ *   userId: string,
+ *   adminId?: string | import('mongoose').Types.ObjectId,
+ *   expectedVersion?: number,
+ *   now?: Date,
+ * }} input
+ * @returns {Promise<{ lockedUser: any, endedSession: any }>}
+ */
+export async function lockUserAccountWithinSession(
+  db,
+  session,
+  { userId, adminId, expectedVersion, now = new Date() },
+) {
+  const userObjectId = new ObjectId(userId);
+  const actorKey = `user:${userObjectId.toHexString()}`;
+  const adminObjectId =
+    adminId && ObjectId.isValid(adminId) ? new ObjectId(adminId) : undefined;
+
+  /** @type {Record<string, any>} */
+  const query = { _id: userObjectId };
+  if (expectedVersion !== undefined) {
+    query.version = expectedVersion;
+    query.status = 'active';
+  }
+
+  const lockedUser = await db.collection('users').findOneAndUpdate(
+    query,
+    {
+      $set: {
+        status: 'locked',
+        statusChangedAt: now,
+        ...(adminObjectId ? { statusChangedBy: adminObjectId } : {}),
+        updatedAt: now,
+      },
+      $inc: { authVersion: 1, version: 1 },
+    },
+    { session, returnDocument: 'after' },
+  );
+
+  if (!lockedUser) {
+    if (expectedVersion !== undefined) {
+      const existing = await db
+        .collection('users')
+        .findOne({ _id: userObjectId }, { session });
+      if (!existing) {
+        throw new AppError({
+          status: 404,
+          code: 'RESOURCE_NOT_FOUND',
+          message: 'Không tìm thấy tài khoản.',
+        });
+      }
+      throw new AppError({
+        status: 409,
+        code: 'VERSION_CONFLICT',
+        message: 'Phiên bản tài khoản không khớp. Vui lòng tải lại.',
+        details: { currentVersion: existing.version },
+      });
+    }
+    throw new AppError({
+      status: 404,
+      code: 'RESOURCE_NOT_FOUND',
+      message: 'Không tìm thấy tài khoản.',
+    });
+  }
+
+  await db
+    .collection('auth_sessions')
+    .updateMany(
+      { userId: userObjectId, revokedAt: { $exists: false } },
+      { $set: { revokedAt: now } },
+      { session },
+    );
+
+  let endedSession = null;
+  const state = await actorStates(db).findOne({ _id: actorKey }, { session });
+
+  if (state?.mode === 'inSession' && ObjectId.isValid(state.resourceId)) {
+    const activeSession = await db.collection('practice_sessions').findOne(
+      {
+        _id: new ObjectId(state.resourceId),
+        'members.actorKey': actorKey,
+      },
+      { session },
+    );
+    if (activeSession && activeSession.status !== 'ended') {
+      endedSession = await endSession(
+        activeSession,
+        now,
+        'account_locked',
+        session,
+      );
+    } else {
+      await touchActorState(db, actorKey, now, session, state);
+    }
+  } else if (state?.mode === 'inviting' && ObjectId.isValid(state.resourceId)) {
+    const invitationId = new ObjectId(state.resourceId);
+    await db.collection('invitations').updateOne(
+      { _id: invitationId, status: 'open' },
+      {
+        $set: { status: 'cancelled', updatedAt: now },
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    const pendingRequests = await db
+      .collection('invite_requests')
+      .find({ invitationId, status: 'pending' }, { session })
+      .toArray();
+    await db.collection('invite_requests').updateMany(
+      { invitationId, status: 'pending' },
+      {
+        $set: { status: 'cancelled', updatedAt: now },
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    const releaseTargets = [
+      { actorKey, mode: 'inviting', resourceId: state.resourceId },
+      ...pendingRequests.map((req) => ({
+        actorKey: req.requesterKey,
+        mode: 'requestingInvite',
+        resourceId: String(req._id),
+      })),
+    ].sort((a, b) => a.actorKey.localeCompare(b.actorKey));
+    for (const target of releaseTargets) {
+      await releaseActorToIdle(db, { ...target, now, session });
+    }
+  } else if (
+    state?.mode === 'requestingInvite' &&
+    ObjectId.isValid(state.resourceId)
+  ) {
+    await db.collection('invite_requests').updateOne(
+      { _id: new ObjectId(state.resourceId), status: 'pending' },
+      {
+        $set: { status: 'cancelled', updatedAt: now },
+        $inc: { version: 1 },
+      },
+      { session },
+    );
+    await releaseActorToIdle(db, {
+      actorKey,
+      mode: 'requestingInvite',
+      resourceId: state.resourceId,
+      now,
+      session,
+    });
+  } else if (state?.mode === 'searching') {
+    await releaseActorToIdle(db, {
+      actorKey,
+      mode: 'searching',
+      now,
+      session,
+    });
+  } else if (state?.mode === 'proposed' && ObjectId.isValid(state.resourceId)) {
+    const proposalId = new ObjectId(state.resourceId);
+    const proposal = await db.collection('match_proposals').findOneAndUpdate(
+      { _id: proposalId, status: 'pending' },
+      {
+        $set: { status: 'cancelled', updatedAt: now },
+        $inc: { version: 1 },
+      },
+      { session, returnDocument: 'after' },
+    );
+    const participantKeys = (proposal?.participants ?? [])
+      .map((/** @type {any} */ p) => p.actorKey)
+      .filter((/** @type {unknown} */ k) => typeof k === 'string');
+    if (!participantKeys.includes(actorKey)) participantKeys.push(actorKey);
+    for (const key of participantKeys.sort()) {
+      await releaseActorToIdle(db, {
+        actorKey: key,
+        mode: 'proposed',
+        resourceId: state.resourceId,
+        now,
+        session,
+      });
+    }
+  } else {
+    await touchActorState(db, actorKey, now, session, state);
+  }
+
+  return { lockedUser, endedSession };
+}
+
+/**
+ * Unlocks a user account within an existing MongoDB transaction session.
+ * Does NOT increment authVersion (Q9), updates status to 'active' and increments version.
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {import('mongoose').ClientSession} session
+ * @param {{
+ *   userId: string,
+ *   adminId?: string | import('mongoose').Types.ObjectId,
+ *   expectedVersion: number,
+ *   now?: Date,
+ * }} input
+ * @returns {Promise<{ unlockedUser: any }>}
+ */
+export async function unlockUserAccountWithinSession(
+  db,
+  session,
+  { userId, adminId, expectedVersion, now = new Date() },
+) {
+  const userObjectId = new ObjectId(userId);
+  const adminObjectId =
+    adminId && ObjectId.isValid(adminId) ? new ObjectId(adminId) : undefined;
+
+  const unlockedUser = await db.collection('users').findOneAndUpdate(
+    { _id: userObjectId, version: expectedVersion, status: 'locked' },
+    {
+      $set: {
+        status: 'active',
+        statusChangedAt: now,
+        ...(adminObjectId ? { statusChangedBy: adminObjectId } : {}),
+        updatedAt: now,
+      },
+      $inc: { version: 1 },
+    },
+    { session, returnDocument: 'after' },
+  );
+
+  if (!unlockedUser) {
+    const existing = await db
+      .collection('users')
+      .findOne({ _id: userObjectId }, { session });
+    if (!existing) {
+      throw new AppError({
+        status: 404,
+        code: 'RESOURCE_NOT_FOUND',
+        message: 'Không tìm thấy tài khoản.',
+      });
+    }
+    throw new AppError({
+      status: 409,
+      code: 'VERSION_CONFLICT',
+      message: 'Phiên bản tài khoản không khớp. Vui lòng tải lại.',
+      details: { currentVersion: existing.version },
+    });
+  }
+
+  return { unlockedUser };
+}
+
+/**
+ * Locks a user account, revokes all sessions, ends any active practice session,
+ * and releases pending invites or matchmaking queue presence (TX-05).
  *
  * @param {{
  *   userId: string,
@@ -529,12 +775,6 @@ export async function lockUserAccount({
       message: 'ID tài khoản không hợp lệ.',
     });
   }
-  const userObjectId = new ObjectId(userId);
-  const actorKey = `user:${userObjectId.toHexString()}`;
-  const adminObjectId =
-    typeof adminId === 'string' && ObjectId.isValid(adminId)
-      ? new ObjectId(adminId)
-      : undefined;
 
   /** @type {any} */
   let endedSession = null;
@@ -544,147 +784,13 @@ export async function lockUserAccount({
   await withTransaction(async (session) => {
     endedSession = null;
     const db = await connectDatabase();
-
-    lockedUser = await db.collection('users').findOneAndUpdate(
-      { _id: userObjectId },
-      {
-        $set: {
-          status: 'locked',
-          statusChangedAt: now,
-          ...(adminObjectId ? { statusChangedBy: adminObjectId } : {}),
-          updatedAt: now,
-        },
-        $inc: { authVersion: 1, version: 1 },
-      },
-      { session, returnDocument: 'after' },
-    );
-    if (!lockedUser) {
-      throw new AppError({
-        status: 404,
-        code: 'RESOURCE_NOT_FOUND',
-        message: 'Không tìm thấy tài khoản.',
-      });
-    }
-
-    await db
-      .collection('auth_sessions')
-      .updateMany(
-        { userId: userObjectId, revokedAt: { $exists: false } },
-        { $set: { revokedAt: now } },
-        { session },
-      );
-
-    const state = await actorStates(db).findOne({ _id: actorKey }, { session });
-
-    if (state?.mode === 'inSession' && ObjectId.isValid(state.resourceId)) {
-      const activeSession = await db.collection('practice_sessions').findOne(
-        {
-          _id: new ObjectId(state.resourceId),
-          'members.actorKey': actorKey,
-        },
-        { session },
-      );
-      if (activeSession && activeSession.status !== 'ended') {
-        endedSession = await endSession(
-          activeSession,
-          now,
-          'account_locked',
-          session,
-        );
-      } else {
-        await touchActorState(db, actorKey, now, session, state);
-      }
-    } else if (
-      state?.mode === 'inviting' &&
-      ObjectId.isValid(state.resourceId)
-    ) {
-      const invitationId = new ObjectId(state.resourceId);
-      await db.collection('invitations').updateOne(
-        { _id: invitationId, status: 'open' },
-        {
-          $set: { status: 'cancelled', updatedAt: now },
-          $inc: { version: 1 },
-        },
-        { session },
-      );
-      const pendingRequests = await db
-        .collection('invite_requests')
-        .find({ invitationId, status: 'pending' }, { session })
-        .toArray();
-      await db.collection('invite_requests').updateMany(
-        { invitationId, status: 'pending' },
-        {
-          $set: { status: 'cancelled', updatedAt: now },
-          $inc: { version: 1 },
-        },
-        { session },
-      );
-      const releaseTargets = [
-        { actorKey, mode: 'inviting', resourceId: state.resourceId },
-        ...pendingRequests.map((req) => ({
-          actorKey: req.requesterKey,
-          mode: 'requestingInvite',
-          resourceId: String(req._id),
-        })),
-      ].sort((a, b) => a.actorKey.localeCompare(b.actorKey));
-      for (const target of releaseTargets) {
-        await releaseActorToIdle(db, { ...target, now, session });
-      }
-    } else if (
-      state?.mode === 'requestingInvite' &&
-      ObjectId.isValid(state.resourceId)
-    ) {
-      await db.collection('invite_requests').updateOne(
-        { _id: new ObjectId(state.resourceId), status: 'pending' },
-        {
-          $set: { status: 'cancelled', updatedAt: now },
-          $inc: { version: 1 },
-        },
-        { session },
-      );
-      await releaseActorToIdle(db, {
-        actorKey,
-        mode: 'requestingInvite',
-        resourceId: state.resourceId,
-        now,
-        session,
-      });
-    } else if (state?.mode === 'searching') {
-      await releaseActorToIdle(db, {
-        actorKey,
-        mode: 'searching',
-        now,
-        session,
-      });
-    } else if (
-      state?.mode === 'proposed' &&
-      ObjectId.isValid(state.resourceId)
-    ) {
-      const proposalId = new ObjectId(state.resourceId);
-      const proposal = await db.collection('match_proposals').findOneAndUpdate(
-        { _id: proposalId, status: 'pending' },
-        {
-          $set: { status: 'cancelled', updatedAt: now },
-          $inc: { version: 1 },
-        },
-        { session, returnDocument: 'after' },
-      );
-      const participantKeys = (proposal?.participants ?? [])
-        .map((/** @type {any} */ p) => p.actorKey)
-        .filter((/** @type {unknown} */ k) => typeof k === 'string');
-      if (!participantKeys.includes(actorKey)) participantKeys.push(actorKey);
-      for (const key of participantKeys.sort()) {
-        await releaseActorToIdle(db, {
-          actorKey: key,
-          mode: 'proposed',
-          resourceId: state.resourceId,
-          now,
-          session,
-        });
-      }
-    } else {
-      await touchActorState(db, actorKey, now, session, state);
-    }
+    const result = await lockUserAccountWithinSession(db, session, {
+      userId,
+      adminId,
+      now,
+    });
+    lockedUser = result.lockedUser;
+    endedSession = result.endedSession;
   });
 
   if (endedSession) {
