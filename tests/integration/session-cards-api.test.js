@@ -38,6 +38,9 @@ import {
 import { seedContractFixtures } from '../helpers/db-test-helpers.js';
 
 vi.mock('../../server/integrations/livekit/room-service.js', () => ({
+  listMediaParticipants: vi.fn(async () => {
+    throw new Error('Room Service unavailable in fixture');
+  }),
   readMediaParticipant: vi.fn(async () => null),
   removeMediaParticipant: vi.fn(async () => {}),
   closeMediaRoom: vi.fn(async () => {}),

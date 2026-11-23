@@ -16,6 +16,7 @@ import {
   validateObjectId,
 } from '../invitations/invitation-validation.js';
 import { readSession, leaveSession } from './session-service.js';
+import { changeScreenShare } from './screen-share-service.js';
 import {
   changeSessionCards,
   readCardHints,
@@ -128,6 +129,37 @@ function currentIdentity(request) {
 export function createSessionsRouter() {
   const router = express.Router();
   const requireMemberIdentity = requireAuth(['U', 'G']);
+  for (const action of ['claim', 'release']) {
+    router.post(
+      `/:id/screen-share/${action}`,
+      requireMemberIdentity,
+      async (request, response) => {
+        const claim = action === 'claim';
+        const body = fields(request.body, claim ? ['expectedVersion'] : []);
+        const operationId = validateIdempotencyKey(
+          request.get('Idempotency-Key'),
+        );
+        await enforceWriteRateLimit({
+          actorOrIpKey: response.locals.identity.actorKey,
+        });
+        const result = await changeScreenShare({
+          sessionId: String(request.params.id),
+          getIdentity: currentIdentity(request),
+          operationId,
+          ...(claim && {
+            expectedVersion: nonNegativeInteger(
+              body.expectedVersion,
+              'expectedVersion',
+            ),
+          }),
+        });
+        response.locals.meta.serverTime = result.at.toISOString();
+        response
+          .status(result.status)
+          .json({ data: result.data, meta: response.locals.meta });
+      },
+    );
+  }
   router.get(
     '/:id/deck-options',
     requireMemberIdentity,

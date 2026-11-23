@@ -139,7 +139,27 @@ export function createSessionPresenceConsumer({
                 previous.actorKey === p.actorKey && previous.connected,
             ),
         ));
-    const transitionAt = losingConnection ? observedAt : checkedAt;
+    const replacedConnection =
+      event.event === 'presence_snapshot' &&
+      before.status === 'active' &&
+      before.presence.some(
+        (/** @type {any} */ p, /** @type {number} */ i) =>
+          p.connected &&
+          after.presence[i]?.connected &&
+          p.connectionSid !== after.presence[i].connectionSid,
+      );
+    const lastConfirmed = before.lastBothPresentAt ?? before.activeSince;
+    const transitionAt =
+      losingConnection || replacedConnection
+        ? event.event === 'presence_snapshot' && lastConfirmed instanceof Date
+          ? new Date(
+              Math.max(
+                before.activeSince?.getTime() ?? 0,
+                lastConfirmed.getTime(),
+              ),
+            )
+          : observedAt
+        : checkedAt;
     const reconciled = await reconcileSessionDeadline(
       { ...after, presence: before.presence },
       transitionAt,
@@ -179,9 +199,30 @@ export function createSessionPresenceConsumer({
       after.presence.every((/** @type {any} */ p) => p.connected);
     /** @type {Record<string, any>} */
     const set = { updatedAt: transitionAt, presence: after.presence };
+    if (
+      before.screenShare?.ownerKey &&
+      (!bothConnected ||
+        before.presence.some(
+          (/** @type {any} */ p, /** @type {number} */ i) =>
+            p.actorKey === before.screenShare.ownerKey &&
+            p.connectionSid !== after.presence[i]?.connectionSid,
+        ))
+    ) {
+      set.screenShare = {
+        ...before.screenShare,
+        state: 'revoking',
+        version: before.screenShare.version + 1,
+      };
+    }
     /** @type {Record<string, string>} */
     const unset = {};
-    if (
+    if (replacedConnection && bothConnected) {
+      Object.assign(set, sessionClocks(before, transitionAt), {
+        activeSince: checkedAt,
+      });
+      if (!before.deckVersionId) set.selectionRunningSince = checkedAt;
+      unset.pendingAction = '';
+    } else if (
       bothConnected &&
       (!before.startedAt || before.status === 'reconnecting')
     ) {
@@ -274,14 +315,14 @@ export function createSessionPresenceConsumer({
         );
       }
     } else if (!bothConnected) {
-      Object.assign(set, sessionClocks(before, observedAt));
+      Object.assign(set, sessionClocks(before, transitionAt));
       if (before.startedAt) set.status = 'reconnecting';
       Object.assign(unset, {
         activeSince: '',
         selectionRunningSince: '',
         pendingAction: '',
       });
-    } else return;
+    }
     const result = await db.collection('practice_sessions').findOneAndUpdate(
       { _id: after._id, version: after.version, status: after.status },
       {

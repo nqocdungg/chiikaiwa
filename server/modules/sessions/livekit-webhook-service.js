@@ -14,7 +14,7 @@ const participantEvents = new Set([
 /**
  * BE-012 supplies a transactional consumer. It must use the supplied Mongo session,
  * and must not call external services: MongoDB may rerun the transaction callback.
- * @typedef {(input: {event: import('livekit-server-sdk').WebhookEvent, before: import('mongoose').mongo.WithId<import('mongoose').mongo.Document>, after: import('mongoose').mongo.WithId<import('mongoose').mongo.Document>, presenceChanged: boolean, reason: string, session: import('mongoose').ClientSession, observedAt: Date, checkedAt?: Date, roomEmpty?: boolean}) => Promise<void>} PresenceConsumer
+ * @typedef {(input: {event: { event: string }, before: import('mongoose').mongo.WithId<import('mongoose').mongo.Document>, after: import('mongoose').mongo.WithId<import('mongoose').mongo.Document>, presenceChanged: boolean, reason: string, session: import('mongoose').ClientSession, observedAt: Date, checkedAt?: Date, roomEmpty?: boolean}) => Promise<void>} PresenceConsumer
  */
 
 /**

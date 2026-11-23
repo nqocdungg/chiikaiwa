@@ -35,9 +35,12 @@ import {
   lockUserAccount,
 } from '../../server/modules/safety/safety-service.js';
 import { cleanupSessionMedia } from '../../server/modules/sessions/media-cleanup-service.js';
+import { changeScreenShare } from '../../server/modules/sessions/screen-share-service.js';
 import { issueMediaToken } from '../../server/modules/sessions/media-token-service.js';
 import { createInvitation } from '../../server/modules/invitations/invitation-service.js';
 import {
+  listMediaParticipants,
+  setScreenPermission,
   removeMediaParticipant,
   readMediaParticipant,
 } from '../../server/integrations/livekit/room-service.js';
@@ -63,6 +66,13 @@ import {
 } from '../fixtures/livekit-fixtures.js';
 
 vi.mock('../../server/integrations/livekit/room-service.js', () => ({
+  hasScreenMedia: (
+    /** @type {import("livekit-server-sdk").ParticipantInfo} */ participant,
+  ) => participant.permission?.canPublishSources.includes(3),
+  setScreenPermission: vi.fn(),
+  listMediaParticipants: vi.fn(async () => {
+    throw new Error('Room Service unavailable in fixture');
+  }),
   readMediaParticipant: vi.fn(async () => null),
   removeMediaParticipant: vi.fn(async () => {}),
   closeMediaRoom: vi.fn(async () => {}),
@@ -248,9 +258,98 @@ describe('BE-012 lifecycle on a real replica set', () => {
     expect(await persisted()).not.toHaveProperty('startedAt');
     expect(await db.collection('statistics').countDocuments()).toBe(0);
   });
+  it('pauses selection and duration when Room Service detects a missing webhook', async () => {
+    await start();
+    const before = await persisted();
+    if (!before) throw new Error('Missing fixture session');
+    at = new Date(at.getTime() + 12_000);
+    vi.mocked(listMediaParticipants).mockResolvedValueOnce([
+      /** @type {import("livekit-server-sdk").ParticipantInfo} */ ({
+        identity: before.presence[0].actorKey,
+        sid: before.presence[0].connectionSid,
+        state: 2,
+      }),
+    ]);
+    await readSession({
+      sessionId: String(SESSION_ID),
+      getIdentity: identity,
+      now,
+    });
+    const after = await persisted();
+    if (!after) throw new Error('Missing fixture session');
+    expect(after).toMatchObject({
+      status: 'reconnecting',
+      activeDurationMs: 0,
+      selectionRemainingMs: 60_000,
+    });
+    expect(after.presence[1].reconnectUntil).toEqual(
+      new Date(at.getTime() + 300_000),
+    );
+  });
+  it('reserves a single screen publisher and waits for confirmed revocation before releasing', async () => {
+    await start();
+    const doc = await persisted();
+    if (!doc) throw new Error('Missing fixture session');
+    const participants = doc.presence.map(
+      (/** @type {{actorKey:string, connectionSid:string}} */ presence) => ({
+        identity: presence.actorKey,
+        sid: presence.connectionSid,
+        permission: { canPublishSources: [1, 2] },
+      }),
+    );
+    vi.mocked(listMediaParticipants).mockResolvedValueOnce(participants);
+    vi.mocked(setScreenPermission).mockResolvedValueOnce({
+      ...participants[0],
+      permission: { canPublishSources: [1, 2, 3] },
+    });
+    const input = { sessionId: String(SESSION_ID), getIdentity: identity };
+    const claim = await changeScreenShare({
+      ...input,
+      operationId: 'claim',
+      expectedVersion: doc.version,
+    });
+    expect(claim).toMatchObject({
+      status: 200,
+      data: {
+        session: {
+          screenShare: { state: 'active', ownerKey: SESSION_ACTORS[0] },
+        },
+      },
+    });
+    await expect(
+      changeScreenShare({
+        ...input,
+        getIdentity: () => identity(1),
+        operationId: 'other',
+        expectedVersion: claim.data.session.version,
+      }),
+    ).rejects.toMatchObject({ code: 'SCREEN_SHARE_BUSY' });
+    vi.mocked(listMediaParticipants)
+      .mockResolvedValueOnce([
+        { ...participants[0], permission: { canPublishSources: [1, 2, 3] } },
+        participants[1],
+      ])
+      .mockResolvedValueOnce(participants);
+    vi.mocked(setScreenPermission).mockResolvedValueOnce(participants[0]);
+    const release = await changeScreenShare({
+      ...input,
+      operationId: 'release',
+    });
+    expect(release).toMatchObject({
+      status: 200,
+      data: { session: { screenShare: { state: 'idle' } } },
+    });
+    expect(
+      vi.mocked(setScreenPermission).mock.calls.map((args) => args.slice(1)),
+    ).toEqual([
+      [SESSION_ACTORS[0], true],
+      [SESSION_ACTORS[0], false],
+    ]);
+  });
   it('GET projects time without persisting duration, version, controller or statistics', async () => {
     await start();
     const before = await persisted();
+    if (!before) throw new Error('Missing fixture session');
     at = new Date(at.getTime() + 12_000);
     const result = await readSession({
       sessionId: String(SESSION_ID),
@@ -261,7 +360,11 @@ describe('BE-012 lifecycle on a real replica set', () => {
       activeDurationMs: 12_000,
       selectionRemainingMs: 48_000,
     });
-    expect(await persisted()).toEqual(before);
+    const persistedSession = await persisted();
+    if (!persistedSession) throw new Error('Missing fixture session');
+    const { presenceCheckedAt, ...session } = persistedSession;
+    expect(presenceCheckedAt).toEqual(at);
+    expect(session).toEqual(before);
     expect(JSON.stringify(result.data)).not.toMatch(
       /roomName|connectionSid|email|passwordHash|mediaCleanup|activeSince/,
     );
