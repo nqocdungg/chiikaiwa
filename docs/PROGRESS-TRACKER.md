@@ -468,6 +468,22 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ## Sprint 2
 
+### DATA-003 — Biên soạn dữ liệu seed tình huống và quiz N3
+
+- Ngày cập nhật: 2026-11-21
+- Trạng thái: Đã sửa theo review PR #51
+- PR: #51
+- Đã làm:
+  - Biên soạn bộ dữ liệu seed N3 nháp tại `server/persistence/seed/n3-content.js` theo Database Design §7.1–§7.2 và checklist PB-31 (giữ tách biệt khỏi luồng seed mặc định `seed-content.js` để chờ review):
+    - 01 bộ chủ đề Deck N3: `Giao tiếp Đời sống & Công sở Trung cấp` (`topicKey: daily_work_and_life_n3`, `level: N3`).
+    - 05 tình huống N3: nhờ đồng nghiệp kiểm tra tài liệu trước giờ họp; gọi điện xin đổi lịch hẹn khám nha khoa; liên hệ cửa hàng xử lý sản phẩm giao bị hỏng; thảo luận lịch trình và góp ý kế hoạch dã ngoại cuối tuần; nhắn tin/gọi điện xin nghỉ ốm và bàn giao việc trong ngày. Mỗi tình huống có `context`, `objective`, `roleA`/`roleB` phân biệt, `hints`, `knowledgeVersionIds` và 3 `questionVersionIds`.
+    - 10 mục kiến thức N3: 05 ngữ pháp (`〜ようにしている`, `〜てしまう`, `〜てある`, `〜ことにする`, `〜場合`) và 05 từ vựng (`確認`, `都合`, `交換`, `予定`, `連絡`) kèm `reading`, `meaning` tiếng Việt và `examples` song ngữ Nhật–Việt.
+    - 15 câu hỏi quiz N3 (3 câu/tình huống; kết hợp `multipleChoice` và `shortAnswer`), có đáp án đúng, giải thích tiếng Việt và `knowledgeVersionIds`.
+  - Bổ sung `tests/server/content-seed-n3.test.js` (7 ca) kiểm tra `validateSeedDataset`, ngưỡng PB-31, `reading` bắt buộc, phân biệt `roleA`/`roleB`, không có bản ghi mồ côi khỏi manifest/tình huống, không trùng nội dung lựa chọn/đáp án, phân bố vị trí đáp án đúng và không trùng ID/`topicKey` với `sampleDataset` và `n1Dataset`.
+- File liên quan: `server/persistence/seed/n3-content.js`, `tests/server/content-seed-n3.test.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng: Trên Node `v24.22.2` + `npm@11.21.1` (sau `npm ci`): `prettier --check` trên 3 file thay đổi pass; `eslint --max-warnings=0` trên 2 file JS thay đổi pass; `npm run typecheck` pass (0 lỗi); `npm test` pass 32 files / 436 tests (gồm 7/7 ca `tests/server/content-seed-n3.test.js`); `npm run test:integration` pass 18 files / 217 tests trên MongoDB replica set tạm; `npm run build` pass. Lưu ý: `npm run format:check` và `npm run lint` toàn repo hiện bị chặn tại local do thư mục untracked `storybook-static/` còn sót từ trước khi `develop` gỡ Storybook (không tự xóa file untracked). Chưa review chéo lại tiếng Nhật; kiểm tra tự động (bao gồm test so chuỗi không trùng) không thay thế xác nhận tính duy nhất về ngữ nghĩa theo PB-31 AC3.
+- Lưu ý/blocker: Task Handoff DATA-003 có mục `Deliverables` ghi `Nội dung N3/N2 để review` không thống nhất với tên task/Objective/AC N3 (N2 thuộc DATA-008); chỉ biên soạn phần N3 theo đúng phạm vi DATA-003. Không tự commit/push, sửa Tracker online hay đánh dấu Done.
+
 ### BE-022 — Chọn bộ, bốc lá, gợi ý và đồng thuận trong phiên
 
 - Ngày cập nhật: 2026-11-22
@@ -481,17 +497,37 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ### QA-006 — Rà soát contract chọn bộ và manifest
 
-- Ngày cập nhật: 2026-11-16
-- Trạng thái: Còn dở (đã hoàn tất đối chiếu và fixtures; chờ quyết định contract Q1–Q4 và reviewer Yến Nhi duyệt, chưa ghi Done)
-- PR: Chưa có; branch `test/QA-006-review-deck-selection-manifest`, base `origin/develop@93f1593` (tại worktree riêng `D:\cn web\worktree-qa006`, giữ nguyên repo `BE-008`).
+- Ngày cập nhật: 2026-11-22
+- Trạng thái: Còn dở (PR #52 đã merge tài liệu đối chiếu và fixtures; chưa tìm thấy quyết định chính thức cho Q1, Q2b, Q3 nên chưa ghi Done)
+- PR:
+  - PR #52 (`test(sessions): review deck selection contract and manifest [QA-006]`) đã **MERGED** vào `develop` tại commit `7250727` (`7250727c2859e5f5feddbabbcc5e66b5a406bd15`) ngày `2026-11-16`; có `APPROVED` hợp lệ từ tài khoản GitHub `nt-thuyr` (body trống, chưa suy diễn là quyết định cho từng Q1/Q2b/Q3).
+  - Cập nhật bằng chứng rà soát tiếp trên nhánh `docs/QA-006-update-review-evidence` từ `origin/develop@5d89d8c`.
 - Đã làm:
-  - Đối chiếu contract chọn bộ chủ đề & manifest giữa `02-srs.md` (`FR-CAR-01/02`, `BR-12`), `04-ui-ux-design.md` (`SC-08`, `UF-05`), `06-database-design.md` (`§6.1–6.2`, `§7.1–7.2`, `TX-07`, `§12.1`), `07-api-specification.md` (`§6`, `§7`, `§12`), `docs/api/openapi.yaml` và source trên `origin/develop`.
-  - Lập biên bản đối chiếu chi tiết tại `docs/qa/QA-006-deck-selection-manifest-review.md`, phân loại rõ Q1 (`scenarioCount` — blocker sai khác SRS/UI vs API), Q2a (`level?` filter — đề xuất không blocker), Q2b (điều kiện trạng thái phiên cho `deck-options`), Q3 (khoảng trống mã lỗi `deck-selection` cho bộ `hidden`/`draft`/revision cũ/sai loại theo bảng lỗi hiện có) và Q4 (truy vết `toTopicSummaryDto` — rủi ro phòng thủ cần xác minh, chưa có đường lộ thực tế).
-  - Chuẩn bị bộ fixtures kiểm thử tại `tests/fixtures/deck-selection-fixtures.js` cho các ca `published`, `hidden`, `draft`, `empty`, tách riêng `CONTRACT_DECK_OPTION_PROJECTIONS` (theo `07 §6` hiện hành) và `PROPOSED_DECK_OPTION_EXTENSIONS` (chờ chốt Q1).
+  - Đối chiếu contract chọn bộ chủ đề & manifest giữa `02-srs.md` (`FR-CAR-01/02`, `BR-12`), `04-ui-ux-design.md` (`SC-08`, `UF-05`), `06-database-design.md` (`§6.1–6.2`, `§7.1–7.2`, `TX-07`, `§12.1`), `07-api-specification.md` (`§6`, `§7`, `§12`), `docs/api/openapi.yaml` và source trên `origin/develop@5d89d8c`.
+  - Xác minh đầu ra đã merge ở PR #52 (`docs/qa/QA-006-deck-selection-manifest-review.md`, `tests/fixtures/deck-selection-fixtures.js`) và phân biệt rõ phần đã merge trên `origin/develop@5d89d8c` (FE-004 `DeckPicker.jsx` đã hiển thị `{deck.count} tình huống`; chưa có các endpoint `deck-options`/`deck-selection`/`control/claim` trên `develop`; `toTopicSummaryDto` vẫn còn fallback `draftPayload`) với phần chỉ có trên nhánh chưa merge `origin/feature/BE-022-session-card-flow@a173c8e` (PR #59 `OPEN`, 0 review).
+  - Xác nhận fixtures `published`, `hidden`, `draft`, `empty` tại `tests/fixtures/deck-selection-fixtures.js` vẫn bám đúng contract hiện hành trên `origin/develop` (`CONTRACT_DECK_OPTION_PROJECTIONS` giữ 5 trường theo `07 §6`, tách riêng `PROPOSED_DECK_OPTION_EXTENSIONS` chờ chốt Q1).
+  - Giữ rõ phân loại: Q1, Q2b, Q3 chưa có quyết định chính thức; Q2a là đề xuất tùy chọn; Q4 là rủi ro phòng thủ chưa chứng minh được đường lộ trong vận hành bình thường.
 - File liên quan: `docs/qa/QA-006-deck-selection-manifest-review.md`, `tests/fixtures/deck-selection-fixtures.js`, `docs/PROGRESS-TRACKER.md`.
-- Kiểm chứng: `corepack npm ci` và `corepack npm run check` **Pass 100%** trên `Node v24.22.1` + `npm@11.21.1`: `format:check`, `lint` (0 warnings), `typecheck` (0 errors), `test` (25 files, 349/349), `test:integration` (16 files, 183/183 trên MongoDB replica set tạm), `build` và `build-storybook` (cảnh báo chunk > 500 kB, không chặn build). `git diff --check` không có lỗi whitespace; working tree còn 3 file QA-006 chưa commit.
-- Tiếp theo: Nhờ reviewer Yến Nhi và nhóm chốt các câu hỏi Q1–Q4 (đặc biệt là bổ sung `scenarioCount` vào `07 §6` và `openapi.yaml`), duyệt `tests/fixtures/deck-selection-fixtures.js`, sau đó cập nhật `07-api-specification.md`/`openapi.yaml` theo phạm vi được thống nhất trước khi merge `BE-022`.
-- Lưu ý/blocker: Chưa ghi `Done` vì contract `scenarioCount` trong `GET /sessions/:id/deck-options` còn thiếu ở `07 §6` & `openapi.yaml` và chưa có xác nhận của reviewer. Không tự sửa thiết kế 01–07 hoặc code chức năng.
+- Kiểm chứng:
+  - PR #52 đã chạy `corepack npm ci` và `corepack npm run check` pass (349 unit/HTTP/component tests, 183 integration tests trên MongoDB replica set tạm, build và Storybook).
+  - Đợt cập nhật tài liệu này chỉ sửa Markdown: kiểm tra format (`prettier --check`), liên kết tương đối và `git diff --check` trên nhánh `docs/QA-006-update-review-evidence`. Không sửa `docs/design/01–07`, `openapi.yaml`, fixture hoặc code chức năng.
+- Tiếp theo: Xin nhóm và reviewer chốt chính thức Q1 (`scenarioCount`), Q2b (trạng thái phiên đọc `deck-options`) và Q3 (mã lỗi chọn bộ ẩn/nháp/revision cũ/sai loại) làm cơ sở review PR #59 (BE-022) và đồng bộ `07-api-specification.md`/`openapi.yaml` trước khi đóng QA-006.
+- Lưu ý/blocker: Chưa ghi `Done` vì Q1, Q2b, Q3 chưa có quyết định chính thức được ghi nhận. Approval body trống của `nt-thuyr` trên PR #52 là bằng chứng review hợp lệ cho PR nhưng không thay thế quyết định contract từng câu hỏi. Không tự sửa thiết kế 01–07 hoặc biến đề xuất thành contract đã chấp thuận.
+
+### BE-021 — API ghi chú, tự đánh giá, tổng kết và lịch sử
+
+- Ngày cập nhật: 2026-11-23
+- Trạng thái: Đã triển khai; chưa chạy kiểm chứng theo yêu cầu của người thực hiện, chưa ghi Done.
+- PR: Chưa có; branch `feature/BE-021-session-personal-models`, base hiện tại `develop@9b2a674`.
+- Đã làm:
+  - Thêm API owner-scoped `GET /sessions/:id/personal`, `PUT/DELETE /sessions/:id/note` và `PUT /sessions/:id/self-assessment`; noteVersion và version tự đánh giá dùng CAS độc lập, mutation có Idempotency-Key, xóa note giữ self-assessment.
+  - Thêm `GET /sessions/:id/summary` chỉ cho phiên đã bắt đầu và kết thúc; tổng kết ghép lá đã bốc với note, nguồn đã lưu và quiz của đúng người gọi, không đưa dữ liệu riêng của đối tác vào projection.
+  - Thêm `GET /me/sessions` cho tài khoản, phân trang cursor theo `startedAt/_id`, loại phòng chưa bắt đầu và dùng Partner projection an toàn (đối tác guest hiển thị “Khách”).
+  - Giữ hạn dữ liệu guest 15 phút và cập nhật guest write guard trong cùng transaction; giới hạn note/comment theo Unicode code point.
+  - Cập nhật OpenAPI, contract test và integration test cho owner isolation, stale version, replay, xóa note, summary privacy và history.
+- File liên quan: `server/modules/sessions/session-learning-service.js`, `session-learning-router.js`, `session-projection.js`, `server/modules/learning/session-personal-model.js`, `server/app.js`, `docs/api/openapi.yaml`, `tests/integration/session-learning-api.test.js`, `tests/server/openapi-contract.test.js`.
+- Kiểm chứng: Chưa chạy test theo yêu cầu; chỉ đã chạy Prettier trên các file JavaScript thay đổi và `git diff --check` không báo whitespace error tại thời điểm review.
+- Tiếp theo: Người thực hiện chạy suite BE-021, OpenAPI check và `npm run check`; xử lý kết quả trước khi commit/push và mở PR về `develop`.
 
 ### BE-026 — API xử lý báo cáo và quản trị tài khoản
 
@@ -561,4 +597,18 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ## Sprint 3
 
-Chưa có cập nhật.
+### BE-039 — Sửa rò thông tin nháp trong danh mục học liệu learner
+
+- Ngày cập nhật: 2026-11-23
+- Trạng thái: Còn dở — đã triển khai và kiểm chứng local; chờ tạo PR, CI và reviewer duyệt.
+- PR: Chưa có. Branch `fix/BE-039-published-content-metadata`; commit [`a0f485cbfd403f6d0391f1b2b1d0feeb2631da6c`](https://github.com/nqocdungg/chiikaiwa/commit/a0f485cbfd403f6d0391f1b2b1d0feeb2631da6c).
+- Truy vết contract: BE-003/[PR #23](https://github.com/nqocdungg/chiikaiwa/pull/23), BE-013/[PR #34](https://github.com/nqocdungg/chiikaiwa/pull/34), `06 §7`, `07 §7, §10`.
+- Đã làm: Learner catalog và session `deck-options` lấy title, level, description, versionId từ revision theo `publishedVersionId`; filter level theo published payload; loại draft/hidden và revision thiếu, dangling hoặc sai content/kind, không fallback sang draft. Admin tiếp tục đọc/sửa draft. Regression xác nhận publish lỗi giữ revision đang phục vụ, publish thành công chuyển metadata/filter cùng revision, revision cũ bất biến.
+- File liên quan: `server/modules/content/content-repository.js`, `server/modules/content/content-service.js`, `server/modules/content/content-dto.js`, `server/modules/sessions/session-card-service.js`, `tests/server/content-publishing.test.js`, `tests/integration/content-publishing.integration.test.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng:
+  - Trước fix: `npm exec vitest -- run --project integration tests/integration/content-publishing.integration.test.js -t "keeps learner list and level filter on the published revision"` — thất bại như dự kiến, 1 failed/13 skipped; `topicN3` không được tìm thấy sau khi sửa draft.
+  - Sau fix: `npm exec vitest -- run --project integration tests/integration/content-publishing.integration.test.js` — 15/15 pass; `npm exec vitest -- run --project integration tests/integration/session-cards-api.test.js` — 13/13 pass; `npm exec vitest -- run --project server tests/server/content-publishing.test.js` — 18/18 pass.
+  - `npm run check` trên source commit `a0f485c`: pass format, lint, typecheck, 40 test files/571 server-client tests, 23 integration files/343 tests và production build. Build có cảnh báo chunk JavaScript lớn hơn 500 kB nhưng hoàn tất thành công.
+  - `git diff --check`: pass, gồm cả cập nhật tracker này.
+- Tiếp theo: Tạo PR vào `develop`, kiểm tra CI và chờ reviewer Ngọc Dung review; chỉ cập nhật Done khi đủ điều kiện DoD.
+- Lưu ý/blocker: PR/CI và review độc lập chưa có. Không thêm migration/index hoặc backfill. Index hiện hành của `content_items` là `{kind: 1, status: 1, level: 1, _id: 1}` (`06 §10.1`), không có `createdAt` để hỗ trợ đầy đủ cursor/sort; vì vậy không khẳng định truy vấn có cursor index. Hiệu năng chưa được đo bằng `explain`; nếu cần, đánh giá riêng theo quy mô dữ liệu.
