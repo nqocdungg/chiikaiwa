@@ -6,7 +6,7 @@
   "packageManager": "npm@11.21.1",
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/jest-dom": "8.0.0",
     "@testing-library/react": "16.3.3",
     "@types/events": "3.0.3",
     "@types/express": "5.0.6",
