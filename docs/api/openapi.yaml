@@ -30,10 +30,10 @@ paths:
       tags:
         - Sessions
       operationId: getSession
-      summary: ??c phi?n theo quy?n th?nh vi?n
+      summary: Đọc phiên theo quyền thành viên
       description:
-        ??i so?t hi?n di?n v? deadline tr??c khi tr? tr?ng th?i phi?n.
-        GET kh?ng c?ng d?n ??ng h? ho?c counter khi hi?n di?n kh?ng ??i.
+        Đối soát hiện diện và deadline trước khi trả trạng thái phiên.
+        GET không cộng dồn đồng hồ hoặc counter khi hiện diện không đổi.
       security:
         - sessionCookie: []
         - guestCookie: []
@@ -46,7 +46,7 @@ paths:
             $ref: '#/components/schemas/ObjectId'
       responses:
         '200':
-          description: Session hi?n h?nh
+          description: Session hiện hành
           content:
             application/json:
               schema:
@@ -68,11 +68,11 @@ paths:
       tags:
         - Sessions
       operationId: leaveSession
-      summary: K?t th?c phi?n cho c? hai th?nh vi?n
+      summary: Kết thúc phiên cho cả hai thành viên
       description:
-        Body r?ng, kh?ng expectedVersion. Retry kh?ng k?t th?c l?n hai ho?c
-        gia h?n kh?ch. Commit ended tr??c thu h?i media; l?i d?ch v? gi? cleanup
-        pending, response v?n l? Session ended.
+        Body rỗng, không expectedVersion. Retry không kết thúc lần hai hoặc
+        gia hạn khách. Commit ended trước khi thu hồi media. Lỗi dịch vụ giữ cleanup
+        pending, response vẫn là Session ended.
       security: &a3
         - sessionCookie: []
           csrfToken: []
@@ -91,7 +91,7 @@ paths:
               maxProperties: 0
       responses:
         '200':
-          description: Session ended; media c? th? ?ang retry thu h?i
+          description: Session ended. Media có thể đang retry thu hồi
           content:
             application/json:
               schema:
@@ -228,10 +228,10 @@ paths:
       tags:
         - Sessions
       operationId: issueSessionMediaToken
-      summary: C?p token ??ng room v? identity c?a th?nh vi?n
+      summary: Cấp token đúng room và identity của thành viên
       description:
-        TTL t?i ?a 10 ph?t, kh?ng v??t deadline quy?n. Ki?m tra l?i sau k?;
-        kh?ng cache token trong receipt. Ended t? ch?i SESSION_ENDED.
+        TTL tối đa 10 phút, không vượt deadline quyền. Kiểm tra lại sau ký.
+        Không cache token trong receipt. Ended từ chối SESSION_ENDED.
       security: *a3
       parameters:
         - *a2
@@ -239,7 +239,7 @@ paths:
       requestBody: *a4
       responses:
         '200':
-          description: Credential ch? d?ng v?i SDK media
+          description: Credential chỉ dùng với SDK media
           content:
             application/json:
               schema:
@@ -4210,7 +4210,7 @@ components:
 
   responses:
     RequestError:
-      description: L?i theo ErrorResponse v? API specification
+      description: Lỗi theo ErrorResponse và API specification
       content:
         application/json:
           schema:
