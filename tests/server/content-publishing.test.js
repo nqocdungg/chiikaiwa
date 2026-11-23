@@ -159,11 +159,14 @@ describe('BE-013: Unit validation and projections for content publishing', () =>
       const itemDoc = {
         _id: new ObjectId(),
         publishedVersionId: new ObjectId(),
-        title: 'Mua sắm',
-        level: 'N5',
+        title: 'Bản nháp không được lộ',
+        level: 'N1',
       };
       const versionDoc = {
+        _id: itemDoc.publishedVersionId,
         payload: {
+          title: 'Mua sắm',
+          level: 'N5',
           description: 'Hội thoại mua đồ tại cửa hàng tiện lợi',
           scenarioVersionIds: [new ObjectId()],
           questionVersionIds: [new ObjectId()],
@@ -181,6 +184,36 @@ describe('BE-013: Unit validation and projections for content publishing', () =>
       expect(dto).not.toHaveProperty('scenarioVersionIds');
       expect(dto).not.toHaveProperty('roleA');
       expect(dto).not.toHaveProperty('roleB');
+    });
+
+    it('uses metadata and version ID only from the published revision', () => {
+      const itemDoc = {
+        _id: new ObjectId(),
+        publishedVersionId: new ObjectId(),
+        title: 'Bản nháp',
+        level: 'N1',
+        draftPayload: {
+          title: 'Bản nháp',
+          level: 'N1',
+          description: 'Mô tả nháp',
+        },
+      };
+      const versionDoc = {
+        _id: new ObjectId(),
+        payload: {
+          title: 'Bản xuất bản',
+          level: 'N3',
+          description: 'Mô tả đã xuất bản',
+        },
+      };
+
+      expect(toTopicSummaryDto(itemDoc, versionDoc)).toEqual({
+        id: itemDoc._id.toHexString(),
+        versionId: versionDoc._id.toHexString(),
+        title: 'Bản xuất bản',
+        level: 'N3',
+        description: 'Mô tả đã xuất bản',
+      });
     });
 
     it('projects topic version detail with counts only', () => {

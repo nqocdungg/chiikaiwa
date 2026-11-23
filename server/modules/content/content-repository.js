@@ -341,6 +341,7 @@ export async function findContentVersionsByIds(db, ids, { session } = {}) {
  * @param {number} params.limit
  * @param {{ createdAt: Date, id: import('mongoose').Types.ObjectId } | null} [params.cursor]
  * @param {{ session?: import('mongoose').ClientSession }} [options]
+ * @returns {Promise<{ items: Array<{ item: Record<string, any> & { _id: import('mongoose').Types.ObjectId, createdAt: Date }, version: Record<string, any> }>, hasMore: boolean }>}
  */
 export async function queryPublishedTopics(
   db,
@@ -353,12 +354,8 @@ export async function queryPublishedTopics(
   const filter = {
     kind: 'deck',
     status: 'published',
-    publishedVersionId: { $ne: null },
+    publishedVersionId: { $type: 'objectId' },
   };
-
-  if (level) {
-    filter.level = level;
-  }
 
   if (cursor) {
     filter.$or = [
@@ -367,14 +364,64 @@ export async function queryPublishedTopics(
     ];
   }
 
-  const rawItems = await collection
-    .find(filter, { session })
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(limit + 1)
-    .toArray();
+  /** @type {Record<string, any>[]} */
+  const pipeline = [
+    { $match: filter },
+    { $sort: { createdAt: -1, _id: -1 } },
+    {
+      $lookup: {
+        from: 'content_versions',
+        let: {
+          contentId: '$_id',
+          versionId: '$publishedVersionId',
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$_id', '$$versionId'] },
+                  { $eq: ['$contentId', '$$contentId'] },
+                  { $eq: ['$kind', 'deck'] },
+                ],
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              contentId: 1,
+              kind: 1,
+              payload: 1,
+            },
+          },
+        ],
+        as: 'publishedVersion',
+      },
+    },
+    { $unwind: '$publishedVersion' },
+    {
+      $match: {
+        'publishedVersion.payload.title': { $type: 'string' },
+        'publishedVersion.payload.level': { $type: 'string' },
+        'publishedVersion.payload.description': { $type: 'string' },
+        ...(level ? { 'publishedVersion.payload.level': level } : {}),
+      },
+    },
+    { $limit: limit + 1 },
+  ];
+
+  const rawItems = await collection.aggregate(pipeline, { session }).toArray();
 
   const hasMore = rawItems.length > limit;
-  const items = hasMore ? rawItems.slice(0, limit) : rawItems;
+  const items = (hasMore ? rawItems.slice(0, limit) : rawItems).map(
+    ({ publishedVersion, ...item }) => ({
+      item: /** @type {Record<string, any> & { _id: import('mongoose').Types.ObjectId, createdAt: Date }} */ (
+        item
+      ),
+      version: publishedVersion,
+    }),
+  );
 
   return {
     items,
