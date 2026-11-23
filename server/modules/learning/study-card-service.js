@@ -40,7 +40,7 @@ function comparePosition(left, right) {
 }
 
 /** @param {string} cursor @param {string} context @returns {StudyPosition} */
-function readCursor(cursor, context) {
+export function readCursor(cursor, context) {
   try {
     const decoded = Buffer.from(cursor, 'base64url');
     if (decoded.toString('base64url') === cursor) {
@@ -66,7 +66,7 @@ function readCursor(cursor, context) {
 }
 
 /** @param {string} cardKey @param {StoredProgress | null} stored */
-function toProgress(cardKey, stored) {
+export function toProgress(cardKey, stored) {
   if (!stored) {
     return { cardKey, state: 'new', reps: 0, lapses: 0, version: 0 };
   }
@@ -88,6 +88,26 @@ function cardRevision(card) {
   return card.manualVersion === undefined
     ? { contentVersionId: card.contentVersionId }
     : { manualVersion: card.manualVersion };
+}
+
+/** @param {Db} db @param {string} configId @param {import('mongoose').ClientSession} [session] */
+export async function loadStudyScheduler(db, configId, session) {
+  const configuration =
+    /** @type {import('mongoose').mongo.Collection<typeof schedulerConfig>} */ (
+      db.collection('scheduler_configs')
+    );
+  const config = await configuration.findOne({ _id: configId }, { session });
+  try {
+    if (!config) throw new Error('Scheduler configuration is missing');
+    assertSchedulerConfig(config);
+  } catch {
+    throw new AppError({
+      status: 503,
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Cấu hình lịch ôn chưa sẵn sàng.',
+    });
+  }
+  return config;
 }
 
 /**
@@ -179,21 +199,7 @@ export async function prepareStudyCardReveal(
   const stored = await progressCollection(db).findOne({ ownerKey, cardKey });
   const progress = toProgress(cardKey, stored);
   const configId = stored?.schedulerConfigId ?? schedulerConfig._id;
-  const configuration =
-    /** @type {import('mongoose').mongo.Collection<typeof schedulerConfig>} */ (
-      db.collection('scheduler_configs')
-    );
-  const config = await configuration.findOne({ _id: configId });
-  try {
-    if (!config) throw new Error('Scheduler configuration is missing');
-    assertSchedulerConfig(config);
-  } catch {
-    throw new AppError({
-      status: 503,
-      code: 'SERVICE_UNAVAILABLE',
-      message: 'Cấu hình lịch ôn chưa sẵn sàng.',
-    });
-  }
+  const config = await loadStudyScheduler(db, configId);
   const preview = previewCard(stored, now, config).map(
     ({ rating, progress }) => ({
       rating,
