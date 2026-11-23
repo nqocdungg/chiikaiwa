@@ -522,17 +522,17 @@ describe('FE-013 Safety flows (SC-17 Report/Block & SC-18 Block List)', () => {
     );
 
     // Unblock first item -> confirmation explains one-way semantics
-    const unblockButtons = screen.getAllByRole('button', { name: 'Gỡ chặn' });
+    const unblockButtons = screen.getAllByRole('button', { name: 'Bỏ chặn' });
     fireEvent.click(unblockButtons[0]);
 
-    const dialog = screen.getByRole('dialog', { name: 'Gỡ chặn An Nhiên?' });
+    const dialog = screen.getByRole('dialog', { name: 'Bỏ chặn An Nhiên?' });
     expect(
       within(dialog).getByText(/chỉ gỡ bản chặn do bạn tạo/i),
     ).toBeVisible();
 
     // First delete fails with 503 -> item must NOT be removed
     fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Xác nhận gỡ chặn' }),
+      within(dialog).getByRole('button', { name: 'Xác nhận bỏ chặn' }),
     );
     await waitFor(() => {
       expect(within(dialog).getByRole('alert')).toHaveTextContent(
@@ -546,7 +546,7 @@ describe('FE-013 Safety flows (SC-17 Report/Block & SC-18 Block List)', () => {
 
     // Retry delete keeps the same Idempotency-Key and removes item after 204
     fireEvent.click(
-      within(dialog).getByRole('button', { name: 'Thử gỡ chặn lại' }),
+      within(dialog).getByRole('button', { name: 'Thử bỏ chặn lại' }),
     );
     await waitFor(() => {
       expect(screen.queryByText('An Nhiên')).toBeNull();

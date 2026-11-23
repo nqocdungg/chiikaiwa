@@ -356,6 +356,8 @@ function SafetyActionDialogContent({
       open={open}
       onClose={onClose}
       size="form"
+      friendly
+      className="ck-safety-modal"
       title="An toàn trong phiên"
       description="Báo cáo và chặn là hai thao tác độc lập. Bạn có thể chọn một trong hai hoặc rời phòng bất cứ lúc nào."
       closeLabel="Đóng hộp thoại an toàn"

@@ -127,7 +127,10 @@ export function SessionSummaryPage() {
       : 'Đang diễn ra';
 
   return (
-    <section data-screen-id="SC-10" className="ck-account-page ck-safety-page">
+    <section
+      data-screen-id="SC-10"
+      className="ck-account-page ck-safety-page ck-safety-page--summary"
+    >
       <header className="ck-account-header">
         <div>
           <h1 className="text-2xl font-semibold text-ink">Tổng kết phiên</h1>

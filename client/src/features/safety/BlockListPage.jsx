@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import logo from '../../assets/brand/chii-logo.svg';
 import { Button, Icon } from '../../components/ui/controls.jsx';
 import { Dialog } from '../../components/ui/Dialog.jsx';
-import { Avatar, Badge, Card } from '../../components/ui/surfaces.jsx';
+import { Avatar, Card } from '../../components/ui/surfaces.jsx';
 import { createIdempotencyKey } from '../../services/api-client.js';
 import { getIdentityEpoch } from '../../services/cache.js';
 import { ApiError } from '../../services/errors.js';
@@ -22,7 +21,7 @@ const SESSION_EXPIRED_NOTICE =
   'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.';
 
 /**
- * SC-18: Danh sách chặn của người học (04 SC-18, UF-11, 07 §10).
+ * SC-18: Danh sách đã chặn của người học (04 SC-18, UF-11, 07 §10, Figma 80-1304).
  */
 export function BlockListPage() {
   const navigate = useNavigate();
@@ -283,162 +282,217 @@ export function BlockListPage() {
     : '';
 
   return (
-    <section data-screen-id="SC-18" className="ck-account-page ck-safety-page">
-      <div className="ck-account-topbar">
-        <Link
-          className="ck-brand-lockup"
-          to="/home"
-          aria-label="Chiikaiwa, trang chính"
-        >
-          <img src={logo} alt="" />
-          <span>Chiikaiwa</span>
-        </Link>
-        <nav aria-label="Điều hướng tài khoản">
-          <Link to="/profile" className="ck-text-button">
-            Quay lại hồ sơ
-          </Link>
-          <Link to="/home" className="ck-button ck-button--secondary">
-            Về trang chính
-          </Link>
-        </nav>
-      </div>
-
-      <header className="ck-account-header">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Danh sách chặn</h1>
-          <p className="mt-1 text-muted">
-            Chỉ hiển thị các bản chặn do bạn tạo. Gỡ chặn chỉ xóa bản chặn của
-            bạn; nếu đối tác vẫn chặn bạn, hai người vẫn không thể ghép cặp hoặc
-            vào phòng qua mã mời.
-          </p>
-        </div>
-      </header>
-
-      {statusNotice ? (
-        <div
-          className="ck-alert ck-alert--success"
-          role="status"
-          aria-live="polite"
-        >
-          <p>{statusNotice}</p>
-        </div>
-      ) : null}
-
-      <Card className="ck-safety-card">
-        {loading ? (
-          <div className="ck-safety-state" role="status" aria-live="polite">
-            <p className="text-muted">Đang tải danh sách chặn…</p>
-          </div>
-        ) : listError ? (
-          <div className="ck-alert ck-alert--error" role="alert">
-            <div className="ck-alert__body">
-              <strong>Không thể tải danh sách chặn</strong>
-              <p className="mt-1">{listError}</p>
-            </div>
-            <Button
-              variant="secondary"
-              size="compact"
-              onClick={handleRetryInitial}
-            >
-              Thử tải lại
-            </Button>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="ck-safety-empty">
-            <Icon name="shield" size={36} />
-            <h2>Chưa có ai trong danh sách chặn</h2>
-            <p className="text-muted">
-              Khi bạn chặn một đối tác trong phiên luyện hoặc từ màn hình tổng
-              kết, bản chặn của bạn sẽ xuất hiện tại đây để quản lý.
+    <section
+      data-screen-id="SC-18"
+      className="ck-account-page ck-safety-page ck-safety-page--blocks"
+    >
+      <div className="ck-safety-layout">
+        <aside className="ck-safety-sidebar" aria-label="Cài đặt tài khoản">
+          <div className="ck-safety-sidebar__head">
+            <p className="ck-safety-eyebrow" lang="ja">
+              アカウント
             </p>
+            <h2 className="ck-safety-sidebar__title">Tài khoản</h2>
           </div>
-        ) : (
-          <>
-            <ul className="ck-safety-list" aria-label="Các đối tác đã chặn">
-              {items.map((item) => {
-                const partnerName = resolvePartnerDisplayName(item.partner);
-                const isGuestPartner = item.partner.actorKey
-                  .toLowerCase()
-                  .startsWith('guest:');
-                const level = item.partner.profile?.level;
 
-                return (
-                  <li key={item.id} className="ck-safety-list__item">
-                    <div className="ck-safety-list__partner">
-                      <Avatar name={partnerName} size={40} />
-                      <div className="ck-safety-list__meta">
-                        <div className="ck-safety-list__name-row">
-                          <strong className="ck-safety-list__name">
-                            {partnerName}
-                          </strong>
-                          {isGuestPartner ? <Badge>Khách</Badge> : null}
-                          {level ? <Badge tone="accent">{level}</Badge> : null}
+          <nav
+            className="ck-safety-sidebar__nav"
+            aria-label="Điều hướng tài khoản"
+          >
+            <Link to="/profile" className="ck-safety-sidebar__item">
+              <strong>Hồ sơ của tôi</strong>
+              <small>Thông tin công khai</small>
+            </Link>
+            <Link
+              to="/profile#profile-section-heading"
+              className="ck-safety-sidebar__item"
+            >
+              <strong>Chỉnh sửa hồ sơ</strong>
+              <small>Tên, trình độ, chủ đề</small>
+            </Link>
+            <Link
+              to="/profile#password-change-section-heading"
+              className="ck-safety-sidebar__item"
+            >
+              <strong>Đổi mật khẩu</strong>
+              <small>Bảo mật tài khoản</small>
+            </Link>
+            <Link
+              to="/blocks"
+              aria-current="page"
+              className="ck-safety-sidebar__item ck-safety-sidebar__item--active"
+            >
+              <strong>Danh sách đã chặn</strong>
+              <small>Quản lý người đã chặn</small>
+            </Link>
+          </nav>
+        </aside>
+
+        <div className="ck-safety-main">
+          <header className="ck-safety-header">
+            <p className="ck-safety-eyebrow" lang="ja">
+              ブロックリスト
+            </p>
+            <h1 className="ck-safety-title">Danh sách đã chặn</h1>
+            <p className="ck-safety-subtitle">
+              Những người trong danh sách này không thể tìm hoặc gửi yêu cầu
+              luyện nói cho bạn.
+            </p>
+          </header>
+
+          {statusNotice ? (
+            <div
+              className="ck-alert ck-alert--success"
+              role="status"
+              aria-live="polite"
+            >
+              <p>{statusNotice}</p>
+            </div>
+          ) : null}
+
+          <Card className="ck-safety-card">
+            {loading ? (
+              <div className="ck-safety-state" role="status" aria-live="polite">
+                <p className="text-muted">Đang tải danh sách chặn…</p>
+              </div>
+            ) : listError ? (
+              <div className="ck-safety-state-pad">
+                <div className="ck-alert ck-alert--error" role="alert">
+                  <div className="ck-alert__body">
+                    <strong>Không thể tải danh sách chặn</strong>
+                    <p className="mt-1">{listError}</p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    onClick={handleRetryInitial}
+                  >
+                    Thử tải lại
+                  </Button>
+                </div>
+              </div>
+            ) : items.length === 0 ? (
+              <div className="ck-safety-empty">
+                <Icon name="shield" size={36} />
+                <h2>Chưa có ai trong danh sách chặn</h2>
+                <p className="text-muted">
+                  Khi bạn chặn một đối tác trong phiên luyện hoặc từ màn hình
+                  tổng kết, bản chặn của bạn sẽ xuất hiện tại đây để quản lý.
+                </p>
+              </div>
+            ) : (
+              <>
+                <ul className="ck-safety-list" aria-label="Các đối tác đã chặn">
+                  {items.map((item) => {
+                    const partnerName = resolvePartnerDisplayName(item.partner);
+                    const isGuestPartner = item.partner.actorKey
+                      .toLowerCase()
+                      .startsWith('guest:');
+                    const level = item.partner.profile?.level;
+
+                    return (
+                      <li key={item.id} className="ck-safety-list__item">
+                        <div className="ck-safety-list__partner">
+                          <Avatar
+                            name={partnerName}
+                            size={40}
+                            className="ck-safety-list__avatar"
+                          />
+                          <div className="ck-safety-list__meta">
+                            <strong className="ck-safety-list__name">
+                              {partnerName}
+                            </strong>
+                            <span
+                              className="ck-safety-list__sub"
+                              title={`Đã chặn lúc ${formatSafetyDateTime(item.createdAt)}`}
+                            >
+                              {isGuestPartner && level ? (
+                                <>
+                                  <span>Khách</span> · Trình độ{' '}
+                                  <span>{level}</span>
+                                </>
+                              ) : level ? (
+                                <>
+                                  Trình độ <span>{level}</span>
+                                </>
+                              ) : isGuestPartner ? (
+                                <span>Khách</span>
+                              ) : (
+                                <>
+                                  Đã chặn lúc{' '}
+                                  {formatSafetyDateTime(item.createdAt)}
+                                </>
+                              )}
+                            </span>
+                          </div>
                         </div>
-                        <span className="ck-safety-list__date">
-                          Đã chặn lúc {formatSafetyDateTime(item.createdAt)}
-                        </span>
+                        <Button
+                          variant="secondary"
+                          size="compact"
+                          className="ck-safety-unblock-btn"
+                          onClick={() => openUnblockDialog(item)}
+                        >
+                          Bỏ chặn
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {loadMoreError ? (
+                  <div className="ck-safety-state-pad">
+                    <div className="ck-alert ck-alert--error" role="alert">
+                      <div className="ck-alert__body">
+                        <p>{loadMoreError}</p>
                       </div>
+                      <Button
+                        variant="secondary"
+                        size="compact"
+                        loading={loadingMore}
+                        onClick={() => {
+                          void handleLoadMore();
+                        }}
+                      >
+                        Thử tải thêm lại
+                      </Button>
                     </div>
+                  </div>
+                ) : null}
+
+                {nextCursor ? (
+                  <div className="ck-safety-pagination">
                     <Button
                       variant="secondary"
                       size="compact"
-                      onClick={() => openUnblockDialog(item)}
+                      loading={loadingMore}
+                      onClick={() => {
+                        void handleLoadMore();
+                      }}
                     >
-                      Gỡ chặn
+                      {loadingMore ? 'Đang tải thêm…' : 'Tải thêm'}
                     </Button>
-                  </li>
-                );
-              })}
-            </ul>
-
-            {loadMoreError ? (
-              <div className="ck-alert ck-alert--error mt-4" role="alert">
-                <div className="ck-alert__body">
-                  <p>{loadMoreError}</p>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  loading={loadingMore}
-                  onClick={() => {
-                    void handleLoadMore();
-                  }}
-                >
-                  Thử tải thêm lại
-                </Button>
-              </div>
-            ) : null}
-
-            {nextCursor ? (
-              <div className="ck-safety-pagination">
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  loading={loadingMore}
-                  onClick={() => {
-                    void handleLoadMore();
-                  }}
-                >
-                  {loadingMore ? 'Đang tải thêm…' : 'Tải thêm'}
-                </Button>
-              </div>
-            ) : null}
-          </>
-        )}
-      </Card>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </Card>
+        </div>
+      </div>
 
       <Dialog
+        friendly
+        size="compact"
+        className="ck-safety-modal"
         open={Boolean(selectedBlock)}
         onClose={closeUnblockDialog}
-        title={`Gỡ chặn ${selectedPartnerName}?`}
+        title={`Bỏ chặn ${selectedPartnerName}?`}
         description="Thao tác này chỉ gỡ bản chặn do bạn tạo."
-        closeLabel="Đóng xác nhận gỡ chặn"
+        closeLabel="Đóng xác nhận bỏ chặn"
         closeDisabled={unblockPending}
         footer={
           <>
             <Button
               variant="secondary"
-              size="compact"
               disabled={unblockPending}
               onClick={closeUnblockDialog}
             >
@@ -446,17 +500,16 @@ export function BlockListPage() {
             </Button>
             <Button
               variant="primary"
-              size="compact"
               loading={unblockPending}
               onClick={() => {
                 void confirmUnblock();
               }}
             >
               {unblockPending
-                ? 'Đang gỡ chặn…'
+                ? 'Đang bỏ chặn…'
                 : unblockError?.retryable
-                  ? 'Thử gỡ chặn lại'
-                  : 'Xác nhận gỡ chặn'}
+                  ? 'Thử bỏ chặn lại'
+                  : 'Xác nhận bỏ chặn'}
             </Button>
           </>
         }
