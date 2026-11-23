@@ -468,6 +468,22 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ## Sprint 2
 
+### DATA-003 — Biên soạn dữ liệu seed tình huống và quiz N3
+
+- Ngày cập nhật: 2026-11-21
+- Trạng thái: Đã sửa theo review PR #51
+- PR: #51
+- Đã làm:
+  - Biên soạn bộ dữ liệu seed N3 nháp tại `server/persistence/seed/n3-content.js` theo Database Design §7.1–§7.2 và checklist PB-31 (giữ tách biệt khỏi luồng seed mặc định `seed-content.js` để chờ review):
+    - 01 bộ chủ đề Deck N3: `Giao tiếp Đời sống & Công sở Trung cấp` (`topicKey: daily_work_and_life_n3`, `level: N3`).
+    - 05 tình huống N3: nhờ đồng nghiệp kiểm tra tài liệu trước giờ họp; gọi điện xin đổi lịch hẹn khám nha khoa; liên hệ cửa hàng xử lý sản phẩm giao bị hỏng; thảo luận lịch trình và góp ý kế hoạch dã ngoại cuối tuần; nhắn tin/gọi điện xin nghỉ ốm và bàn giao việc trong ngày. Mỗi tình huống có `context`, `objective`, `roleA`/`roleB` phân biệt, `hints`, `knowledgeVersionIds` và 3 `questionVersionIds`.
+    - 10 mục kiến thức N3: 05 ngữ pháp (`〜ようにしている`, `〜てしまう`, `〜てある`, `〜ことにする`, `〜場合`) và 05 từ vựng (`確認`, `都合`, `交換`, `予定`, `連絡`) kèm `reading`, `meaning` tiếng Việt và `examples` song ngữ Nhật–Việt.
+    - 15 câu hỏi quiz N3 (3 câu/tình huống; kết hợp `multipleChoice` và `shortAnswer`), có đáp án đúng, giải thích tiếng Việt và `knowledgeVersionIds`.
+  - Bổ sung `tests/server/content-seed-n3.test.js` (7 ca) kiểm tra `validateSeedDataset`, ngưỡng PB-31, `reading` bắt buộc, phân biệt `roleA`/`roleB`, không có bản ghi mồ côi khỏi manifest/tình huống, không trùng nội dung lựa chọn/đáp án, phân bố vị trí đáp án đúng và không trùng ID/`topicKey` với `sampleDataset` và `n1Dataset`.
+- File liên quan: `server/persistence/seed/n3-content.js`, `tests/server/content-seed-n3.test.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng: Trên Node `v24.22.2` + `npm@11.21.1` (sau `npm ci`): `prettier --check` trên 3 file thay đổi pass; `eslint --max-warnings=0` trên 2 file JS thay đổi pass; `npm run typecheck` pass (0 lỗi); `npm test` pass 32 files / 436 tests (gồm 7/7 ca `tests/server/content-seed-n3.test.js`); `npm run test:integration` pass 18 files / 217 tests trên MongoDB replica set tạm; `npm run build` pass. Lưu ý: `npm run format:check` và `npm run lint` toàn repo hiện bị chặn tại local do thư mục untracked `storybook-static/` còn sót từ trước khi `develop` gỡ Storybook (không tự xóa file untracked). Chưa review chéo lại tiếng Nhật; kiểm tra tự động (bao gồm test so chuỗi không trùng) không thay thế xác nhận tính duy nhất về ngữ nghĩa theo PB-31 AC3.
+- Lưu ý/blocker: Task Handoff DATA-003 có mục `Deliverables` ghi `Nội dung N3/N2 để review` không thống nhất với tên task/Objective/AC N3 (N2 thuộc DATA-008); chỉ biên soạn phần N3 theo đúng phạm vi DATA-003. Không tự commit/push, sửa Tracker online hay đánh dấu Done.
+
 ### BE-022 — Chọn bộ, bốc lá, gợi ý và đồng thuận trong phiên
 
 - Ngày cập nhật: 2026-11-22
@@ -575,3 +591,19 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Kiểm chứng: `npm run check` PASS trên Node 24.21.0/npm 11.19.0: format, lint, typecheck, 40 file unit/HTTP/component (573 tests), 24 file integration (344 tests) và build. `npm run openapi:check` PASS (15/15). `git diff --check` PASS. Build có cảnh báo chunk Vite lớn hơn 500 kB.
 - Tiếp theo: Khi BE-025 có service review, gọi `incrementReviewCount` trong cùng transaction với review log và tiến độ; kiểm chứng OPS-005 restore lifetime từ cùng snapshot và bảo toàn bộ đếm sau cleanup; nhận review của Ngọc Dung rồi mở PR về `develop`.
 - Lưu ý/blocker: Chưa tìm thấy branch/PR BE-025 hoặc triển khai OPS-005 trong source hiện có. Không sửa thiết kế 01–07; chưa commit/push hoặc đánh dấu Done.
+
+### BE-039 — Sửa rò thông tin nháp trong danh mục học liệu learner
+
+- Ngày cập nhật: 2026-11-23
+- Trạng thái: Còn dở — đã triển khai và kiểm chứng local; chờ tạo PR, CI và reviewer duyệt.
+- PR: Chưa có. Branch `fix/BE-039-published-content-metadata`; commit [`a0f485cbfd403f6d0391f1b2b1d0feeb2631da6c`](https://github.com/nqocdungg/chiikaiwa/commit/a0f485cbfd403f6d0391f1b2b1d0feeb2631da6c).
+- Truy vết contract: BE-003/[PR #23](https://github.com/nqocdungg/chiikaiwa/pull/23), BE-013/[PR #34](https://github.com/nqocdungg/chiikaiwa/pull/34), `06 §7`, `07 §7, §10`.
+- Đã làm: Learner catalog và session `deck-options` lấy title, level, description, versionId từ revision theo `publishedVersionId`; filter level theo published payload; loại draft/hidden và revision thiếu, dangling hoặc sai content/kind, không fallback sang draft. Admin tiếp tục đọc/sửa draft. Regression xác nhận publish lỗi giữ revision đang phục vụ, publish thành công chuyển metadata/filter cùng revision, revision cũ bất biến.
+- File liên quan: `server/modules/content/content-repository.js`, `server/modules/content/content-service.js`, `server/modules/content/content-dto.js`, `server/modules/sessions/session-card-service.js`, `tests/server/content-publishing.test.js`, `tests/integration/content-publishing.integration.test.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng:
+  - Trước fix: `npm exec vitest -- run --project integration tests/integration/content-publishing.integration.test.js -t "keeps learner list and level filter on the published revision"` — thất bại như dự kiến, 1 failed/13 skipped; `topicN3` không được tìm thấy sau khi sửa draft.
+  - Sau fix: `npm exec vitest -- run --project integration tests/integration/content-publishing.integration.test.js` — 15/15 pass; `npm exec vitest -- run --project integration tests/integration/session-cards-api.test.js` — 13/13 pass; `npm exec vitest -- run --project server tests/server/content-publishing.test.js` — 18/18 pass.
+  - `npm run check` trên source commit `a0f485c`: pass format, lint, typecheck, 40 test files/571 server-client tests, 23 integration files/343 tests và production build. Build có cảnh báo chunk JavaScript lớn hơn 500 kB nhưng hoàn tất thành công.
+  - `git diff --check`: pass, gồm cả cập nhật tracker này.
+- Tiếp theo: Tạo PR vào `develop`, kiểm tra CI và chờ reviewer Ngọc Dung review; chỉ cập nhật Done khi đủ điều kiện DoD.
+- Lưu ý/blocker: PR/CI và review độc lập chưa có. Không thêm migration/index hoặc backfill. Index hiện hành của `content_items` là `{kind: 1, status: 1, level: 1, _id: 1}` (`06 §10.1`), không có `createdAt` để hỗ trợ đầy đủ cursor/sort; vì vậy không khẳng định truy vấn có cursor index. Hiệu năng chưa được đo bằng `explain`; nếu cần, đánh giá riêng theo quy mô dữ liệu.
