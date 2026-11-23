@@ -20,8 +20,8 @@ export function signReviewTicket(claims) {
   return `${payload}.${signature(payload)}`;
 }
 
-/** @param {string} token @param {string} ownerKey @param {Date} now */
-export function verifyReviewTicket(token, ownerKey, now) {
+/** @param {string} token @param {string} ownerKey @param {Date} now @param {boolean} [committed] */
+export function verifyReviewTicket(token, ownerKey, now, committed = false) {
   const [payload, signed, extra] = token.split('.');
   if (payload && signed && extra === undefined) {
     const actual = Buffer.from(signed);
@@ -34,7 +34,7 @@ export function verifyReviewTicket(token, ownerKey, now) {
         JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
       );
       if (claims.ownerKey === ownerKey) {
-        if (Date.parse(claims.expiresAt) <= now.getTime()) {
+        if (!committed && Date.parse(claims.expiresAt) <= now.getTime()) {
           throw new AppError({
             status: 409,
             code: 'REVIEW_TICKET_EXPIRED',

@@ -1,7 +1,16 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
+import {
+  AUTH_COOKIE_NAME,
+  GUEST_COOKIE_NAME,
+  parseCookies,
+} from '../../middleware/cookies.js';
 import { createValidationError } from '../../middleware/http-error.js';
+import { enforceWriteRateLimit } from '../../middleware/rate-limit.js';
 import { connectDatabase } from '../../persistence/database.js';
+import { parsePageLimit } from '../content/content-service.js';
+import { resolveIdentityFromCookies } from '../identity/identity-service.js';
+import { validateIdempotencyKey } from '../identity/validation.js';
 import { signReviewTicket } from './review-ticket.js';
 import {
   prepareStudyCardReveal,
@@ -9,6 +18,7 @@ import {
   studyCardKeyPattern,
 } from './study-card-service.js';
 import { resolveStudySet } from './study-scope.js';
+import { readStudyReviews, submitStudyReview } from './study-review-service.js';
 
 const objectIdPattern = /^[a-f0-9]{24}$/u;
 
@@ -69,7 +79,7 @@ export function createStudyCardRouter() {
   const router = Router();
   const auth = requireAuth(['U', 'G']);
 
-  router.post('/query', auth, async (request, response) => {
+  router.post('/study/cards/query', auth, async (request, response) => {
     const {
       scope: rawScope,
       mode,
@@ -104,7 +114,7 @@ export function createStudyCardRouter() {
     response.json({ data, meta });
   });
 
-  router.post('/reveal', auth, async (request, response) => {
+  router.post('/study/cards/reveal', auth, async (request, response) => {
     const { scope: rawScope, cardKey } = readObject(
       request.body,
       ['scope', 'cardKey'],
@@ -130,6 +140,59 @@ export function createStudyCardRouter() {
       data: { ...data, reviewTicket: signReviewTicket(ticketClaims) },
       meta,
     });
+  });
+
+  router.post('/study/reviews', auth, async (request, response) => {
+    const { reviewTicket, rating } = readObject(
+      request.body,
+      ['reviewTicket', 'rating'],
+      'body',
+    );
+    if (
+      typeof reviewTicket !== 'string' ||
+      !reviewTicket ||
+      reviewTicket.length > 4096
+    )
+      throw invalid('reviewTicket');
+    if (rating !== 1 && rating !== 2 && rating !== 3) throw invalid('rating');
+    const operationId = validateIdempotencyKey(request.get('Idempotency-Key'));
+    const { identity, meta } = response.locals;
+    await enforceWriteRateLimit({ actorOrIpKey: identity.actorKey });
+    const cookies = parseCookies(request.headers.cookie);
+    const data = await submitStudyReview({
+      getIdentity: () =>
+        resolveIdentityFromCookies({
+          authCookie: cookies[AUTH_COOKIE_NAME],
+          guestCookie: cookies[GUEST_COOKIE_NAME],
+        }),
+      reviewTicket,
+      rating,
+      operationId,
+      reviewedAt: new Date(meta.serverTime),
+    });
+    response.status(201).json({ data, meta });
+  });
+
+  router.get('/me/reviews', auth, async (request, response) => {
+    const { cardKey, limit, cursor } = readObject(
+      request.query,
+      ['cardKey', 'limit', 'cursor'],
+      'query',
+    );
+    if (typeof cardKey !== 'string' || !studyCardKeyPattern.test(cardKey))
+      throw invalid('cardKey');
+    if (
+      cursor !== undefined &&
+      (typeof cursor !== 'string' || cursor.length > 512)
+    )
+      throw invalid('cursor');
+    const { identity, meta } = response.locals;
+    const data = await readStudyReviews(identity, {
+      cardKey,
+      limit: parsePageLimit(limit),
+      cursor,
+    });
+    response.json({ data, meta });
   });
 
   return router;
