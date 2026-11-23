@@ -4,8 +4,8 @@ import { sessionClocks } from './session-clock.js';
 
 const { ObjectId } = mongoose.Types;
 
-/** @param {any} doc @param {string} actorKey @param {Date} at @param {import('mongoose').ClientSession} [session] */
-export async function projectSession(doc, actorKey, at, session) {
+/** @param {any} doc @param {import('mongoose').ClientSession} [session] */
+export async function projectSessionMembers(doc, session) {
   const db = await connectDatabase();
   const members = [];
   for (const member of doc.members) {
@@ -39,6 +39,13 @@ export async function projectSession(doc, actorKey, at, session) {
       profile,
     });
   }
+  return members;
+}
+
+/** @param {any} doc @param {string} actorKey @param {Date} at @param {import('mongoose').ClientSession} [session] */
+export async function projectSession(doc, actorKey, at, session) {
+  const db = await connectDatabase();
+  const members = await projectSessionMembers(doc, session);
   const cards = await db
     .collection('session_cards')
     .find({ sessionId: doc._id }, { session })

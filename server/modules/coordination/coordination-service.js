@@ -24,7 +24,7 @@ function actorBusyError() {
   });
 }
 
-function idempotencyConflictError() {
+export function idempotencyConflictError() {
   return new AppError({
     status: 409,
     code: 'IDEMPOTENCY_CONFLICT',
@@ -48,14 +48,14 @@ function canonicalJson(value) {
 }
 
 /** @param {unknown} payload */
-function hashPayload(payload) {
+export function hashPayload(payload) {
   return createHash('sha256')
     .update(canonicalJson(payload ?? {}))
     .digest('hex');
 }
 
 /** @param {unknown} error */
-function isDuplicateKeyError(error) {
+export function isDuplicateKeyError(error) {
   return Boolean(
     error &&
     typeof error === 'object' &&
