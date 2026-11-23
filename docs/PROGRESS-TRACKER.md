@@ -568,4 +568,18 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ## Sprint 3
 
-Chưa có cập nhật.
+### BE-039 — Sửa rò thông tin nháp trong danh mục học liệu learner
+
+- Ngày cập nhật: 2026-11-23
+- Trạng thái: Còn dở — đã triển khai và kiểm chứng local; chờ tạo PR, CI và reviewer duyệt.
+- PR: Chưa có. Branch `fix/BE-039-published-content-metadata`; commit [`a0f485cbfd403f6d0391f1b2b1d0feeb2631da6c`](https://github.com/nqocdungg/chiikaiwa/commit/a0f485cbfd403f6d0391f1b2b1d0feeb2631da6c).
+- Truy vết contract: BE-003/[PR #23](https://github.com/nqocdungg/chiikaiwa/pull/23), BE-013/[PR #34](https://github.com/nqocdungg/chiikaiwa/pull/34), `06 §7`, `07 §7, §10`.
+- Đã làm: Learner catalog và session `deck-options` lấy title, level, description, versionId từ revision theo `publishedVersionId`; filter level theo published payload; loại draft/hidden và revision thiếu, dangling hoặc sai content/kind, không fallback sang draft. Admin tiếp tục đọc/sửa draft. Regression xác nhận publish lỗi giữ revision đang phục vụ, publish thành công chuyển metadata/filter cùng revision, revision cũ bất biến.
+- File liên quan: `server/modules/content/content-repository.js`, `server/modules/content/content-service.js`, `server/modules/content/content-dto.js`, `server/modules/sessions/session-card-service.js`, `tests/server/content-publishing.test.js`, `tests/integration/content-publishing.integration.test.js`, `docs/PROGRESS-TRACKER.md`.
+- Kiểm chứng:
+  - Trước fix: `npm exec vitest -- run --project integration tests/integration/content-publishing.integration.test.js -t "keeps learner list and level filter on the published revision"` — thất bại như dự kiến, 1 failed/13 skipped; `topicN3` không được tìm thấy sau khi sửa draft.
+  - Sau fix: `npm exec vitest -- run --project integration tests/integration/content-publishing.integration.test.js` — 15/15 pass; `npm exec vitest -- run --project integration tests/integration/session-cards-api.test.js` — 13/13 pass; `npm exec vitest -- run --project server tests/server/content-publishing.test.js` — 18/18 pass.
+  - `npm run check` trên source commit `a0f485c`: pass format, lint, typecheck, 40 test files/571 server-client tests, 23 integration files/343 tests và production build. Build có cảnh báo chunk JavaScript lớn hơn 500 kB nhưng hoàn tất thành công.
+  - `git diff --check`: pass, gồm cả cập nhật tracker này.
+- Tiếp theo: Tạo PR vào `develop`, kiểm tra CI và chờ reviewer Ngọc Dung review; chỉ cập nhật Done khi đủ điều kiện DoD.
+- Lưu ý/blocker: PR/CI và review độc lập chưa có. Không thêm migration/index hoặc backfill. Index hiện hành của `content_items` là `{kind: 1, status: 1, level: 1, _id: 1}` (`06 §10.1`), không có `createdAt` để hỗ trợ đầy đủ cursor/sort; vì vậy không khẳng định truy vấn có cursor index. Hiệu năng chưa được đo bằng `explain`; nếu cần, đánh giá riêng theo quy mô dữ liệu.
