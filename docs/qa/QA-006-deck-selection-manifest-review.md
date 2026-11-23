@@ -4,8 +4,9 @@
 - **Owner:** Hạnh Nhi (`HanhNhiDo`)
 - **Reviewer:** Yến Nhi
 - **PB References:** PB-12, PB-32
-- **Cơ sở đối chiếu:** `origin/develop@93f1593` (cùng đối chiếu tham khảo nhánh chưa merge `origin/feature/BE-022-session-card-flow@90716a9`)
-- **Trạng thái:** Chờ quyết định contract & reviewer duyệt (chưa ghi `Done`)
+- **PR đã merge:** PR #52 (`test(sessions): review deck selection contract and manifest [QA-006]`), merge commit `7250727` (`7250727c2859e5f5feddbabbcc5e66b5a406bd15`) ngày `2026-11-16` (có `APPROVED` từ tài khoản GitHub `nt-thuyr`, body trống, chưa có quyết định bằng văn bản cho từng câu hỏi Q1/Q2b/Q3).
+- **Cơ sở đối chiếu hiện tại:** `origin/develop@5d89d8c` (cùng đối chiếu tham khảo nhánh chưa merge `origin/feature/BE-022-session-card-flow@a173c8e` — PR #59 đang `OPEN`, 0 review).
+- **Trạng thái:** Đã merge đối chiếu & fixtures ở PR #52; còn chờ quyết định chính thức cho Q1, Q2b, Q3 (chưa ghi `Done`).
 
 ---
 
@@ -17,16 +18,21 @@ Rà soát contract giữa các nguồn:
 - [04-ui-ux-design.md](../design/04-ui-ux-design.md): `UF-05`, `SC-08`.
 - [06-database-design.md](../design/06-database-design.md): `§6.1` (`practice_sessions`), `§6.2` (`session_cards`), `§7.1` (`content_items`), `§7.2` (`content_versions`), `§11.2` (`TX-07`, `TX-11`), `§12.1` (`Projection`).
 - [07-api-specification.md](../design/07-api-specification.md): `§1`–`§3`, `§6`, `§7`, `§12`.
-- [openapi.yaml](../api/openapi.yaml) và source hiện có trên `origin/develop`:
+- [openapi.yaml](../api/openapi.yaml) và source hiện có trên `origin/develop@5d89d8c`:
   - [content-dto.js](../../server/modules/content/content-dto.js)
   - [content-repository.js](../../server/modules/content/content-repository.js)
   - [content-validator.js](../../server/modules/content/content-validator.js)
   - [content-service.js](../../server/modules/content/content-service.js)
   - [content-learner-router.js](../../server/modules/content/content-learner-router.js)
   - [session-projection.js](../../server/modules/sessions/session-projection.js)
+  - [session-service.js](../../server/modules/sessions/session-service.js)
   - [sessions-router.js](../../server/modules/sessions/sessions-router.js)
+  - [DeckPicker.jsx](../../client/src/features/kaiwa/components/DeckPicker.jsx) (đã merge qua FE-004 / PR #56)
 
-> **Lưu ý về nhánh khác:** Trên remote có nhánh `origin/feature/BE-022-session-card-flow` (`90716a9`) chưa merge vào `develop`, trong đó đã triển khai nháp `GET /sessions/:id/deck-options`, `POST /sessions/:id/deck-selection`, `POST /sessions/:id/control/claim` và tự thêm `scenarioCount` vào `deck-options`. Báo cáo này đánh giá theo trạng thái đã tích hợp trên `origin/develop` và nêu rõ điểm lệch cần chốt trước khi merge BE-022.
+> **Phân biệt code đã merge và nhánh chưa merge:**
+>
+> - **Đã merge trên `origin/develop@5d89d8c`:** `docs/design/07-api-specification.md` §6 vẫn chỉ có 5 trường `{id, versionId, title, level, description}`; `docs/api/openapi.yaml` và `sessions-router.js` chưa có `GET /sessions/:id/deck-options`, `POST /sessions/:id/deck-selection` hay `POST /sessions/:id/control/claim`; `FE-004` (PR #56) đã merge `DeckPicker.jsx` hiển thị `{deck.count} tình huống`.
+> - **Chỉ tồn tại trên nhánh chưa merge `origin/feature/BE-022-session-card-flow@a173c8e` (PR #59 `OPEN`, chưa review/merge):** đã triển khai nháp các endpoint trên và đề xuất sửa `07-api-specification.md` / `openapi.yaml` theo hướng bổ sung `scenarioCount` (Q1), giữ nguyên `limit?, cursor?` (Q2a), trả `409 SESSION_ENDED` khi phiên kết thúc (Q2b) và trả `404 RESOURCE_NOT_FOUND` khi chọn bộ ẩn/nháp/revision cũ/sai loại (Q3). Các thay đổi này chưa được duyệt hay tích hợp vào `develop`, nên chưa được xem là contract đã chấp thuận.
 
 ---
 
@@ -73,62 +79,65 @@ Rà soát contract giữa các nguồn:
 
 ## 3. Các quyết định còn thiếu & phân loại findings
 
-### Q1 (Blocker — Sai khác yêu cầu UI/SRS vs contract API): Thiếu `scenarioCount` trong `GET /sessions/:id/deck-options`
+### Q1 (Blocker — Chưa tìm thấy quyết định chính thức; sai khác yêu cầu UI/SRS vs contract API): Thiếu `scenarioCount` trong `GET /sessions/:id/deck-options`
 
-- **Nguồn:** `02-srs.md` `FR-CAR-01` (#L262); `04-ui-ux-design.md` `SC-08` (#L148); `07-api-specification.md` `§6` (#L156), `§7` (#L184–185); `06-database-design.md` `§7.2` (#L281).
+- **Nguồn:** `02-srs.md` `FR-CAR-01` (#L262); `04-ui-ux-design.md` `SC-08` (#L148); `07-api-specification.md` `§6` (#L156), `§7` (#L184–185); `06-database-design.md` `§7.2` (#L281); [DeckPicker.jsx](../../client/src/features/kaiwa/components/DeckPicker.jsx) (`#L4`, `#L28`).
 - **Bằng chứng:**
   - `FR-CAR-01` quy định: _"Hệ thống phải cho cả hai xem cùng danh sách bộ đã xuất bản, nhận biết chủ đề, cấp độ và số tình huống."_
-  - `07 §6` (#L156) chỉ đặc tả `GET /sessions/:id/deck-options` trả `{id, versionId, title, level, description}`, không có `scenarioCount`. Trong `content_versions` (`kind: 'deck'`, `06 §7.2`), mảng `payload.scenarioVersionIds` đã có sẵn để đếm.
-  - Trên remote, nhánh chưa merge `origin/feature/BE-022-session-card-flow` (`90716a9`) đã tự thêm `scenarioCount`, gây lệch giữa code nhánh đó và `07 §6`.
-- **Ảnh hưởng:** Chặn FE hiển thị số tình huống ở `SC-08` trước khi chọn bộ; nếu không chốt, `BE-022` và `FE` có thể dùng DTO khác nhau.
-- **Đề xuất tối thiểu & nơi cần đồng bộ:**
-  - Bổ sung `scenarioCount: integer` (`>= 1`) vào response item của `GET /sessions/:id/deck-options` (tính từ `versionDoc.payload.scenarioVersionIds.length`).
+  - Trên `origin/develop@5d89d8c` (đã merge): `07 §6` (#L156) chỉ đặc tả `GET /sessions/:id/deck-options` trả `{id, versionId, title, level, description}`, không có `scenarioCount`; `openapi.yaml` chưa có endpoint này. Trong `content_versions` (`kind: 'deck'`, `06 §7.2`), mảng `payload.scenarioVersionIds` đã có sẵn để đếm. Ngoài ra, `FE-004` (PR #56, đã merge) đã đưa `DeckPicker.jsx` lên `develop` với phần hiển thị `{deck.count} tình huống`.
+  - Trên nhánh chưa merge `origin/feature/BE-022-session-card-flow@a173c8e` (PR #59 `OPEN`, 0 review): đã triển khai `scenarioCount` từ `scenarioVersionIds` và đề xuất cập nhật `07 §6` + `openapi.yaml` (`minimum: 0`, chưa đồng bộ `07 §7`), nhưng chưa được duyệt hoặc merge.
+- **Ảnh hưởng:** Chặn FE hiển thị số tình huống ở `SC-08` trước khi chọn bộ; nếu không chốt, `BE-022` và `FE` có thể dùng DTO hoặc ràng buộc (`minimum: 1` vs `0`) khác nhau.
+- **Đề xuất tối thiểu & nơi cần đồng bộ (chưa phải contract đã chấp thuận):**
+  - Bổ sung `scenarioCount: integer` (`>= 1`) vào response item của `GET /sessions/:id/deck-options` (tính từ số `payload.scenarioVersionIds` phân biệt).
   - Nơi cần đồng bộ khi được duyệt: `docs/design/07-api-specification.md` (`§6`, và cân nhắc đồng bộ `§7` cho `GET /topics` / `GET /topic-versions/:id`), `docs/api/openapi.yaml`, implementation `BE-022` và client `FE` (`SC-08`).
 - **Người cần quyết định:** Reviewer **Yến Nhi** cùng nhóm (Product/BE/FE).
 
 ### Q2 — Tách đề xuất `level` filter và câu hỏi quyền/trạng thái phiên ở `GET /sessions/:id/deck-options`
 
-#### Q2a (Đề xuất cải tiến — Không phải blocker): Hỗ trợ query `level?` trên `GET /sessions/:id/deck-options`
+#### Q2a (Đề xuất tùy chọn — Không phải blocker): Hỗ trợ query `level?` trên `GET /sessions/:id/deck-options`
 
 - **Nguồn:** `02-srs.md` `FR-CAR-01` (#L262); `07-api-specification.md` `§6` (#L156) vs `§7` (#L184).
-- **Bằng chứng:** `GET /topics` (`07 §7`) có `level?, limit?, cursor?`, còn `GET /sessions/:id/deck-options` (`07 §6`) chỉ có `limit?, cursor?`. `FR-CAR-01` chỉ yêu cầu _"Danh sách hỗ trợ N5–N1"_, không bắt buộc query param `level` ở API phòng.
+- **Bằng chứng:** `GET /topics` (`07 §7`) có `level?, limit?, cursor?`, còn `GET /sessions/:id/deck-options` (`07 §6`) chỉ có `limit?, cursor?`. `FR-CAR-01` chỉ yêu cầu _"Danh sách hỗ trợ N5–N1"_, không bắt buộc query param `level` ở API phòng. Nhánh chưa merge `BE-022@a173c8e` (PR #59) cũng giữ nguyên `limit?, cursor?`.
 - **Ảnh hưởng:** Không chặn triển khai `BE-022`/`FE` nếu FE lọc cục bộ hoặc hiển thị chung tất cả bộ.
-- **Khuyến nghị:** Giữ là đề xuất đồng bộ tùy chọn; không coi là blocker cho `BE-022`.
+- **Khuyến nghị:** Giữ là đề xuất tùy chọn; không cần thay đổi contract nếu nhóm không yêu cầu lọc phía server.
 - **Người cần quyết định:** Reviewer **Yến Nhi** và **FE/BE**.
 
-#### Q2b (Cần chốt nghiệp vụ): Điều kiện trạng thái phiên khi gọi `GET /sessions/:id/deck-options`
+#### Q2b (Cần chốt nghiệp vụ — Chưa tìm thấy quyết định chính thức): Điều kiện trạng thái phiên khi gọi `GET /sessions/:id/deck-options`
 
-- **Nguồn:** `02-srs.md` `FR-CAR-02`, `BR-12` (#L143); `06-database-design.md` `§6.1` (#L210–218); `07-api-specification.md` `§6` (#L156, #L170), `§12` (#L298).
-- **Bằng chứng:** `07 §6` (#L170) quy định điều kiện _chọn bộ_ (`POST /deck-selection`) là cả hai kết nối, đang chọn và còn trong 60s; nhưng chưa nêu rõ `GET /sessions/:id/deck-options` có bị chặn khi phiên đang `preparing`, `reconnecting` hoặc `ended` hay không.
+- **Nguồn:** `02-srs.md` `FR-CAR-02`, `BR-12` (#L143); `06-database-design.md` `§6.1` (#L210–218); `07-api-specification.md` `§6` (#L156, #L170, #L178), `§12` (#L298).
+- **Bằng chứng:**
+  - Trên `origin/develop@5d89d8c`: `07 §6` (#L170, #L178) quy định điều kiện _chọn bộ_ (`POST /deck-selection`) và việc phiên `ended` từ chối token/draw/chọn bộ/action, nhưng chưa nêu rõ `GET /sessions/:id/deck-options` có bị chặn khi phiên đang `preparing`, `reconnecting` hoặc `ended` hay không.
+  - Trên nhánh chưa merge `origin/feature/BE-022-session-card-flow@a173c8e` (PR #59 `OPEN`, 0 review): đã triển khai cho phép thành viên đọc khi phiên chưa `ended`, reconcile deadline và trả `409 SESSION_ENDED` khi phiên đã `ended` (kèm đề xuất cập nhật `07 §6` và `openapi.yaml`), nhưng chưa được duyệt hoặc merge.
 - **Ảnh hưởng:** Nếu không thống nhất, BE có thể trả danh sách cho phiên `ended` hoặc chặn nhầm lúc một bên vừa mất kết nối tạm (`reconnecting`).
-- **Khuyến nghị:** Cho phép thành viên đọc khi phiên chưa `ended` (hoặc `active`/`reconnecting` trong giai đoạn chưa chọn bộ); trả `409 SESSION_ENDED` nếu phiên đã `ended` (theo mã lỗi hiện có tại `07 §12`).
+- **Khuyến nghị (chưa phải contract đã chấp thuận):** Cho phép thành viên đọc khi phiên chưa `ended` (`preparing`, `active`, `reconnecting`); trả `409 SESSION_ENDED` nếu phiên đã `ended` (sau khi reconcile deadline, theo mã lỗi hiện có tại `07 §12`).
 - **Người cần quyết định:** Reviewer **Yến Nhi** và **BE-022**.
 
-### Q3 (Cần chốt — Khoảng trống quy tắc lỗi): `POST /sessions/:id/deck-selection` khi `deckVersionId` ẩn, nháp, revision cũ hoặc sai loại
+### Q3 (Cần chốt — Chưa tìm thấy quyết định chính thức; khoảng trống quy tắc lỗi): `POST /sessions/:id/deck-selection` khi `deckVersionId` ẩn, nháp, revision cũ hoặc sai loại
 
 - **Nguồn:** `06-database-design.md` `§7.2` (#L287); `07-api-specification.md` `§6` (#L157, #L170), `§12` (#L294–304).
 - **Bằng chứng:**
   - `06 §7.2` (#L287) quy định: _"Danh mục chọn mới lấy bộ đang published và publishedVersionId."_
   - Bảng mã lỗi `07 §12` hiện có các mã liên quan: `404 RESOURCE_NOT_FOUND`, `403 CONTROL_REQUIRED`, `409 DECK_ALREADY_SELECTED`, `409 INVALID_SESSION_STATE`, `409 SESSION_ENDED`, `409 SESSION_RECONNECTING`, `409 VERSION_CONFLICT`, `422 VALIDATION_FAILED`.
-  - Hiện `07 §6` và `§12` chưa quy định cụ thể mã lỗi cho 3 trường hợp hợp lệ về cú pháp ObjectId nhưng không hợp lệ để chọn mới:
+  - Trên `origin/develop@5d89d8c`: `07 §6` và `§12` chưa quy định cụ thể mã lỗi cho 3 trường hợp hợp lệ về cú pháp ObjectId nhưng không hợp lệ để chọn mới:
     1. `deckVersionId` thuộc bộ đang `status: 'hidden'` hoặc `'draft'` (ví dụ: tại t=10s hai người tải `deck-options` thấy bộ A; tại t=20s Admin ẩn bộ A; tại t=25s controller gửi `deck-selection` với bộ A).
     2. `deckVersionId` là một revision cũ (`content_versions._id` tồn tại nhưng không còn là `content_items.publishedVersionId` hiện tại do Admin vừa xuất bản revision mới).
     3. `deckVersionId` thực chất là `contentId` (`content_items._id`) hoặc ID của `scenario`/`knowledge`/`question` thay vì `deck` version.
+  - Trên nhánh chưa merge `origin/feature/BE-022-session-card-flow@a173c8e` (PR #59 `OPEN`, 0 review): đang triển khai trả chung `404 RESOURCE_NOT_FOUND` cho cả 3 trường hợp trên (riêng bộ 0 tình huống trả `409 DECK_EXHAUSTED`) và đề xuất ghi quy tắc này vào `07 §6` + `openapi.yaml`, nhưng chưa được duyệt hoặc merge.
 - **Ảnh hưởng:** FE `SC-08` cần phân biệt tình huống dữ liệu cũ do race với Admin (để tải lại `deck-options`) với lỗi tài nguyên không tồn tại hoặc sai input; nếu không chốt, mỗi endpoint/task có thể tự trả mã khác nhau.
-- **Các phương án đối chiếu theo quy tắc lỗi hiện có (không tự chọn mã mới):**
+- **Các phương án đối chiếu theo quy tắc lỗi hiện có (chưa phải contract đã chấp thuận):**
   - _Phương án 1:_ Dùng `404 RESOURCE_NOT_FOUND` cho trường hợp (3) không tồn tại/sai kind, và dùng `409 INVALID_SESSION_STATE` (hoặc trình nhóm xem xét bổ sung mã riêng vào `07 §12` nếu muốn tách trạng thái bộ khỏi trạng thái phiên) cho (1) & (2) để client tải lại `deck-options`.
   - _Phương án 2:_ Dùng chung `404 RESOURCE_NOT_FOUND` cho cả (1), (2), (3) theo nguyên tắc tài nguyên không còn trong phạm vi chọn mới.
 - **Người cần quyết định:** Reviewer **Yến Nhi** cùng nhóm thiết kế API/BE-022/FE.
 
-### Q4 (Rủi ro phòng thủ cần xác minh — Chưa chứng minh được đường lộ thực tế): Fallback `draftPayload` trong `toTopicSummaryDto`
+### Q4 (Rủi ro phòng thủ — Chưa chứng minh đường lỗi trong vận hành bình thường): Fallback `draftPayload` trong `toTopicSummaryDto`
 
 - **Nguồn:** `06-database-design.md` `§12.1` (#L509); `server/modules/content/content-dto.js` (#L166–181); `server/modules/content/content-service.js` (#L807–861); `server/modules/content/content-repository.js` (#L203–217, #L345–383).
-- **Bằng chứng truy vết:**
-  - Đã grep toàn bộ `server/` và `tests/`: caller duy nhất của `toTopicSummaryDto(itemDoc, versionDoc)` là `listPublishedTopics` (`content-service.js#L857`).
+- **Bằng chứng truy vết (kiểm tra lại trên `origin/develop@5d89d8c`):**
+  - Đã grep toàn bộ `server/`, `client/` và `tests/`: caller duy nhất của `toTopicSummaryDto(itemDoc, versionDoc)` vẫn là `listPublishedTopics` (`content-service.js#L857`). Nhánh chưa merge `BE-022@a173c8e` không gọi `toTopicSummaryDto` mà đọc trực tiếp `version.payload` theo hướng fail-closed.
   - `listPublishedTopics` gọi `queryPublishedTopics` (`content-repository.js#L353-357`) lọc `{ kind: 'deck', status: 'published', publishedVersionId: { $ne: null } }`, sau đó load `content_versions` qua `findContentVersionsByIds`.
   - Trong luồng bình thường (`publishContentItemTx` / `seedContentDataset`), `content_versions` được chèn cùng transaction với việc gán `publishedVersionId` và là bản bất biến không bị xóa. Vì vậy `versionDoc` luôn tồn tại khi dữ liệu toàn vẹn; `versionDoc` chỉ thiếu nếu DB bị hỏng tham chiếu (`publishedVersionId` mồ côi).
-  - Tuy nhiên, dòng `const payload = versionDoc?.payload ?? itemDoc.draftPayload ?? {};` tại `content-dto.js#L167` có nhánh fallback về `itemDoc.draftPayload`.
-- **Ảnh hưởng:** Chưa có bằng chứng lộ `draftPayload` ở luồng vận hành hợp lệ; đây là **rủi ro phòng thủ cần xác minh** nếu xảy ra lỗi dữ liệu mồ côi hoặc khi có caller mới truyền thiếu `versionDoc`.
+  - Tuy nhiên, dòng `const payload = versionDoc?.payload ?? itemDoc.draftPayload ?? {};` tại `content-dto.js#L167` vẫn còn nhánh fallback về `itemDoc.draftPayload`.
+- **Ảnh hưởng:** Chưa chứng minh được đường lộ `draftPayload` trong vận hành bình thường; đây là **rủi ro phòng thủ** nếu xảy ra lỗi dữ liệu mồ côi hoặc khi có caller mới truyền thiếu `versionDoc`.
 - **Khuyến nghị:** Khi có task chỉnh sửa module `content`, bỏ fallback `itemDoc.draftPayload` tại `toTopicSummaryDto` (fail-closed hoặc bỏ qua item thiếu `versionDoc`).
 - **Người cần quyết định:** Reviewer **Yến Nhi** và owner module `content`.
 
@@ -154,18 +163,13 @@ Rà soát contract giữa các nguồn:
 
 ---
 
-## 5. Kết quả kiểm chứng
+## 5. Kết quả kiểm chứng và bằng chứng review
 
-- **Runtime & cài đặt:** Đã kiểm tra runtime tại `C:\Users\This MC\AppData\Local\OpenAI\Codex\runtimes\cua_node\bbc9141fe9f920ac\bin` (`Node v24.22.1`) và `corepack npm` (`11.21.1` theo `packageManager` trong `package.json`); chạy `corepack npm ci` thành công tại `D:\cn web\worktree-qa006`.
-- **Kết quả `corepack npm run check`:** **Pass 100% (7/7 bước)** trên `Node v24.22.1` + `npm@11.21.1`:
-  - `format:check`: Pass (`prettier --check .`).
-  - `lint`: Pass (`eslint . --max-warnings=0`).
-  - `typecheck`: Pass (`tsc -p client/jsconfig.json && tsc -p server/jsconfig.json && tsc -p jsconfig.json`).
-  - `test`: **25 files, 349/349 tests passed**.
-  - `test:integration`: **16 files, 183/183 tests passed** (MongoDB replica set tạm).
-  - `build`: Pass (`vite build`, `node --check server/app.js`, `node --check api/index.js`).
-  - `build-storybook`: Pass (cảnh báo chunk > 500 kB, không chặn build).
-- **Trạng thái Git tại `D:\cn web\worktree-qa006`:**
-  - Nhánh: `test/QA-006-review-deck-selection-manifest` (base `origin/develop@93f1593`).
-  - Working tree **chưa sạch** vì còn 3 file thay đổi/chưa track của QA-006 chưa commit (`docs/PROGRESS-TRACKER.md`, `docs/qa/QA-006-deck-selection-manifest-review.md`, `tests/fixtures/deck-selection-fixtures.js`).
-  - `git diff --check`: không có lỗi whitespace.
+- **Bằng chứng PR #52 (đã merge vào `develop`):**
+  - Merge commit: `7250727` (`7250727c2859e5f5feddbabbcc5e66b5a406bd15`), ngày `2026-11-16` (`2026-11-16T10:03:16Z`).
+  - Review trên GitHub: tài khoản `nt-thuyr` đã gửi `APPROVED` lúc `2026-11-16T10:03:04Z` với body trống (0 review comments). Đây là bằng chứng review/approval hợp lệ cho PR #52 (không suy đoán mapping tài khoản GitHub nếu chưa xác minh), nhưng không thay thế cho quyết định bằng văn bản của nhóm đối với từng câu hỏi Q1, Q2b và Q3.
+  - Kiểm chứng tự động tại PR #52 (`Node v24.22.1`, `npm@11.21.1`): `corepack npm ci` và `corepack npm run check` pass (format, lint 0 warnings, typecheck 0 errors, 25 files / 349 unit/HTTP/component tests, 16 files / 183 integration tests trên MongoDB replica set tạm, build và Storybook).
+- **Rà soát lại trên `origin/develop@5d89d8c` (2026-11-22):**
+  - Xác minh `docs/design/01–07`, `server/modules/content/`, `server/persistence/models/` và `tests/fixtures/deck-selection-fixtures.js` không có thay đổi làm sai lệch fixtures kể từ `93f1593`.
+  - Xác minh `FE-004` (PR #56, đã merge) đã có `DeckPicker.jsx` hiển thị `{deck.count} tình huống`; còn `BE-022` hiện mở PR #59 (`origin/feature/BE-022-session-card-flow@a173c8e`, 0 review, chưa merge).
+  - Kiểm tra đợt cập nhật tài liệu trên nhánh `docs/QA-006-update-review-evidence`: format (`prettier --check`), kiểm tra liên kết tương đối và `git diff --check`. Không thay đổi code chức năng, fixture, `docs/design/01–07` hoặc `docs/api/openapi.yaml`.

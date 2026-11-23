@@ -93,22 +93,9 @@ export async function readDeckOptions({ sessionId, identity, limit, cursor }) {
       { limit, cursor: decoded },
       { session },
     );
-    const versions = await findContentVersionsByIds(
-      db,
-      items.map((item) => item.publishedVersionId),
-      { session },
-    );
-    const byId = new Map(
-      versions.map((version) => [String(version._id), version]),
-    );
     return {
-      items: items.map((item) => {
-        const version = byId.get(String(item.publishedVersionId));
-        if (
-          !version ||
-          version.kind !== 'deck' ||
-          !item._id.equals(version.contentId)
-        ) {
+      items: items.map(({ item, version }) => {
+        if (version.kind !== 'deck' || !item._id.equals(version.contentId)) {
           throw new Error('Invalid published deck revision');
         }
         const { title, level, description, scenarioVersionIds } =
@@ -123,7 +110,8 @@ export async function readDeckOptions({ sessionId, identity, limit, cursor }) {
         };
       }),
       nextCursor: hasMore
-        ? context + encodeContentCursor(items[items.length - 1], deckFilters)
+        ? context +
+          encodeContentCursor(items[items.length - 1].item, deckFilters)
         : null,
     };
   });
