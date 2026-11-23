@@ -76,6 +76,29 @@ export function validateNewPasswordInput(rawPassword) {
 }
 
 /**
+ * Validates confirmNewPassword without trimming or Unicode normalization.
+ *
+ * @param {string} newPassword
+ * @param {string} confirmNewPassword
+ * @returns {string | null}
+ */
+export function validateConfirmNewPasswordInput(
+  newPassword,
+  confirmNewPassword,
+) {
+  if (
+    typeof confirmNewPassword !== 'string' ||
+    confirmNewPassword.length === 0
+  ) {
+    return 'Vui lòng nhập lại mật khẩu mới để xác nhận.';
+  }
+  if (confirmNewPassword !== newPassword) {
+    return 'Mật khẩu xác nhận không khớp với mật khẩu mới.';
+  }
+  return null;
+}
+
+/**
  * Validates currentPassword according to 07 §2.3 & §4:
  * Non-empty string, <= 128 Unicode code points; no trimming.
  *

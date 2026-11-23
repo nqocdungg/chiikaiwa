@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
-import logo from '../../assets/brand/chii-logo.svg';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { Button } from '../../components/ui/controls.jsx';
 import { Input, PasswordInput, Select } from '../../components/ui/forms.jsx';
 import { Avatar, Badge, Card } from '../../components/ui/surfaces.jsx';
@@ -13,6 +12,7 @@ import {
   buildProfilePatchPayload,
   createDraftFromUser,
   mergeDraftChangesOntoUser,
+  validateConfirmNewPasswordInput,
   validateCurrentPasswordInput,
   validateDisplayNameInput,
   validateNewPasswordInput,
@@ -49,6 +49,34 @@ const SESSION_EXPIRED_RELOGIN_NOTICE =
   'Phiên đăng nhập đã hết hạn hoặc không còn hiệu lực. Vui lòng đăng nhập lại.';
 
 /**
+ * Resolves the active SC-04 section from location.hash.
+ * @param {string} hash
+ * @returns {'overview' | 'edit' | 'password'}
+ */
+function resolveProfileSection(hash) {
+  if (hash === '#profile-section-heading') {
+    return 'edit';
+  }
+  if (hash === '#password-change-section-heading') {
+    return 'password';
+  }
+  return 'overview';
+}
+
+/**
+ * Resolves a human-readable Vietnamese label from catalog items.
+ * @param {CatalogItem[]} options
+ * @param {string} code
+ * @returns {string}
+ */
+function findCatalogLabel(options, code) {
+  if (!code) {
+    return '';
+  }
+  return options.find((item) => item.code === code)?.label ?? code;
+}
+
+/**
  * @param {Object} props
  * @param {SelfUser} props.initialUser
  * @param {string} props.role
@@ -63,6 +91,8 @@ function ProfileWorkspace({
   onSessionRevoked,
   onRefreshSession,
 }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -76,7 +106,6 @@ function ProfileWorkspace({
     /** @type {SelfUser} */ (initialUser),
   );
   const [draft, setDraft] = useState(() => createDraftFromUser(initialUser));
-  const [isDirty, setIsDirty] = useState(false);
 
   const [catalogs, setCatalogs] = useState(
     /** @type {CatalogsData | null} */ (null),
@@ -118,6 +147,7 @@ function ProfileWorkspace({
   // Change password form state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordError, setPasswordError] = useState(
     /** @type {string | null} */ (null),
@@ -198,7 +228,6 @@ function ProfileWorkspace({
    */
   const updateDraftField = (field, value, errorFieldKey) => {
     setDraft((prev) => ({ ...prev, [field]: value }));
-    setIsDirty(true);
     setProfileSuccess(null);
     setProfileError(null);
     retryIntentRef.current = { payloadHash: '', idempotencyKey: null };
@@ -229,7 +258,6 @@ function ProfileWorkspace({
       : [...draft.interests, code];
 
     setDraft((prev) => ({ ...prev, interests: next }));
-    setIsDirty(true);
     setProfileSuccess(null);
     setProfileError(null);
     retryIntentRef.current = { payloadHash: '', idempotencyKey: null };
@@ -256,7 +284,6 @@ function ProfileWorkspace({
    */
   const handleResetDraft = () => {
     setDraft(createDraftFromUser(baseUser));
-    setIsDirty(false);
     setProfileFieldErrors({});
     setProfileError(null);
     setProfileSuccess(null);
@@ -318,7 +345,6 @@ function ProfileWorkspace({
       const updatedSelf = /** @type {SelfUser} */ (res.data);
       setBaseUser(updatedSelf);
       setDraft(createDraftFromUser(updatedSelf));
-      setIsDirty(false);
       setConflictState(null);
       setIdentityConflictMessage(null);
       setProfileFieldErrors({});
@@ -448,12 +474,10 @@ function ProfileWorkspace({
         setConflictState(null);
 
         if (keepCurrentDraft) {
-          setIsDirty(true);
           setProfileSuccess(
-            `Đã đồng bộ phiên bản mới nhất (v${latestUser.version}). Nội dung bạn đang nhập được giữ nguyên, hãy kiểm tra và bấm "Lưu hồ sơ".`,
+            `Đã đồng bộ phiên bản mới nhất (v${latestUser.version}). Nội dung bạn đang nhập được giữ nguyên, hãy kiểm tra và bấm "Lưu thay đổi".`,
           );
         } else {
-          setIsDirty(false);
           setProfileFieldErrors({});
           setProfileSuccess(
             `Đã tải lại dữ liệu mới nhất từ máy chủ (v${latestUser.version}).`,
@@ -514,8 +538,12 @@ function ProfileWorkspace({
 
     const currentPasswordErr = validateCurrentPasswordInput(currentPassword);
     const newPasswordErr = validateNewPasswordInput(newPassword);
+    const confirmNewPasswordErr = validateConfirmNewPasswordInput(
+      newPassword,
+      confirmNewPassword,
+    );
 
-    if (currentPasswordErr || newPasswordErr) {
+    if (currentPasswordErr || newPasswordErr || confirmNewPasswordErr) {
       /** @type {Record<string, string>} */
       const nextErrors = {};
       if (currentPasswordErr) {
@@ -523,6 +551,9 @@ function ProfileWorkspace({
       }
       if (newPasswordErr) {
         nextErrors.newPassword = newPasswordErr;
+      }
+      if (confirmNewPasswordErr) {
+        nextErrors.confirmNewPassword = confirmNewPasswordErr;
       }
       setPasswordFieldErrors(nextErrors);
       return;
@@ -631,556 +662,818 @@ function ProfileWorkspace({
   const isAdmin = baseUser.role === 'admin' || role === 'admin';
   const avatarDisplayName =
     draft.displayName.trim() || baseUser.displayName || 'U';
+  const basePathname = location.pathname || '/profile';
+  const activeSection = resolveProfileSection(location.hash);
+
+  const savedProfile = baseUser.profile ?? {};
+  const savedDisplayName = baseUser.displayName?.trim() || 'Người học';
+  const savedLevelLabel =
+    typeof savedProfile.level === 'string' && savedProfile.level
+      ? findCatalogLabel(levelOptions, savedProfile.level)
+      : '';
+  const savedAvatarLabel = findCatalogLabel(
+    avatarOptions,
+    baseUser.avatarKey || DEFAULT_AVATAR_KEY,
+  );
+  const savedGoalLabel =
+    typeof savedProfile.goal === 'string' && savedProfile.goal
+      ? findCatalogLabel(goalOptions, savedProfile.goal)
+      : '';
+  const savedPersonalDetails = [
+    typeof savedProfile.nativeLanguageCode === 'string' &&
+    savedProfile.nativeLanguageCode
+      ? findCatalogLabel(languageOptions, savedProfile.nativeLanguageCode)
+      : '',
+    typeof savedProfile.countryCode === 'string' && savedProfile.countryCode
+      ? findCatalogLabel(countryOptions, savedProfile.countryCode)
+      : '',
+    typeof savedProfile.ageGroup === 'string' && savedProfile.ageGroup
+      ? findCatalogLabel(ageGroupOptions, savedProfile.ageGroup)
+      : '',
+    typeof savedProfile.gender === 'string' && savedProfile.gender
+      ? findCatalogLabel(genderOptions, savedProfile.gender)
+      : '',
+  ].filter(Boolean);
+  const savedInterestLabels = Array.isArray(savedProfile.interests)
+    ? savedProfile.interests
+        .filter((code) => typeof code === 'string' && code.length > 0)
+        .map((code) => findCatalogLabel(interestOptions, code))
+    : [];
+
+  const handleStartEdit = () => {
+    setProfileSuccess(null);
+    navigate({ pathname: basePathname, hash: '#profile-section-heading' });
+  };
+
+  const handleCancelEdit = () => {
+    handleResetDraft();
+    navigate({ pathname: basePathname, hash: '' });
+  };
+
+  const catalogsAlert = catalogsError ? (
+    <div className="ck-alert ck-alert--warning" role="alert">
+      <div className="ck-alert__body">
+        <strong>Chưa tải được danh mục lựa chọn</strong>
+        <p className="mt-1">{catalogsError}</p>
+      </div>
+      <Button
+        variant="secondary"
+        size="compact"
+        onClick={handleRetryCatalogs}
+        disabled={catalogsLoading}
+      >
+        {catalogsLoading ? 'Đang tải...' : 'Thử tải lại danh mục'}
+      </Button>
+    </div>
+  ) : null;
 
   return (
-    <section data-screen-id="SC-04" className="ck-account-page">
-      <div className="ck-account-topbar">
-        <Link
-          className="ck-brand-lockup"
-          to={isAdmin ? '/admin' : '/home'}
-          aria-label="Chiikaiwa, trang chính"
-        >
-          <img src={logo} alt="" />
-          <span>Chiikaiwa</span>
-        </Link>
-        <nav aria-label="Điều hướng tài khoản">
-          {!isAdmin ? (
-            <Link to="/blocks" className="ck-text-button">
-              Danh sách chặn
+    <section data-screen-id="SC-04" className="ck-account-page ck-profile-page">
+      <h1 className="sr-only">Hồ sơ cá nhân</h1>
+
+      <div className="ck-account-layout">
+        <aside className="ck-account-sidebar" aria-label="Cài đặt tài khoản">
+          <div className="ck-account-sidebar__head">
+            <p className="ck-account-eyebrow" lang="ja">
+              アカウント
+            </p>
+            <h2 className="ck-account-sidebar__title">Tài khoản</h2>
+          </div>
+
+          <nav
+            className="ck-account-sidebar__nav"
+            aria-label="Điều hướng tài khoản"
+          >
+            <Link
+              to={{ pathname: basePathname, hash: '' }}
+              aria-current={activeSection === 'overview' ? 'page' : undefined}
+              className={`ck-account-sidebar__item ${activeSection === 'overview' ? 'ck-account-sidebar__item--active' : ''}`}
+            >
+              <strong>Hồ sơ của tôi</strong>
+              <small>Thông tin công khai</small>
             </Link>
-          ) : null}
-          <Link
-            to={isAdmin ? '/admin' : '/home'}
-            className="ck-button ck-button--secondary"
-          >
-            {isAdmin ? 'Khu vực quản trị' : 'Về trang chính'}
-          </Link>
-        </nav>
-      </div>
-
-      <header className="ck-account-header">
-        <div className="ck-account-identity">
-          <Avatar name={avatarDisplayName} size={48} />
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Hồ sơ cá nhân</h1>
-            <p className="mt-1 text-muted">
-              Cập nhật thông tin hiển thị, mục tiêu học tập và bảo mật tài
-              khoản.
-            </p>
-          </div>
-        </div>
-        <div className="ck-account-meta">
-          <Badge>{baseUser.email}</Badge>
-          <Badge tone="accent">
-            Vai trò: {isAdmin ? 'Quản trị' : 'Học viên'}
-          </Badge>
-          <Badge>Phiên bản hồ sơ: v{baseUser.version}</Badge>
-        </div>
-      </header>
-
-      {catalogsError ? (
-        <div className="ck-alert ck-alert--warning" role="alert">
-          <div className="ck-alert__body">
-            <strong>Chưa tải được danh mục lựa chọn</strong>
-            <p className="mt-1">{catalogsError}</p>
-          </div>
-          <Button
-            variant="secondary"
-            onClick={handleRetryCatalogs}
-            disabled={catalogsLoading}
-          >
-            {catalogsLoading ? 'Đang tải...' : 'Thử tải lại danh mục'}
-          </Button>
-        </div>
-      ) : null}
-
-      <div className="ck-account-grid">
-        {/* Card 1: Profile Form */}
-        <Card className="ck-account-card">
-          <div className="ck-card__header">
-            <h2
-              id="profile-section-heading"
-              className="text-lg font-semibold text-ink"
+            <Link
+              to={{ pathname: basePathname, hash: '#profile-section-heading' }}
+              aria-current={activeSection === 'edit' ? 'page' : undefined}
+              className={`ck-account-sidebar__item ${activeSection === 'edit' ? 'ck-account-sidebar__item--active' : ''}`}
             >
-              Thông tin &amp; mục tiêu học tập
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              Các trường tùy chọn có thể để trống hoặc chọn &ldquo;Chưa chọn /
-              Xóa lựa chọn&rdquo; để gỡ thông tin đã lưu.
-            </p>
-          </div>
-
-          {profileSuccess ? (
-            <div
-              className="ck-alert ck-alert--success mb-4"
-              role="status"
-              aria-live="polite"
+              <strong>Chỉnh sửa hồ sơ</strong>
+              <small>Tên, trình độ, chủ đề</small>
+            </Link>
+            <Link
+              to={{
+                pathname: basePathname,
+                hash: '#password-change-section-heading',
+              }}
+              aria-current={activeSection === 'password' ? 'page' : undefined}
+              className={`ck-account-sidebar__item ${activeSection === 'password' ? 'ck-account-sidebar__item--active' : ''}`}
             >
-              <p>{profileSuccess}</p>
-            </div>
-          ) : null}
+              <strong>Đổi mật khẩu</strong>
+              <small>Bảo mật tài khoản</small>
+            </Link>
+            {!isAdmin ? (
+              <Link to="/blocks" className="ck-account-sidebar__item">
+                <strong>Danh sách đã chặn</strong>
+                <small>Quản lý người đã chặn</small>
+              </Link>
+            ) : null}
+          </nav>
+        </aside>
 
-          {profileError ? (
-            <div className="ck-alert ck-alert--error mb-4" role="alert">
-              <p>{profileError}</p>
-            </div>
-          ) : null}
+        <div className="ck-account-main">
+          {activeSection === 'overview' ? (
+            <>
+              <header className="ck-account-section-header">
+                <p className="ck-account-eyebrow" lang="ja">
+                  プロフィール
+                </p>
+                <h2 className="ck-account-section-title">Hồ sơ của tôi</h2>
+                <p className="ck-account-section-subtitle">
+                  Thông tin này giúp bạn luyện hiểu thêm về bạn trước khi bắt
+                  đầu hội thoại.
+                </p>
+              </header>
 
-          {identityConflictMessage ? (
-            <div className="ck-alert ck-alert--error mb-4" role="alert">
-              <div>
-                <strong className="block">
-                  Tài khoản đăng nhập đã thay đổi
-                </strong>
-                <p className="mt-1">{identityConflictMessage}</p>
-                <div className="ck-actions mt-3">
+              {catalogsAlert}
+
+              {profileSuccess ? (
+                <div
+                  className="ck-alert ck-alert--success"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p>{profileSuccess}</p>
+                </div>
+              ) : null}
+
+              <Card className="ck-profile-card ck-profile-card--overview">
+                <div className="ck-profile-overview__top">
+                  <div className="ck-profile-overview__identity">
+                    <Avatar
+                      name={savedDisplayName}
+                      size={64}
+                      className="ck-profile-overview__avatar"
+                    />
+                    <div className="ck-profile-overview__meta">
+                      <div className="ck-profile-overview__name-row">
+                        <strong className="ck-profile-overview__name">
+                          {savedDisplayName}
+                        </strong>
+                        {savedLevelLabel ? (
+                          <Badge tone="accent">{savedLevelLabel}</Badge>
+                        ) : null}
+                        {isAdmin ? <Badge tone="accent">Quản trị</Badge> : null}
+                      </div>
+                      <span className="ck-profile-overview__email">
+                        {baseUser.email}
+                      </span>
+                    </div>
+                  </div>
+
                   <Button
                     type="button"
                     variant="primary"
-                    onClick={handleReloadProfile}
-                    loading={isReloadingProfile}
+                    size="compact"
+                    className="ck-profile-action-btn ck-profile-overview__edit-btn"
+                    onClick={handleStartEdit}
                   >
-                    {isReloadingProfile ? 'Đang tải lại...' : 'Tải lại hồ sơ'}
+                    Chỉnh sửa hồ sơ
                   </Button>
                 </div>
-              </div>
-            </div>
+
+                <dl className="ck-profile-overview__dl">
+                  <div className="ck-profile-overview__row">
+                    <dt>Ảnh đại diện</dt>
+                    <dd>{savedAvatarLabel}</dd>
+                  </div>
+                  <div className="ck-profile-overview__row">
+                    <dt>Mục tiêu học</dt>
+                    <dd>
+                      {savedGoalLabel || (
+                        <span className="text-muted">Chưa cập nhật</span>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="ck-profile-overview__row">
+                    <dt>Thông tin cá nhân</dt>
+                    <dd>
+                      {savedPersonalDetails.length > 0 ? (
+                        savedPersonalDetails.join(' · ')
+                      ) : (
+                        <span className="text-muted">Chưa cập nhật</span>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="ck-profile-overview__row">
+                    <dt>Chủ đề yêu thích</dt>
+                    <dd>
+                      {savedInterestLabels.length > 0 ? (
+                        <div className="ck-profile-topic-list">
+                          {savedInterestLabels.map((label) => (
+                            <span key={label} className="ck-profile-topic-tag">
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted">
+                          Chưa chọn chủ đề yêu thích
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </Card>
+            </>
           ) : null}
 
-          {conflictState ? (
-            <div className="ck-alert ck-alert--warning mb-4" role="alert">
-              <div>
-                <strong className="block">Xung đột phiên bản dữ liệu</strong>
-                <p className="mt-1">{conflictState.message}</p>
-                {conflictState.currentVersion !== null ? (
-                  <p className="mt-1 text-sm">
-                    Phiên bản trên máy chủ hiện tại: v
-                    {conflictState.currentVersion} (phiên bản biểu mẫu đang giữ:
-                    v{baseUser.version}). Nội dung bạn vừa nhập vẫn được giữ
-                    nguyên.
-                  </p>
-                ) : null}
-                <div className="ck-actions mt-3">
-                  <Button
-                    variant="primary"
-                    onClick={() => handleResolveConflict(true)}
-                    loading={isSyncingConflict}
-                  >
-                    {isSyncingConflict
-                      ? 'Đang đồng bộ...'
-                      : 'Đồng bộ phiên bản mới và giữ nội dung đang nhập'}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => handleResolveConflict(false)}
-                    disabled={isSyncingConflict}
-                  >
-                    Hoàn tác theo dữ liệu máy chủ
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ) : null}
+          {activeSection === 'edit' ? (
+            <>
+              <header className="ck-account-section-header">
+                <p className="ck-account-eyebrow" lang="ja">
+                  プロフィール編集
+                </p>
+                <h2
+                  id="profile-section-heading"
+                  className="ck-account-section-title"
+                >
+                  Chỉnh sửa hồ sơ
+                </h2>
+                <p className="ck-account-section-subtitle">
+                  Cập nhật thông tin để tìm được những người luyện có cùng sở
+                  thích.
+                </p>
+              </header>
 
-          <form className="ck-form" onSubmit={handleProfileSubmit} noValidate>
-            <fieldset
-              className="ck-form border-0 p-0 m-0 min-w-0"
-              disabled={
-                profileSubmitting ||
-                isSyncingConflict ||
-                Boolean(identityConflictMessage)
-              }
-            >
-              {/* Display Name */}
-              <Input
-                id="profile-display-name"
-                name="displayName"
-                type="text"
-                label="Tên hiển thị"
-                required
-                value={draft.displayName}
-                onChange={(e) =>
-                  updateDraftField('displayName', e.target.value, 'displayName')
-                }
-                helperText="Từ 1 đến 100 ký tự (khoảng trắng đầu/cuối sẽ tự động được cắt gọn)."
-                error={displayNameError}
-              />
+              {catalogsAlert}
 
-              {/* Avatar preset */}
-              <fieldset className="ck-fieldset">
-                <legend className="ck-legend">
-                  Ảnh đại diện (Avatar preset)
-                </legend>
+              {profileSuccess ? (
                 <div
-                  className="ck-choice-grid"
-                  role="radiogroup"
-                  aria-label="Chọn ảnh đại diện"
+                  className="ck-alert ck-alert--success"
+                  role="status"
+                  aria-live="polite"
                 >
-                  {avatarOptions.map((item) => {
-                    const isSelected = draft.avatarKey === item.code;
-                    return (
-                      <label
-                        key={item.code}
-                        className={`ck-choice-chip ${isSelected ? 'ck-choice-chip--selected' : ''}`}
-                      >
-                        <input
-                          type="radio"
-                          name="avatarKey"
-                          value={item.code}
-                          checked={isSelected}
-                          onChange={() =>
-                            updateDraftField(
-                              'avatarKey',
-                              item.code,
-                              'avatarKey',
-                            )
-                          }
-                        />
-                        <span>{item.label}</span>
-                      </label>
-                    );
-                  })}
+                  <p>{profileSuccess}</p>
                 </div>
-                {avatarKeyError ? (
-                  <p
-                    className="ck-field__message ck-field__message--error"
-                    role="alert"
-                  >
-                    {avatarKeyError}
-                  </p>
-                ) : null}
-              </fieldset>
+              ) : null}
 
-              {/* Optional select fields */}
-              <div className="ck-form-row">
-                <Select
-                  label="Trình độ tiếng Nhật"
-                  id="profile-level"
-                  error={levelError}
-                  name="level"
-                  value={draft.level}
-                  onChange={(e) =>
-                    updateDraftField('level', e.target.value, 'profile.level')
-                  }
-                  disabled={catalogsLoading && levelOptions.length === 0}
-                >
-                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                  {draft.level &&
-                  !levelOptions.some((opt) => opt.code === draft.level) ? (
-                    <option value={draft.level}>{draft.level}</option>
-                  ) : null}
-                  {levelOptions.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.label}
-                    </option>
-                  ))}
-                </Select>
-
-                <Select
-                  label="Mục tiêu học"
-                  id="profile-goal"
-                  error={goalError}
-                  name="goal"
-                  value={draft.goal}
-                  onChange={(e) =>
-                    updateDraftField('goal', e.target.value, 'profile.goal')
-                  }
-                  disabled={catalogsLoading && goalOptions.length === 0}
-                >
-                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                  {draft.goal &&
-                  !goalOptions.some((opt) => opt.code === draft.goal) ? (
-                    <option value={draft.goal}>{draft.goal}</option>
-                  ) : null}
-                  {goalOptions.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div className="ck-form-row">
-                <Select
-                  label="Tiếng mẹ đẻ"
-                  id="profile-native-language"
-                  error={nativeLangError}
-                  name="nativeLanguageCode"
-                  value={draft.nativeLanguageCode}
-                  onChange={(e) =>
-                    updateDraftField(
-                      'nativeLanguageCode',
-                      e.target.value,
-                      'profile.nativeLanguageCode',
-                    )
-                  }
-                  disabled={catalogsLoading && languageOptions.length === 0}
-                >
-                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                  {draft.nativeLanguageCode &&
-                  !languageOptions.some(
-                    (opt) => opt.code === draft.nativeLanguageCode,
-                  ) ? (
-                    <option value={draft.nativeLanguageCode}>
-                      {draft.nativeLanguageCode}
-                    </option>
-                  ) : null}
-                  {languageOptions.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.label}
-                    </option>
-                  ))}
-                </Select>
-
-                <Select
-                  label="Quốc gia đang sinh sống"
-                  id="profile-country"
-                  error={countryError}
-                  name="countryCode"
-                  value={draft.countryCode}
-                  onChange={(e) =>
-                    updateDraftField(
-                      'countryCode',
-                      e.target.value,
-                      'profile.countryCode',
-                    )
-                  }
-                  disabled={catalogsLoading && countryOptions.length === 0}
-                >
-                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                  {draft.countryCode &&
-                  !countryOptions.some(
-                    (opt) => opt.code === draft.countryCode,
-                  ) ? (
-                    <option value={draft.countryCode}>
-                      {draft.countryCode}
-                    </option>
-                  ) : null}
-                  {countryOptions.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div className="ck-form-row">
-                <Select
-                  label="Nhóm tuổi"
-                  id="profile-age-group"
-                  error={ageGroupError}
-                  name="ageGroup"
-                  value={draft.ageGroup}
-                  onChange={(e) =>
-                    updateDraftField(
-                      'ageGroup',
-                      e.target.value,
-                      'profile.ageGroup',
-                    )
-                  }
-                  disabled={catalogsLoading && ageGroupOptions.length === 0}
-                >
-                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                  {draft.ageGroup &&
-                  !ageGroupOptions.some(
-                    (opt) => opt.code === draft.ageGroup,
-                  ) ? (
-                    <option value={draft.ageGroup}>{draft.ageGroup}</option>
-                  ) : null}
-                  {ageGroupOptions.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.label}
-                    </option>
-                  ))}
-                </Select>
-
-                <Select
-                  label="Giới tính"
-                  id="profile-gender"
-                  error={genderError}
-                  name="gender"
-                  value={draft.gender}
-                  onChange={(e) =>
-                    updateDraftField('gender', e.target.value, 'profile.gender')
-                  }
-                  disabled={catalogsLoading && genderOptions.length === 0}
-                >
-                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                  {draft.gender &&
-                  !genderOptions.some((opt) => opt.code === draft.gender) ? (
-                    <option value={draft.gender}>{draft.gender}</option>
-                  ) : null}
-                  {genderOptions.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              {/* Interests (max 3) */}
-              <fieldset className="ck-fieldset">
-                <legend className="ck-legend">
-                  Sở thích ({draft.interests.length}/{MAX_PROFILE_INTERESTS})
-                </legend>
-                <small className="text-muted">
-                  Chọn tối đa {MAX_PROFILE_INTERESTS} chủ đề bạn muốn trò chuyện
-                  khi ghép đôi.
-                </small>
-                <div
-                  className="ck-choice-grid mt-2"
-                  role="group"
-                  aria-label="Chọn sở thích"
-                >
-                  {interestOptions.map((item) => {
-                    const isChecked = draft.interests.includes(item.code);
-                    const isMaxReached =
-                      !isChecked &&
-                      draft.interests.length >= MAX_PROFILE_INTERESTS;
-                    return (
-                      <label
-                        key={item.code}
-                        className={`ck-choice-chip ${isChecked ? 'ck-choice-chip--selected' : ''} ${isMaxReached ? 'ck-choice-chip--disabled' : ''}`}
-                      >
-                        <input
-                          type="checkbox"
-                          name="interests"
-                          value={item.code}
-                          checked={isChecked}
-                          onChange={() => handleToggleInterest(item.code)}
-                        />
-                        <span>{item.label}</span>
-                      </label>
-                    );
-                  })}
+              {profileError ? (
+                <div className="ck-alert ck-alert--error" role="alert">
+                  <p>{profileError}</p>
                 </div>
-                {interestsError ? (
-                  <p
-                    className="ck-field__message ck-field__message--error"
-                    role="alert"
+              ) : null}
+
+              {identityConflictMessage ? (
+                <div className="ck-alert ck-alert--error" role="alert">
+                  <div>
+                    <strong className="block">
+                      Tài khoản đăng nhập đã thay đổi
+                    </strong>
+                    <p className="mt-1">{identityConflictMessage}</p>
+                    <div className="ck-actions mt-3">
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="compact"
+                        onClick={handleReloadProfile}
+                        loading={isReloadingProfile}
+                      >
+                        {isReloadingProfile
+                          ? 'Đang tải lại...'
+                          : 'Tải lại hồ sơ'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {conflictState ? (
+                <div className="ck-alert ck-alert--warning" role="alert">
+                  <div>
+                    <strong className="block">
+                      Xung đột phiên bản dữ liệu
+                    </strong>
+                    <p className="mt-1">{conflictState.message}</p>
+                    {conflictState.currentVersion !== null ? (
+                      <p className="mt-1 text-sm">
+                        Dữ liệu trên máy chủ hiện mới hơn bản biểu mẫu bạn đang
+                        mở. Nội dung bạn vừa nhập vẫn được giữ nguyên.
+                      </p>
+                    ) : null}
+                    <div className="ck-actions mt-3">
+                      <Button
+                        variant="primary"
+                        size="compact"
+                        onClick={() => handleResolveConflict(true)}
+                        loading={isSyncingConflict}
+                      >
+                        {isSyncingConflict
+                          ? 'Đang đồng bộ...'
+                          : 'Đồng bộ phiên bản mới và giữ nội dung đang nhập'}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="compact"
+                        onClick={() => handleResolveConflict(false)}
+                        disabled={isSyncingConflict}
+                      >
+                        Hoàn tác theo dữ liệu máy chủ
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <Card className="ck-profile-card">
+                <form
+                  className="ck-form"
+                  onSubmit={handleProfileSubmit}
+                  noValidate
+                >
+                  <fieldset
+                    className="ck-form border-0 p-0 m-0 min-w-0"
+                    disabled={
+                      profileSubmitting ||
+                      isSyncingConflict ||
+                      Boolean(identityConflictMessage)
+                    }
                   >
-                    {interestsError}
-                  </p>
-                ) : null}
-              </fieldset>
+                    {/* Avatar preset */}
+                    <div className="ck-profile-avatar-row">
+                      <Avatar
+                        name={avatarDisplayName}
+                        size={64}
+                        className="ck-profile-overview__avatar"
+                      />
+                      <fieldset className="ck-fieldset flex-1 min-w-0">
+                        <legend className="ck-legend">
+                          Ảnh đại diện (Avatar preset)
+                        </legend>
+                        <div
+                          className="ck-choice-grid"
+                          role="radiogroup"
+                          aria-label="Chọn ảnh đại diện"
+                        >
+                          {avatarOptions.map((item) => {
+                            const isSelected = draft.avatarKey === item.code;
+                            return (
+                              <label
+                                key={item.code}
+                                className={`ck-choice-chip ${isSelected ? 'ck-choice-chip--selected' : ''}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="avatarKey"
+                                  value={item.code}
+                                  checked={isSelected}
+                                  onChange={() =>
+                                    updateDraftField(
+                                      'avatarKey',
+                                      item.code,
+                                      'avatarKey',
+                                    )
+                                  }
+                                />
+                                <span>{item.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {avatarKeyError ? (
+                          <p
+                            className="ck-field__message ck-field__message--error"
+                            role="alert"
+                          >
+                            {avatarKeyError}
+                          </p>
+                        ) : null}
+                      </fieldset>
+                    </div>
 
-              <div className="ck-actions mt-4">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  loading={profileSubmitting}
-                  disabled={isSyncingConflict}
-                >
-                  {profileSubmitting ? 'Đang lưu hồ sơ...' : 'Lưu hồ sơ'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleResetDraft}
-                  disabled={
-                    profileSubmitting ||
-                    isSyncingConflict ||
-                    (!isDirty &&
-                      Object.keys(profileFieldErrors).length === 0 &&
-                      !profileError)
-                  }
-                >
-                  Hoàn tác thay đổi
-                </Button>
-              </div>
-            </fieldset>
-          </form>
-        </Card>
+                    {/* Display Name + Read-only Email */}
+                    <div className="ck-form-row">
+                      <Input
+                        id="profile-display-name"
+                        name="displayName"
+                        type="text"
+                        label="Tên hiển thị"
+                        required
+                        value={draft.displayName}
+                        onChange={(e) =>
+                          updateDraftField(
+                            'displayName',
+                            e.target.value,
+                            'displayName',
+                          )
+                        }
+                        helperText="Từ 1 đến 100 ký tự (khoảng trắng đầu/cuối sẽ tự động được cắt gọn)."
+                        error={displayNameError}
+                      />
 
-        {/* Card 2: Change Password Form */}
-        <Card className="ck-account-card">
-          <div className="ck-card__header">
-            <h2
-              id="password-change-section-heading"
-              className="text-lg font-semibold text-ink"
-            >
-              Đổi mật khẩu
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              Sau khi đổi mật khẩu thành công, tất cả phiên đăng nhập hiện tại
-              sẽ bị thu hồi và bạn cần đăng nhập lại bằng mật khẩu mới.
-            </p>
-          </div>
+                      <Input
+                        id="profile-email"
+                        name="email"
+                        type="email"
+                        label="Email"
+                        value={baseUser.email}
+                        readOnly
+                        disabled
+                        helperText="Email không thể thay đổi tại đây."
+                      />
+                    </div>
 
-          {passwordError ? (
-            <div className="ck-alert ck-alert--error mb-4" role="alert">
-              <p>{passwordError}</p>
-            </div>
+                    {/* Optional select fields */}
+                    <div className="ck-form-row">
+                      <Select
+                        label="Trình độ tiếng Nhật"
+                        id="profile-level"
+                        error={levelError}
+                        name="level"
+                        value={draft.level}
+                        onChange={(e) =>
+                          updateDraftField(
+                            'level',
+                            e.target.value,
+                            'profile.level',
+                          )
+                        }
+                        disabled={catalogsLoading && levelOptions.length === 0}
+                      >
+                        <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                        {draft.level &&
+                        !levelOptions.some(
+                          (opt) => opt.code === draft.level,
+                        ) ? (
+                          <option value={draft.level}>{draft.level}</option>
+                        ) : null}
+                        {levelOptions.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </Select>
+
+                      <Select
+                        label="Mục tiêu học"
+                        id="profile-goal"
+                        error={goalError}
+                        name="goal"
+                        value={draft.goal}
+                        onChange={(e) =>
+                          updateDraftField(
+                            'goal',
+                            e.target.value,
+                            'profile.goal',
+                          )
+                        }
+                        disabled={catalogsLoading && goalOptions.length === 0}
+                      >
+                        <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                        {draft.goal &&
+                        !goalOptions.some((opt) => opt.code === draft.goal) ? (
+                          <option value={draft.goal}>{draft.goal}</option>
+                        ) : null}
+                        {goalOptions.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+
+                    <div className="ck-form-row">
+                      <Select
+                        label="Tiếng mẹ đẻ"
+                        id="profile-native-language"
+                        error={nativeLangError}
+                        name="nativeLanguageCode"
+                        value={draft.nativeLanguageCode}
+                        onChange={(e) =>
+                          updateDraftField(
+                            'nativeLanguageCode',
+                            e.target.value,
+                            'profile.nativeLanguageCode',
+                          )
+                        }
+                        disabled={
+                          catalogsLoading && languageOptions.length === 0
+                        }
+                      >
+                        <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                        {draft.nativeLanguageCode &&
+                        !languageOptions.some(
+                          (opt) => opt.code === draft.nativeLanguageCode,
+                        ) ? (
+                          <option value={draft.nativeLanguageCode}>
+                            {draft.nativeLanguageCode}
+                          </option>
+                        ) : null}
+                        {languageOptions.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </Select>
+
+                      <Select
+                        label="Quốc gia đang sinh sống"
+                        id="profile-country"
+                        error={countryError}
+                        name="countryCode"
+                        value={draft.countryCode}
+                        onChange={(e) =>
+                          updateDraftField(
+                            'countryCode',
+                            e.target.value,
+                            'profile.countryCode',
+                          )
+                        }
+                        disabled={
+                          catalogsLoading && countryOptions.length === 0
+                        }
+                      >
+                        <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                        {draft.countryCode &&
+                        !countryOptions.some(
+                          (opt) => opt.code === draft.countryCode,
+                        ) ? (
+                          <option value={draft.countryCode}>
+                            {draft.countryCode}
+                          </option>
+                        ) : null}
+                        {countryOptions.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+
+                    <div className="ck-form-row">
+                      <Select
+                        label="Nhóm tuổi"
+                        id="profile-age-group"
+                        error={ageGroupError}
+                        name="ageGroup"
+                        value={draft.ageGroup}
+                        onChange={(e) =>
+                          updateDraftField(
+                            'ageGroup',
+                            e.target.value,
+                            'profile.ageGroup',
+                          )
+                        }
+                        disabled={
+                          catalogsLoading && ageGroupOptions.length === 0
+                        }
+                      >
+                        <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                        {draft.ageGroup &&
+                        !ageGroupOptions.some(
+                          (opt) => opt.code === draft.ageGroup,
+                        ) ? (
+                          <option value={draft.ageGroup}>
+                            {draft.ageGroup}
+                          </option>
+                        ) : null}
+                        {ageGroupOptions.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </Select>
+
+                      <Select
+                        label="Giới tính"
+                        id="profile-gender"
+                        error={genderError}
+                        name="gender"
+                        value={draft.gender}
+                        onChange={(e) =>
+                          updateDraftField(
+                            'gender',
+                            e.target.value,
+                            'profile.gender',
+                          )
+                        }
+                        disabled={catalogsLoading && genderOptions.length === 0}
+                      >
+                        <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                        {draft.gender &&
+                        !genderOptions.some(
+                          (opt) => opt.code === draft.gender,
+                        ) ? (
+                          <option value={draft.gender}>{draft.gender}</option>
+                        ) : null}
+                        {genderOptions.map((item) => (
+                          <option key={item.code} value={item.code}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+
+                    {/* Interests (max 3) */}
+                    <fieldset className="ck-fieldset">
+                      <legend className="ck-legend">
+                        Chủ đề yêu thích ({draft.interests.length}/
+                        {MAX_PROFILE_INTERESTS})
+                      </legend>
+                      <small className="text-muted">
+                        Chọn tối đa {MAX_PROFILE_INTERESTS} chủ đề bạn muốn trò
+                        chuyện khi ghép đôi.
+                      </small>
+                      <div
+                        className="ck-choice-grid mt-2"
+                        role="group"
+                        aria-label="Chọn sở thích"
+                      >
+                        {interestOptions.map((item) => {
+                          const isChecked = draft.interests.includes(item.code);
+                          const isMaxReached =
+                            !isChecked &&
+                            draft.interests.length >= MAX_PROFILE_INTERESTS;
+                          return (
+                            <label
+                              key={item.code}
+                              className={`ck-choice-pill ${isChecked ? 'ck-choice-pill--active' : ''} ${isMaxReached ? 'ck-choice-chip--disabled' : ''}`}
+                            >
+                              <input
+                                type="checkbox"
+                                name="interests"
+                                value={item.code}
+                                checked={isChecked}
+                                onChange={() => handleToggleInterest(item.code)}
+                              />
+                              <span>{item.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {interestsError ? (
+                        <p
+                          className="ck-field__message ck-field__message--error"
+                          role="alert"
+                        >
+                          {interestsError}
+                        </p>
+                      ) : null}
+                    </fieldset>
+
+                    <div className="ck-profile-form-footer">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="compact"
+                        className="ck-profile-action-btn"
+                        onClick={handleCancelEdit}
+                        disabled={profileSubmitting || isSyncingConflict}
+                      >
+                        Hủy
+                      </Button>
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="compact"
+                        className="ck-profile-action-btn"
+                        loading={profileSubmitting}
+                        disabled={isSyncingConflict}
+                      >
+                        {profileSubmitting
+                          ? 'Đang lưu hồ sơ...'
+                          : 'Lưu thay đổi'}
+                      </Button>
+                    </div>
+                  </fieldset>
+                </form>
+              </Card>
+            </>
           ) : null}
 
-          <form
-            className="ck-form"
-            onSubmit={handlePasswordChangeSubmit}
-            noValidate
-          >
-            <PasswordInput
-              id="profile-current-password"
-              name="currentPassword"
-              autoComplete="current-password"
-              label="Mật khẩu hiện tại"
-              required
-              showLabel="Hiện mật khẩu hiện tại"
-              hideLabel="Ẩn mật khẩu hiện tại"
-              value={currentPassword}
-              disabled={passwordSubmitting}
-              onChange={(e) => {
-                setCurrentPassword(e.target.value);
-                setPasswordError(null);
-                setPasswordFieldErrors((prev) => {
-                  if (!prev.currentPassword) return prev;
-                  const next = { ...prev };
-                  delete next.currentPassword;
-                  return next;
-                });
-              }}
-              error={passwordFieldErrors.currentPassword}
-            />
+          {activeSection === 'password' ? (
+            <>
+              <header className="ck-account-section-header">
+                <p className="ck-account-eyebrow" lang="ja">
+                  セキュリティ
+                </p>
+                <h2
+                  id="password-change-section-heading"
+                  className="ck-account-section-title"
+                >
+                  Đổi mật khẩu
+                </h2>
+                <p className="ck-account-section-subtitle">
+                  Sử dụng mật khẩu mạnh và không dùng lại mật khẩu ở dịch vụ
+                  khác. Sau khi đổi, mọi phiên hiện tại sẽ được đăng xuất.
+                </p>
+              </header>
 
-            <PasswordInput
-              id="profile-new-password"
-              name="newPassword"
-              autoComplete="new-password"
-              label="Mật khẩu mới"
-              required
-              showLabel="Hiện mật khẩu mới"
-              hideLabel="Ẩn mật khẩu mới"
-              value={newPassword}
-              disabled={passwordSubmitting}
-              onChange={(e) => {
-                setNewPassword(e.target.value);
-                setPasswordError(null);
-                setPasswordFieldErrors((prev) => {
-                  if (!prev.newPassword) return prev;
-                  const next = { ...prev };
-                  delete next.newPassword;
-                  return next;
-                });
-              }}
-              helperText="Từ 8 đến 128 ký tự (giữ nguyên khoảng trắng, không tự cắt)."
-              error={passwordFieldErrors.newPassword}
-            />
+              {passwordError ? (
+                <div className="ck-alert ck-alert--error" role="alert">
+                  <p>{passwordError}</p>
+                </div>
+              ) : null}
 
-            <div className="ck-actions mt-4">
-              <Button
-                type="submit"
-                variant="primary"
-                loading={passwordSubmitting}
-              >
-                {passwordSubmitting
-                  ? 'Đang cập nhật mật khẩu...'
-                  : 'Đổi mật khẩu'}
-              </Button>
-              <Link to="/forgot-password" className="ck-text-button">
-                Quên mật khẩu hiện tại?
-              </Link>
-            </div>
-          </form>
-        </Card>
+              <Card className="ck-profile-card ck-profile-card--password">
+                <form
+                  className="ck-form"
+                  onSubmit={handlePasswordChangeSubmit}
+                  noValidate
+                >
+                  <PasswordInput
+                    id="profile-current-password"
+                    name="currentPassword"
+                    autoComplete="current-password"
+                    label="Mật khẩu hiện tại"
+                    required
+                    showLabel="Hiện mật khẩu hiện tại"
+                    hideLabel="Ẩn mật khẩu hiện tại"
+                    value={currentPassword}
+                    disabled={passwordSubmitting}
+                    onChange={(e) => {
+                      setCurrentPassword(e.target.value);
+                      setPasswordError(null);
+                      setPasswordFieldErrors((prev) => {
+                        if (!prev.currentPassword) return prev;
+                        const next = { ...prev };
+                        delete next.currentPassword;
+                        return next;
+                      });
+                    }}
+                    error={passwordFieldErrors.currentPassword}
+                  />
+
+                  <PasswordInput
+                    id="profile-new-password"
+                    name="newPassword"
+                    autoComplete="new-password"
+                    label="Mật khẩu mới"
+                    required
+                    showLabel="Hiện mật khẩu mới"
+                    hideLabel="Ẩn mật khẩu mới"
+                    value={newPassword}
+                    disabled={passwordSubmitting}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      setPasswordError(null);
+                      setPasswordFieldErrors((prev) => {
+                        if (!prev.newPassword && !prev.confirmNewPassword) {
+                          return prev;
+                        }
+                        const next = { ...prev };
+                        delete next.newPassword;
+                        delete next.confirmNewPassword;
+                        return next;
+                      });
+                    }}
+                    helperText="Từ 8 đến 128 ký tự (giữ nguyên khoảng trắng, không tự cắt)."
+                    error={passwordFieldErrors.newPassword}
+                  />
+
+                  <PasswordInput
+                    id="profile-confirm-new-password"
+                    name="confirmNewPassword"
+                    autoComplete="new-password"
+                    label="Xác nhận mật khẩu mới"
+                    required
+                    showLabel="Hiện xác nhận mật khẩu mới"
+                    hideLabel="Ẩn xác nhận mật khẩu mới"
+                    value={confirmNewPassword}
+                    disabled={passwordSubmitting}
+                    onChange={(e) => {
+                      setConfirmNewPassword(e.target.value);
+                      setPasswordError(null);
+                      setPasswordFieldErrors((prev) => {
+                        if (!prev.confirmNewPassword) return prev;
+                        const next = { ...prev };
+                        delete next.confirmNewPassword;
+                        return next;
+                      });
+                    }}
+                    error={passwordFieldErrors.confirmNewPassword}
+                  />
+
+                  <div className="ck-profile-password-footer">
+                    <Link to="/forgot-password" className="ck-text-button">
+                      Quên mật khẩu hiện tại?
+                    </Link>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="compact"
+                      className="ck-profile-action-btn"
+                      loading={passwordSubmitting}
+                    >
+                      {passwordSubmitting
+                        ? 'Đang cập nhật mật khẩu...'
+                        : 'Đổi mật khẩu'}
+                    </Button>
+                  </div>
+                </form>
+              </Card>
+            </>
+          ) : null}
+        </div>
       </div>
     </section>
   );

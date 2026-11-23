@@ -160,14 +160,51 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
           idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
         }));
 
-      render(
+      const { container } = render(
         <MemoryRouter initialEntries={['/profile']}>
           <App />
         </MemoryRouter>,
       );
 
       expect(
-        await screen.findByRole('heading', { name: 'Hồ sơ cá nhân' }),
+        await screen.findByRole('heading', { name: 'Hồ sơ của tôi' }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole('heading', { name: 'Hồ sơ cá nhân' }),
+      ).toBeInTheDocument();
+
+      // F-01 & F-02: single LearningHeader, no duplicate .ck-account-topbar, no version metadata badge
+      expect(container.querySelectorAll('.ck-learning-header')).toHaveLength(1);
+      expect(container.querySelector('.ck-account-topbar')).toBeNull();
+      expect(screen.queryByText(/Phiên bản hồ sơ/u)).not.toBeInTheDocument();
+
+      // Sidebar navigation items (matching Figma account sidebar + existing routes)
+      expect(
+        screen.getByRole('link', { name: /Hồ sơ của tôi/u }),
+      ).toHaveAttribute('href', '/profile');
+      expect(
+        screen.getByRole('link', { name: /Chỉnh sửa hồ sơ/u }),
+      ).toHaveAttribute('href', '/profile#profile-section-heading');
+      expect(
+        screen.getByRole('link', { name: /Đổi mật khẩu/u }),
+      ).toHaveAttribute('href', '/profile#password-change-section-heading');
+      expect(
+        screen.getByRole('link', { name: /Danh sách đã chặn/u }),
+      ).toHaveAttribute('href', '/blocks');
+
+      // Overview shows saved profile details resolved from catalogs
+      await waitFor(() => {
+        expect(screen.getByText('Du lịch')).toBeVisible();
+      });
+      expect(screen.getByText('Chiikawa')).toBeVisible();
+      expect(screen.getByText('Âm nhạc')).toBeVisible();
+      expect(screen.getByText('Sách')).toBeVisible();
+
+      // Switch to Edit Profile view via primary CTA on overview card
+      fireEvent.click(screen.getByRole('button', { name: 'Chỉnh sửa hồ sơ' }));
+
+      expect(
+        await screen.findByRole('heading', { name: 'Chỉnh sửa hồ sơ' }),
       ).toBeVisible();
 
       // Wait for catalogs to populate select options
@@ -177,18 +214,16 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
 
       expect(getSpy).toHaveBeenCalledWith('/catalogs');
       expect(screen.getByLabelText('Tên hiển thị *')).toHaveValue('Hạnh Nhi');
+      expect(screen.getByLabelText('Email')).toHaveValue(
+        'hanhnhi@chiikaiwa.dev',
+      );
+      expect(screen.getByLabelText('Email')).toHaveAttribute('readonly');
+      expect(screen.getByLabelText('Email')).toBeDisabled();
       expect(screen.getByLabelText('Mục tiêu học')).toHaveValue('travel');
       expect(screen.getByLabelText('Tiếng mẹ đẻ')).toHaveValue('vi');
       expect(screen.getByLabelText('Quốc gia đang sinh sống')).toHaveValue('');
       expect(screen.getByLabelText('Nhóm tuổi')).toHaveValue('');
       expect(screen.getByLabelText('Giới tính')).toHaveValue('');
-      expect(screen.getByText('Phiên bản hồ sơ: v1')).toBeVisible();
-      expect(
-        screen.getByRole('link', { name: 'Về trang chính' }),
-      ).toHaveAttribute('href', '/home');
-      expect(
-        screen.getByRole('link', { name: 'Danh sách chặn' }),
-      ).toHaveAttribute('href', '/blocks');
 
       // Ensure non-contract fields (e.g. durations) are NOT rendered on the profile form
       expect(screen.queryByText('10 phút')).not.toBeInTheDocument();
@@ -210,7 +245,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       });
       fireEvent.click(screen.getByRole('checkbox', { name: 'Ẩm thực' }));
 
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
       await waitFor(() => {
         expect(patchSpy).toHaveBeenCalledTimes(1);
@@ -244,12 +279,21 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu,
       );
 
-      // UI and cache updated after save
+      // UI and cache updated after save (version stays hidden from user)
       expect(
         await screen.findByText('Đã lưu hồ sơ cá nhân thành công.'),
       ).toBeVisible();
-      expect(screen.getByText('Phiên bản hồ sơ: v2')).toBeVisible();
+      expect(screen.queryByText(/Phiên bản hồ sơ/u)).not.toBeInTheDocument();
       expect(getPrivateCache('/me/profile')).toEqual(updatedUser);
+
+      // Navigate back to overview via sidebar -> reflects updated profile
+      fireEvent.click(screen.getByRole('link', { name: /Hồ sơ của tôi/u }));
+      expect(
+        await screen.findByRole('heading', { name: 'Hồ sơ của tôi' }),
+      ).toBeVisible();
+      expect(screen.getAllByText('Hạnh Nhi Mới')).toHaveLength(2);
+      expect(screen.getByText('Usagi')).toBeVisible();
+      expect(screen.getByText('Ẩm thực')).toBeVisible();
     });
 
     it('enforces client-side input limits (displayName length, max 3 interests) and surfaces server 422 field errors without showing success', async () => {
@@ -292,7 +336,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       );
 
       render(
-        <MemoryRouter initialEntries={['/profile']}>
+        <MemoryRouter initialEntries={['/profile#profile-section-heading']}>
           <App />
         </MemoryRouter>,
       );
@@ -307,7 +351,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         screen.getByText('Chỉ được chọn tối đa 3 sở thích.'),
       ).toBeVisible();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
       expect(patchSpy).not.toHaveBeenCalled();
 
       // Uncheck 4th interest to return to 3 valid interests
@@ -320,7 +364,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       fireEvent.change(screen.getByLabelText('Tên hiển thị *'), {
         target: { value: '    ' },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
       expect(
         screen.getByText(
           'Tên hiển thị sau khi cắt khoảng trắng phải từ 1 đến 100 ký tự.',
@@ -332,7 +376,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       fireEvent.change(screen.getByLabelText('Tên hiển thị *'), {
         target: { value: 'Hạnh Nhi' },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
       expect(
         await screen.findByText('Trình độ không nằm trong danh mục cho phép.'),
@@ -407,7 +451,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         });
 
       render(
-        <MemoryRouter initialEntries={['/profile']}>
+        <MemoryRouter initialEntries={['/profile#profile-section-heading']}>
           <App />
         </MemoryRouter>,
       );
@@ -431,7 +475,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       });
 
       // First save attempt hits 409 VERSION_CONFLICT
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
       expect(
         await screen.findByText('Xung đột phiên bản dữ liệu'),
@@ -455,7 +499,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       expect(
         await screen.findByText(/Đã đồng bộ phiên bản mới nhất \(v3\)/u),
       ).toBeVisible();
-      expect(screen.getByText('Phiên bản hồ sơ: v3')).toBeVisible();
+      expect(screen.queryByText(/Phiên bản hồ sơ/u)).not.toBeInTheDocument();
       // Draft values are still preserved
       expect(screen.getByLabelText('Tên hiển thị *')).toHaveValue(
         'Tên Đang Nhập',
@@ -463,7 +507,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       expect(screen.getByLabelText('Trình độ tiếng Nhật')).toHaveValue('N2');
 
       // Now user clicks Save again -> sends expectedVersion: 3 with a fresh Idempotency-Key
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
       await waitFor(() => {
         expect(patchSpy).toHaveBeenCalledTimes(2);
@@ -482,7 +526,6 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       expect(
         await screen.findByText('Đã lưu hồ sơ cá nhân thành công.'),
       ).toBeVisible();
-      expect(screen.getByText('Phiên bản hồ sơ: v4')).toBeVisible();
     });
 
     it('reuses the same Idempotency-Key when retrying the exact same profile payload after a 503/network error, and prevents duplicate concurrent submissions', async () => {
@@ -521,7 +564,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         );
 
       render(
-        <MemoryRouter initialEntries={['/profile']}>
+        <MemoryRouter initialEntries={['/profile#profile-section-heading']}>
           <App />
         </MemoryRouter>,
       );
@@ -535,7 +578,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       });
 
       // 1. First submit fails with 503 SERVICE_UNAVAILABLE
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
       expect(
         await screen.findByText('Máy chủ tạm thời gián đoạn.'),
       ).toBeVisible();
@@ -544,7 +587,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       ).not.toBeInTheDocument();
 
       // 2. Retry same form without changing fields -> reuses exact same Idempotency-Key
-      const saveBtn = screen.getByRole('button', { name: 'Lưu hồ sơ' });
+      const saveBtn = screen.getByRole('button', { name: 'Lưu thay đổi' });
       fireEvent.click(saveBtn);
       // Duplicate click while pending must be ignored
       fireEvent.click(
@@ -612,7 +655,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       );
 
       render(
-        <MemoryRouter initialEntries={['/profile']}>
+        <MemoryRouter initialEntries={['/profile#profile-section-heading']}>
           <App />
         </MemoryRouter>,
       );
@@ -626,7 +669,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       fireEvent.change(screen.getByLabelText('Tên hiển thị *'), {
         target: { value: 'Nháp của A' },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
       await waitFor(() => {
         expect(patchSpy).toHaveBeenCalledTimes(1);
@@ -723,7 +766,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         });
 
       render(
-        <MemoryRouter initialEntries={['/profile']}>
+        <MemoryRouter initialEntries={['/profile#profile-section-heading']}>
           <App />
         </MemoryRouter>,
       );
@@ -737,7 +780,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         target: { value: 'Tên Mới Tab 1' },
       });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
       expect(
         await screen.findByText('Xung đột phiên bản dữ liệu'),
       ).toBeVisible();
@@ -759,7 +802,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       );
 
       // Re-submit after sync: must send new expectedVersion (2) and displayName, omitting countryCode
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
       await waitFor(() => {
         expect(patchSpy).toHaveBeenCalledTimes(2);
@@ -798,7 +841,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       });
 
       render(
-        <MemoryRouter initialEntries={['/profile']}>
+        <MemoryRouter initialEntries={['/profile#profile-section-heading']}>
           <App />
         </MemoryRouter>,
       );
@@ -811,7 +854,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         target: { value: oneHundredOneEmojis },
       });
       expect(displayNameInput).toHaveValue(oneHundredOneEmojis);
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
       expect(displayNameInput).toHaveAccessibleDescription(
         'Tên hiển thị sau khi cắt khoảng trắng phải từ 1 đến 100 ký tự.',
@@ -823,7 +866,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         target: { value: hundredEmojis },
       });
       expect(displayNameInput).toHaveValue(hundredEmojis);
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
       await waitFor(() => {
         expect(patchSpy).toHaveBeenCalledTimes(1);
@@ -832,6 +875,74 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         expectedVersion: 1,
         displayName: hundredEmojis,
       });
+    });
+
+    it('cancels edits back to baseline overview and navigates between overview, edit, and password sections via sidebar', async () => {
+      const initialUser = createMockUser();
+      vi.spyOn(api, 'get').mockImplementation(async (path) => {
+        if (path === '/auth/me') {
+          return {
+            data: { kind: 'user', user: initialUser },
+            meta: {},
+            epoch: getIdentityEpoch(),
+          };
+        }
+        return {
+          data: MOCK_CATALOGS,
+          meta: {},
+          epoch: getIdentityEpoch(),
+        };
+      });
+      const patchSpy = vi.spyOn(api, 'patch');
+
+      render(
+        <MemoryRouter initialEntries={['/profile']}>
+          <App />
+        </MemoryRouter>,
+      );
+
+      // Default view is read-only overview ("Hồ sơ của tôi")
+      expect(
+        await screen.findByRole('heading', { name: 'Hồ sơ của tôi' }),
+      ).toBeVisible();
+      expect(screen.queryByLabelText('Tên hiển thị *')).not.toBeInTheDocument();
+
+      // Switch to edit via sidebar link
+      fireEvent.click(screen.getByRole('link', { name: /Chỉnh sửa hồ sơ/u }));
+      const nameInput = await screen.findByLabelText('Tên hiển thị *');
+      expect(nameInput).toHaveValue('Hạnh Nhi');
+      expect(screen.getByLabelText('Email')).toHaveValue(
+        'hanhnhi@chiikaiwa.dev',
+      );
+      expect(
+        screen.getByText('Email không thể thay đổi tại đây.'),
+      ).toBeVisible();
+
+      // Mutate draft and click "Hủy" -> discards draft without API call and returns to overview
+      fireEvent.change(nameInput, { target: { value: 'Tên Chưa Lưu' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Hủy' }));
+
+      expect(patchSpy).not.toHaveBeenCalled();
+      expect(
+        await screen.findByRole('heading', { name: 'Hồ sơ của tôi' }),
+      ).toBeVisible();
+      expect(screen.getAllByText('Hạnh Nhi').length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText('Tên Chưa Lưu')).not.toBeInTheDocument();
+
+      // Re-open edit and verify draft was reset to baseline
+      fireEvent.click(screen.getByRole('button', { name: 'Chỉnh sửa hồ sơ' }));
+      expect(await screen.findByLabelText('Tên hiển thị *')).toHaveValue(
+        'Hạnh Nhi',
+      );
+
+      // Switch to Change Password view via sidebar link
+      fireEvent.click(screen.getByRole('link', { name: /Đổi mật khẩu/u }));
+      expect(
+        await screen.findByRole('heading', { name: 'Đổi mật khẩu' }),
+      ).toBeVisible();
+      expect(
+        screen.getByLabelText('Xác nhận mật khẩu mới *'),
+      ).toBeInTheDocument();
     });
   });
 
@@ -869,7 +980,9 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
         });
 
       render(
-        <MemoryRouter initialEntries={['/profile']}>
+        <MemoryRouter
+          initialEntries={['/profile#password-change-section-heading']}
+        >
           <App />
         </MemoryRouter>,
       );
@@ -889,6 +1002,9 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       fireEvent.change(screen.getByLabelText('Mật khẩu mới *'), {
         target: { value: 'short' },
       });
+      fireEvent.change(screen.getByLabelText('Xác nhận mật khẩu mới *'), {
+        target: { value: 'short' },
+      });
       fireEvent.click(screen.getByRole('button', { name: 'Đổi mật khẩu' }));
 
       expect(
@@ -900,6 +1016,9 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       // Use a password with leading/trailing spaces to verify no trimming occurs
       const untrimmedNewPassword = '  NewSecretPass123  ';
       fireEvent.change(screen.getByLabelText('Mật khẩu mới *'), {
+        target: { value: untrimmedNewPassword },
+      });
+      fireEvent.change(screen.getByLabelText('Xác nhận mật khẩu mới *'), {
         target: { value: untrimmedNewPassword },
       });
       fireEvent.click(screen.getByRole('button', { name: 'Đổi mật khẩu' }));
@@ -932,6 +1051,78 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       expect(getPrivateCache('learner-secret-cache')).toBeUndefined();
       expect(globalThis.localStorage.length).toBe(0);
       expect(globalThis.sessionStorage.length).toBe(0);
+    });
+
+    it('rejects empty or mismatched confirm password without trimming and omits confirmNewPassword from POST /auth/password-change', async () => {
+      const initialUser = createMockUser();
+      vi.spyOn(api, 'get').mockImplementation(async (path) => {
+        if (path === '/auth/me') {
+          return {
+            data: { kind: 'user', user: initialUser },
+            meta: {},
+            epoch: getIdentityEpoch(),
+          };
+        }
+        return {
+          data: MOCK_CATALOGS,
+          meta: {},
+          epoch: getIdentityEpoch(),
+        };
+      });
+
+      const postSpy = vi.spyOn(api, 'post').mockResolvedValueOnce({
+        data: null,
+        meta: { requestId: 'pwd-confirm-ok' },
+        epoch: getIdentityEpoch(),
+      });
+
+      render(
+        <MemoryRouter
+          initialEntries={['/profile#password-change-section-heading']}
+        >
+          <App />
+        </MemoryRouter>,
+      );
+
+      const currentInput = await screen.findByLabelText('Mật khẩu hiện tại *');
+      const newInput = screen.getByLabelText('Mật khẩu mới *');
+      const confirmInput = screen.getByLabelText('Xác nhận mật khẩu mới *');
+
+      // 1. Missing confirmation triggers inline required message and skips API
+      fireEvent.change(currentInput, { target: { value: 'OldPass123' } });
+      fireEvent.change(newInput, { target: { value: '  MyNewPass99  ' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Đổi mật khẩu' }));
+
+      expect(confirmInput).toHaveAccessibleDescription(
+        'Vui lòng nhập lại mật khẩu mới để xác nhận.',
+      );
+      expect(postSpy).not.toHaveBeenCalled();
+
+      // 2. Trailing space mismatch must NOT be trimmed away (regression for non-trim contract)
+      fireEvent.change(confirmInput, { target: { value: '  MyNewPass99' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Đổi mật khẩu' }));
+
+      expect(confirmInput).toHaveAccessibleDescription(
+        'Mật khẩu xác nhận không khớp với mật khẩu mới.',
+      );
+      expect(postSpy).not.toHaveBeenCalled();
+
+      // 3. Exact match submits only { currentPassword, newPassword }
+      fireEvent.change(confirmInput, { target: { value: '  MyNewPass99  ' } });
+      expect(confirmInput).not.toHaveAttribute('aria-invalid', 'true');
+      fireEvent.click(screen.getByRole('button', { name: 'Đổi mật khẩu' }));
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalledTimes(1);
+      });
+      expect(postSpy).toHaveBeenCalledWith('/auth/password-change', {
+        currentPassword: 'OldPass123',
+        newPassword: '  MyNewPass99  ',
+      });
+      expect(postSpy.mock.calls[0][1]).not.toHaveProperty('confirmNewPassword');
+      expect(
+        await screen.findByRole('heading', { name: 'Đăng nhập' }),
+      ).toBeVisible();
     });
 
     it('renders re-login guidance and link directly in ProfilePage when mounted standalone', async () => {
@@ -1203,7 +1394,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       );
 
       render(
-        <MemoryRouter initialEntries={['/profile']}>
+        <MemoryRouter initialEntries={['/profile#profile-section-heading']}>
           <App />
         </MemoryRouter>,
       );
@@ -1215,7 +1406,7 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       fireEvent.change(screen.getByLabelText('Tên hiển thị *'), {
         target: { value: 'Stale Actor Update' },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
       // Simulate identity change while PATCH is in-flight
       act(() => {
@@ -1303,13 +1494,13 @@ describe('FE-003 independent regression cases', () => {
         }),
     );
     render(
-      <MemoryRouter initialEntries={['/profile']}>
+      <MemoryRouter initialEntries={['/profile#profile-section-heading']}>
         <App />
       </MemoryRouter>,
     );
     const input = await screen.findByLabelText('Tên hiển thị *');
     fireEvent.change(input, { target: { value: 'Submitted name' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu hồ sơ' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
     await waitFor(() => expect(api.patch).toHaveBeenCalled());
     expect(input).toBeDisabled();
     expect(screen.getByLabelText('Trình độ tiếng Nhật')).toBeDisabled();
@@ -1321,10 +1512,10 @@ describe('FE-003 independent regression cases', () => {
     expect(input).toHaveValue('Next edit');
   });
   it.each(['/forgot-password', '/reset-password?token=review-token'])(
-    'allows authenticated recovery route %s',
+    'allows authenticated recovery route %s and renders single-surface AuthLayout without nested cards',
     async (path) => {
       setup();
-      render(
+      const { container } = render(
         <MemoryRouter initialEntries={[path]}>
           <App />
         </MemoryRouter>,
@@ -1339,6 +1530,14 @@ describe('FE-003 independent regression cases', () => {
       expect(
         screen.queryByRole('heading', { name: 'Trang chính' }),
       ).not.toBeInTheDocument();
+      expect(
+        container.querySelector('.ck-auth-screen--recovery'),
+      ).not.toBeNull();
+      expect(
+        container.querySelector('.ck-auth-layout__panel > .ck-auth-card'),
+      ).not.toBeNull();
+      expect(container.querySelector('.ck-account-page')).toBeNull();
+      expect(container.querySelector('.ck-card')).toBeNull();
     },
   );
 });
