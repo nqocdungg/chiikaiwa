@@ -63,6 +63,18 @@ export function readAuthEnv(source = process.env) {
     throw new Error('APP_ORIGIN must use HTTPS in production');
   }
 
+  const csrfOrigins = [origin.origin];
+  if (
+    nodeEnv === 'development' &&
+    origin.protocol === 'http:' &&
+    ['localhost', '127.0.0.1'].includes(origin.hostname)
+  ) {
+    const alias = new URL(origin);
+    alias.hostname =
+      origin.hostname === 'localhost' ? '127.0.0.1' : 'localhost';
+    csrfOrigins.push(alias.origin);
+  }
+
   const rawJwtSecret = source.JWT_SECRET;
   if (nodeEnv === 'production' && (!rawJwtSecret || rawJwtSecret.length < 32)) {
     throw new Error('JWT_SECRET must be at least 32 characters');
@@ -77,6 +89,7 @@ export function readAuthEnv(source = process.env) {
   return {
     nodeEnv,
     origin: origin.origin,
+    csrfOrigins,
     secureCookies: nodeEnv === 'production' || origin.protocol === 'https:',
     jwtSecret: jwtSecret || DEFAULT_DEV_JWT_SECRET,
     jwtIssuer: source.JWT_ISSUER ?? 'chiikaiwa',

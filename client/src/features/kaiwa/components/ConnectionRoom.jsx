@@ -125,7 +125,6 @@ export function ConnectionRoom({ live, onHome }) {
                   role="switch"
                   type="checkbox"
                   checked={enabled}
-                  aria-label={`${enabled ? 'Tắt' : 'Bật'} ${label}`}
                   aria-describedby={`ck-device-${device}-status`}
                   disabled={!connected || media?.pendingDevices.has(device)}
                   onChange={() => {

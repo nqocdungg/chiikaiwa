@@ -2,6 +2,17 @@ import { useId, useState } from 'react';
 import { IconButton } from './controls.jsx';
 
 /**
+ * @param {string} id
+ * @param {string} [error]
+ * @param {string} [helperText]
+ */
+function fieldDescriptionId(id, error, helperText) {
+  if (error) return `${id}-error`;
+  if (helperText) return `${id}-helper`;
+  return undefined;
+}
+
+/**
  * @param {{
  * label: string,
  * htmlFor?: string,
@@ -66,11 +77,6 @@ export function Input({
 }) {
   const generatedId = useId();
   const id = providedId ?? `ck-input-${generatedId}`;
-  const describedBy = error
-    ? `${id}-error`
-    : helperText
-      ? `${id}-helper`
-      : undefined;
 
   return (
     <FormField
@@ -88,7 +94,46 @@ export function Input({
         className={`ck-input ${className}`.trim()}
         required={required}
         aria-invalid={error ? 'true' : undefined}
-        aria-describedby={describedBy}
+        aria-describedby={fieldDescriptionId(id, error, helperText)}
+      />
+    </FormField>
+  );
+}
+
+/**
+ * @param {import('react').SelectHTMLAttributes<HTMLSelectElement> & {
+ * label: string,
+ * helperText?: string,
+ * error?: string,
+ * }} props
+ */
+export function Select({
+  id: providedId,
+  label,
+  helperText,
+  error,
+  required,
+  className = '',
+  ...selectProps
+}) {
+  const generatedId = useId();
+  const id = providedId ?? `ck-select-${generatedId}`;
+
+  return (
+    <FormField
+      label={label}
+      htmlFor={id}
+      helperText={helperText}
+      error={error}
+      required={required}
+    >
+      <select
+        {...selectProps}
+        id={id}
+        className={`ck-input ${className}`.trim()}
+        required={required}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={fieldDescriptionId(id, error, helperText)}
       />
     </FormField>
   );
@@ -118,11 +163,6 @@ export function PasswordInput({
   const generatedId = useId();
   const id = providedId ?? `ck-password-${generatedId}`;
   const [visible, setVisible] = useState(false);
-  const describedBy = error
-    ? `${id}-error`
-    : helperText
-      ? `${id}-helper`
-      : undefined;
 
   return (
     <FormField
@@ -141,12 +181,13 @@ export function PasswordInput({
           className="ck-input ck-input--with-action"
           required={required}
           aria-invalid={error ? 'true' : undefined}
-          aria-describedby={describedBy}
+          aria-describedby={fieldDescriptionId(id, error, helperText)}
         />
         <IconButton
           className="ck-field__action"
           name={visible ? 'eyeOff' : 'eye'}
-          label={visible ? hideLabel : showLabel}
+          label={showLabel}
+          title={visible ? hideLabel : showLabel}
           pressed={visible}
           onClick={() => setVisible((current) => !current)}
         />

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import logo from '../../assets/brand/chii-logo.svg';
 import { Button } from '../../components/ui/controls.jsx';
-import { FormField, Input, PasswordInput } from '../../components/ui/forms.jsx';
+import { Input, PasswordInput, Select } from '../../components/ui/forms.jsx';
 import { Avatar, Badge, Card } from '../../components/ui/surfaces.jsx';
 import { api, createIdempotencyKey } from '../../services/api-client.js';
 import { getIdentityEpoch, setPrivateCache } from '../../services/cache.js';
@@ -853,229 +853,169 @@ function ProfileWorkspace({
 
               {/* Optional select fields */}
               <div className="ck-form-row">
-                <FormField
+                <Select
                   label="Trình độ tiếng Nhật"
-                  htmlFor="profile-level"
+                  id="profile-level"
                   error={levelError}
+                  name="level"
+                  value={draft.level}
+                  onChange={(e) =>
+                    updateDraftField('level', e.target.value, 'profile.level')
+                  }
+                  disabled={catalogsLoading && levelOptions.length === 0}
                 >
-                  <select
-                    id="profile-level"
-                    name="level"
-                    className="ck-input"
-                    value={draft.level}
-                    onChange={(e) =>
-                      updateDraftField('level', e.target.value, 'profile.level')
-                    }
-                    disabled={catalogsLoading && levelOptions.length === 0}
-                    aria-invalid={Boolean(levelError)}
-                    aria-describedby={
-                      levelError ? 'profile-level-error' : undefined
-                    }
-                  >
-                    <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                    {draft.level &&
-                    !levelOptions.some((opt) => opt.code === draft.level) ? (
-                      <option value={draft.level}>{draft.level}</option>
-                    ) : null}
-                    {levelOptions.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                  {draft.level &&
+                  !levelOptions.some((opt) => opt.code === draft.level) ? (
+                    <option value={draft.level}>{draft.level}</option>
+                  ) : null}
+                  {levelOptions.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
 
-                <FormField
+                <Select
                   label="Mục tiêu học"
-                  htmlFor="profile-goal"
+                  id="profile-goal"
                   error={goalError}
+                  name="goal"
+                  value={draft.goal}
+                  onChange={(e) =>
+                    updateDraftField('goal', e.target.value, 'profile.goal')
+                  }
+                  disabled={catalogsLoading && goalOptions.length === 0}
                 >
-                  <select
-                    id="profile-goal"
-                    name="goal"
-                    className="ck-input"
-                    value={draft.goal}
-                    onChange={(e) =>
-                      updateDraftField('goal', e.target.value, 'profile.goal')
-                    }
-                    disabled={catalogsLoading && goalOptions.length === 0}
-                    aria-invalid={Boolean(goalError)}
-                    aria-describedby={
-                      goalError ? 'profile-goal-error' : undefined
-                    }
-                  >
-                    <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                    {draft.goal &&
-                    !goalOptions.some((opt) => opt.code === draft.goal) ? (
-                      <option value={draft.goal}>{draft.goal}</option>
-                    ) : null}
-                    {goalOptions.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                  {draft.goal &&
+                  !goalOptions.some((opt) => opt.code === draft.goal) ? (
+                    <option value={draft.goal}>{draft.goal}</option>
+                  ) : null}
+                  {goalOptions.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
               </div>
 
               <div className="ck-form-row">
-                <FormField
+                <Select
                   label="Tiếng mẹ đẻ"
-                  htmlFor="profile-native-language"
+                  id="profile-native-language"
                   error={nativeLangError}
+                  name="nativeLanguageCode"
+                  value={draft.nativeLanguageCode}
+                  onChange={(e) =>
+                    updateDraftField(
+                      'nativeLanguageCode',
+                      e.target.value,
+                      'profile.nativeLanguageCode',
+                    )
+                  }
+                  disabled={catalogsLoading && languageOptions.length === 0}
                 >
-                  <select
-                    id="profile-native-language"
-                    name="nativeLanguageCode"
-                    className="ck-input"
-                    value={draft.nativeLanguageCode}
-                    onChange={(e) =>
-                      updateDraftField(
-                        'nativeLanguageCode',
-                        e.target.value,
-                        'profile.nativeLanguageCode',
-                      )
-                    }
-                    disabled={catalogsLoading && languageOptions.length === 0}
-                    aria-invalid={Boolean(nativeLangError)}
-                    aria-describedby={
-                      nativeLangError
-                        ? 'profile-native-language-error'
-                        : undefined
-                    }
-                  >
-                    <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                    {draft.nativeLanguageCode &&
-                    !languageOptions.some(
-                      (opt) => opt.code === draft.nativeLanguageCode,
-                    ) ? (
-                      <option value={draft.nativeLanguageCode}>
-                        {draft.nativeLanguageCode}
-                      </option>
-                    ) : null}
-                    {languageOptions.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                  {draft.nativeLanguageCode &&
+                  !languageOptions.some(
+                    (opt) => opt.code === draft.nativeLanguageCode,
+                  ) ? (
+                    <option value={draft.nativeLanguageCode}>
+                      {draft.nativeLanguageCode}
+                    </option>
+                  ) : null}
+                  {languageOptions.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
 
-                <FormField
+                <Select
                   label="Quốc gia đang sinh sống"
-                  htmlFor="profile-country"
+                  id="profile-country"
                   error={countryError}
+                  name="countryCode"
+                  value={draft.countryCode}
+                  onChange={(e) =>
+                    updateDraftField(
+                      'countryCode',
+                      e.target.value,
+                      'profile.countryCode',
+                    )
+                  }
+                  disabled={catalogsLoading && countryOptions.length === 0}
                 >
-                  <select
-                    id="profile-country"
-                    name="countryCode"
-                    className="ck-input"
-                    value={draft.countryCode}
-                    onChange={(e) =>
-                      updateDraftField(
-                        'countryCode',
-                        e.target.value,
-                        'profile.countryCode',
-                      )
-                    }
-                    disabled={catalogsLoading && countryOptions.length === 0}
-                    aria-invalid={Boolean(countryError)}
-                    aria-describedby={
-                      countryError ? 'profile-country-error' : undefined
-                    }
-                  >
-                    <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                    {draft.countryCode &&
-                    !countryOptions.some(
-                      (opt) => opt.code === draft.countryCode,
-                    ) ? (
-                      <option value={draft.countryCode}>
-                        {draft.countryCode}
-                      </option>
-                    ) : null}
-                    {countryOptions.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                  {draft.countryCode &&
+                  !countryOptions.some(
+                    (opt) => opt.code === draft.countryCode,
+                  ) ? (
+                    <option value={draft.countryCode}>
+                      {draft.countryCode}
+                    </option>
+                  ) : null}
+                  {countryOptions.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
               </div>
 
               <div className="ck-form-row">
-                <FormField
+                <Select
                   label="Nhóm tuổi"
-                  htmlFor="profile-age-group"
+                  id="profile-age-group"
                   error={ageGroupError}
+                  name="ageGroup"
+                  value={draft.ageGroup}
+                  onChange={(e) =>
+                    updateDraftField(
+                      'ageGroup',
+                      e.target.value,
+                      'profile.ageGroup',
+                    )
+                  }
+                  disabled={catalogsLoading && ageGroupOptions.length === 0}
                 >
-                  <select
-                    id="profile-age-group"
-                    name="ageGroup"
-                    className="ck-input"
-                    value={draft.ageGroup}
-                    onChange={(e) =>
-                      updateDraftField(
-                        'ageGroup',
-                        e.target.value,
-                        'profile.ageGroup',
-                      )
-                    }
-                    disabled={catalogsLoading && ageGroupOptions.length === 0}
-                    aria-invalid={Boolean(ageGroupError)}
-                    aria-describedby={
-                      ageGroupError ? 'profile-age-group-error' : undefined
-                    }
-                  >
-                    <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                    {draft.ageGroup &&
-                    !ageGroupOptions.some(
-                      (opt) => opt.code === draft.ageGroup,
-                    ) ? (
-                      <option value={draft.ageGroup}>{draft.ageGroup}</option>
-                    ) : null}
-                    {ageGroupOptions.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                  {draft.ageGroup &&
+                  !ageGroupOptions.some(
+                    (opt) => opt.code === draft.ageGroup,
+                  ) ? (
+                    <option value={draft.ageGroup}>{draft.ageGroup}</option>
+                  ) : null}
+                  {ageGroupOptions.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
 
-                <FormField
+                <Select
                   label="Giới tính"
-                  htmlFor="profile-gender"
+                  id="profile-gender"
                   error={genderError}
+                  name="gender"
+                  value={draft.gender}
+                  onChange={(e) =>
+                    updateDraftField('gender', e.target.value, 'profile.gender')
+                  }
+                  disabled={catalogsLoading && genderOptions.length === 0}
                 >
-                  <select
-                    id="profile-gender"
-                    name="gender"
-                    className="ck-input"
-                    value={draft.gender}
-                    onChange={(e) =>
-                      updateDraftField(
-                        'gender',
-                        e.target.value,
-                        'profile.gender',
-                      )
-                    }
-                    disabled={catalogsLoading && genderOptions.length === 0}
-                    aria-invalid={Boolean(genderError)}
-                    aria-describedby={
-                      genderError ? 'profile-gender-error' : undefined
-                    }
-                  >
-                    <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
-                    {draft.gender &&
-                    !genderOptions.some((opt) => opt.code === draft.gender) ? (
-                      <option value={draft.gender}>{draft.gender}</option>
-                    ) : null}
-                    {genderOptions.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
+                  <option value="">-- Chưa chọn / Xóa lựa chọn --</option>
+                  {draft.gender &&
+                  !genderOptions.some((opt) => opt.code === draft.gender) ? (
+                    <option value={draft.gender}>{draft.gender}</option>
+                  ) : null}
+                  {genderOptions.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
               </div>
 
               {/* Interests (max 3) */}

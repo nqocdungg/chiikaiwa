@@ -1,0 +1,232 @@
+.ck-button--sticker {
+  --sticker-top: #fefcfd;
+  --sticker-face: #f7e7d8;
+  --sticker-middle: #fdf5ef;
+  --sticker-hover: #fff6f0;
+  --sticker-outline: #a18386;
+  --sticker-depth: #b89da2;
+  --sticker-gloss: rgb(255 255 255 / 26%);
+  --sticker-lip: rgb(255 255 255 / 62%);
+  --button-secondary-text: #603347;
+  border: 3px solid #fffdfa;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    180deg,
+    var(--sticker-top),
+    var(--sticker-middle) 48%,
+    var(--sticker-face) 87%,
+    var(--sticker-middle)
+  );
+  box-shadow:
+    inset 0 0 0 2px var(--sticker-outline),
+    inset 0 0 0 4.5px var(--sticker-gloss),
+    inset 0 4px 5px var(--sticker-lip),
+    0 4px 0 var(--sticker-depth);
+  font-weight: 800 !important;
+}
+
+.ck-button--sticker.ck-button--primary {
+  --sticker-top: #ff9bb3;
+  --sticker-middle: #ff87aa;
+  --sticker-face: #fc719b;
+  --sticker-hover: #ffafc1;
+  --sticker-outline: #f66393;
+  --sticker-depth: #b58a98;
+  --sticker-gloss: rgb(255 208 227 / 51%);
+  --sticker-lip: #ffb5cb;
+  --button-primary-text: #fffdf9;
+}
+
+.ck-button--sticker.ck-button--primary:is(:enabled, [data-loading='true'])
+  .ck-button__content {
+  -webkit-text-stroke: 2px #8a254b;
+  paint-order: stroke fill;
+}
+
+.ck-button--sticker.ck-button--danger {
+  --sticker-top: #bf3f61;
+  --sticker-middle: #b93759;
+  --sticker-face: #ad2c50;
+  --sticker-hover: #a22546;
+  --sticker-outline: #982542;
+  --sticker-depth: #83223e;
+  --color-danger: #fffdf9;
+}
+
+.ck-button--sticker:not(:disabled, [aria-disabled='true']):hover {
+  border-color: #fffdfa;
+  background: linear-gradient(
+    180deg,
+    var(--sticker-hover),
+    var(--sticker-face)
+  );
+}
+
+.ck-button--sticker:not(:disabled, [aria-disabled='true']):active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 0 0 1.5px var(--sticker-outline),
+    0 1px 0 var(--sticker-depth);
+}
+
+.ck-button--sticker:not(:disabled, [aria-disabled='true'])::before {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 13%;
+  width: 14%;
+  max-width: 1.5rem;
+  height: 0.67rem;
+  border-top: 5px solid rgb(255 255 255 / 72%);
+  border-radius: 70% 90% 0 0;
+  transform: rotate(-24deg);
+  pointer-events: none;
+  content: '';
+}
+
+.ck-button--sticker:disabled:not([data-loading='true']),
+.ck-button--sticker[aria-disabled='true']:not([data-loading='true']) {
+  border-color: var(--color-border);
+  background: var(--color-room-sidebar);
+  box-shadow: none;
+}
+
+.ck-button--sticker[data-loading='true'] {
+  border-color: #fffdfa;
+  background: var(--sticker-face);
+  box-shadow:
+    inset 0 0 0 1.5px var(--sticker-outline),
+    0 2px 0 var(--sticker-depth);
+  opacity: 1;
+}
+
+.ck-button--sticker .ck-button__content--loading {
+  opacity: 1;
+}
+
+.ck-button--sticker .ck-button__spinner {
+  position: static;
+  flex: none;
+  width: 1em;
+  height: 1em;
+}
+
+.ck-dialog--sticker {
+  max-height: calc(100dvh - 7rem);
+  overflow: visible;
+  border: 2px solid #c27b96;
+  border-radius: var(--radius-dialog-friendly);
+  background: #fffcf8;
+  box-shadow:
+    0 16px 44px rgb(81 34 57 / 25%),
+    0 5px 0 #a86482;
+}
+
+.ck-dialog--sticker .ck-dialog__layout {
+  max-height: calc(100dvh - 7rem - 4px);
+  overflow: hidden;
+  border-radius: calc(var(--radius-dialog-friendly) - 2px);
+}
+
+.ck-dialog__sticker-top {
+  position: absolute;
+  z-index: 1;
+  inset-block-end: calc(100% - 1.08rem);
+  inset-inline-start: 14%;
+  width: 5.1rem;
+  height: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 0 #fff) drop-shadow(1px 0 0 #fff)
+    drop-shadow(-1px 0 0 #fff) drop-shadow(0 -1px 0 #fff);
+}
+
+.ck-dialog--sticker .ck-dialog__header {
+  position: relative;
+  isolation: isolate;
+  align-items: center;
+  min-height: 5.1rem;
+  padding-block: var(--space-4);
+  border-bottom: 1px solid #e9b7c9;
+  background:
+    url('./sticker-flowers.svg') left 0.55rem top 0.45rem /
+      clamp(2.35rem, 9vw, 4.3rem) auto no-repeat,
+    url('./sticker-flowers.svg') left 1.25rem bottom 0.12rem / 1.4rem auto
+      no-repeat,
+    url('./sticker-flowers.svg') right 0.6rem bottom 0.16rem /
+      clamp(2.25rem, 8vw, 3.15rem) auto no-repeat,
+    linear-gradient(#fce4ee, #f4c9da);
+  color: #64354d;
+}
+
+.ck-dialog--sticker.ck-dialog--centered .ck-dialog__header {
+  padding-inline: clamp(4.15rem, 10vw, 5.4rem);
+}
+
+.ck-dialog--sticker.ck-dialog--centered .ck-dialog__heading {
+  padding-inline: 0;
+}
+
+.ck-dialog--sticker.ck-dialog--centered .ck-dialog__close {
+  position: absolute;
+  inset-block-start: 1.1rem;
+  inset-inline-end: 1rem;
+  margin: 0;
+}
+
+.ck-dialog--sticker .ck-dialog__title {
+  font-weight: 900;
+}
+
+.ck-dialog--sticker .ck-dialog__description {
+  color: #6d4659;
+}
+
+.ck-dialog--sticker .ck-dialog__close {
+  background: #fff6fa;
+  color: #743851;
+}
+
+.ck-dialog--sticker .ck-dialog__body {
+  padding-block-start: var(--space-6);
+  scrollbar-gutter: stable both-edges;
+}
+
+.ck-dialog--sticker .ck-dialog__footer {
+  justify-content: center;
+  border-top-color: #efccdb;
+  background:
+    url('./sticker-flowers.svg') left 0.35rem bottom 0.15rem / 2.3rem auto
+      no-repeat,
+    url('./sticker-flowers.svg') right 0.35rem top 0.15rem / 2.3rem auto
+      no-repeat,
+    #fdf0f6;
+}
+
+.ck-dialog--sticker .ck-dialog__footer > .ck-button {
+  flex: 0 1 9.65rem;
+  min-height: 4.15rem;
+}
+
+@media (max-width: 480px) {
+  .ck-dialog--sticker .ck-dialog__footer > .ck-button {
+    flex: 1 1 7rem;
+    padding-inline: var(--space-3);
+    min-height: 3.55rem;
+  }
+
+  .ck-dialog--sticker.ck-dialog--centered .ck-dialog__title {
+    font-size: clamp(1.15rem, 5.6vw, 1.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ck-button--sticker:not(:disabled, [aria-disabled='true']):is(
+      :hover,
+      :active
+    ) {
+    transform: none;
+  }
+
+  .ck-button--sticker .ck-button__spinner {
+    animation: none;
+  }
+}
