@@ -718,7 +718,9 @@ describe('FE-009 Auth Screens (/login, /register) & Logout Flow', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }));
       fireEvent.click(screen.getByRole('button', { name: 'Quay lại lịch sử' }));
       expect(
-        await screen.findByRole('heading', { name: 'Chiikaiwa' }),
+        await screen.findByRole('heading', {
+          name: 'Không gian luyện nói tiếng Nhật 1-1',
+        }),
       ).toBeVisible();
 
       await act(async () => {
@@ -726,7 +728,11 @@ describe('FE-009 Auth Screens (/login, /register) & Logout Flow', () => {
       });
 
       expect(getPrivateCache('late-logout-cache')).toBeUndefined();
-      expect(screen.getByRole('heading', { name: 'Chiikaiwa' })).toBeVisible();
+      expect(
+        screen.getByRole('heading', {
+          name: 'Không gian luyện nói tiếng Nhật 1-1',
+        }),
+      ).toBeVisible();
       expect(
         screen.queryByRole('heading', { name: 'Đăng nhập' }),
       ).not.toBeInTheDocument();

@@ -29,6 +29,11 @@ const schemaOptions = /** @type {const} */ ({
   bufferCommands: false,
 });
 
+/** @param {unknown} value @param {number} maximum */
+function hasAtMostCodePoints(value, maximum) {
+  return typeof value !== 'string' || [...value].length <= maximum;
+}
+
 const selfAssessmentSchema = new Schema(
   {
     confidence: {
@@ -38,7 +43,14 @@ const selfAssessmentSchema = new Schema(
       max: 5,
       validate: Number.isSafeInteger,
     },
-    comment: { type: String, maxlength: 1_000 },
+    comment: {
+      type: String,
+      validate: {
+        validator: (/** @type {unknown} */ value) =>
+          hasAtMostCodePoints(value, 1_000),
+        message: 'Self-assessment comment must not exceed 1000 code points',
+      },
+    },
   },
   { _id: false, strict: 'throw' },
 );
@@ -51,7 +63,14 @@ const sessionPersonalSchema = new Schema(
       required: true,
       immutable: true,
     },
-    note: { type: String, maxlength: 10_000 },
+    note: {
+      type: String,
+      validate: {
+        validator: (/** @type {unknown} */ value) =>
+          hasAtMostCodePoints(value, 10_000),
+        message: 'Session note must not exceed 10000 code points',
+      },
+    },
     noteVersion: nonNegativeVersion,
     selfAssessment: selfAssessmentSchema,
     version: nonNegativeVersion,

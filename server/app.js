@@ -7,6 +7,10 @@ import { createCsrfMiddleware } from './middleware/csrf.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { AppError } from './middleware/http-error.js';
 import { createAdminContentRouter } from './modules/content/content-admin-router.js';
+import {
+  createAdminReportsRouter,
+  createAdminUsersRouter,
+} from './modules/safety/admin-router.js';
 import { createLearnerContentRouter } from './modules/content/content-learner-router.js';
 import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
 import { createAuthRouter } from './modules/identity/auth-router.js';
@@ -16,6 +20,7 @@ import { createSavedItemRouter } from './modules/learning/saved-item-router.js';
 import { createStudyCardRouter } from './modules/learning/study-card-router.js';
 import { createQuizRouter } from './modules/quiz/quiz-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
+import { createSessionLearningRouter } from './modules/sessions/session-learning-router.js';
 import {
   createLivekitWebhookHandler,
   finishWebhookEffects,
@@ -138,7 +143,7 @@ export function createApp({
   app.use(
     '/api/v1',
     createCsrfMiddleware({
-      getOrigin: () => readAuthEnv().origin,
+      getOrigins: () => readAuthEnv().csrfOrigins,
     }),
   );
 
@@ -151,7 +156,10 @@ export function createApp({
   app.use('/api/v1', createInvitationRouter({ assertPairCanEnterSession }));
 
   app.use('/api/v1/sessions', createSessionsRouter());
+  app.use('/api/v1', createSessionLearningRouter());
   app.use('/api/v1/admin/content', createAdminContentRouter());
+  app.use('/api/v1/admin/users', createAdminUsersRouter());
+  app.use('/api/v1/admin/reports', createAdminReportsRouter());
   app.use('/api/v1', createLearnerContentRouter());
   app.use('/api/v1/me/saved-items', createSavedItemRouter());
   app.use('/api/v1/study/cards', createStudyCardRouter());

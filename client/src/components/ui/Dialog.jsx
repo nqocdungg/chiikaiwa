@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
+import chiikawaPeek from '../../assets/mascots/chiikawa-peek.webp';
 import { IconButton } from './controls.jsx';
 
 const focusableSelector = [
@@ -22,6 +23,7 @@ const focusableSelector = [
  * footer?: import('react').ReactNode,
  * size?: 'compact'|'form',
  * friendly?: boolean,
+ * appearance?: 'default'|'sticker',
  * align?: 'start'|'center',
  * className?: string,
  * footerClassName?: string,
@@ -42,6 +44,7 @@ export function Dialog({
   footer,
   size = 'compact',
   friendly = false,
+  appearance = 'default',
   align = 'start',
   className = '',
   footerClassName = '',
@@ -88,6 +91,7 @@ export function Dialog({
     'ck-dialog',
     size === 'form' ? 'ck-dialog--form' : '',
     friendly ? 'ck-dialog--friendly' : '',
+    appearance === 'sticker' ? 'ck-dialog--sticker' : '',
     align === 'center' ? 'ck-dialog--centered' : '',
     className,
   ]
@@ -146,6 +150,15 @@ export function Dialog({
       }}
       onKeyDown={handleKeyDown}
     >
+      {appearance === 'sticker' ? (
+        <img
+          className="ck-dialog__sticker-top"
+          src={chiikawaPeek}
+          alt=""
+          width="82"
+          height="82"
+        />
+      ) : null}
       <div className="ck-dialog__layout">
         <header className="ck-dialog__header">
           <div className="ck-dialog__heading">

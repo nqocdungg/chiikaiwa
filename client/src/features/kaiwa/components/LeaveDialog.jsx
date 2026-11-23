@@ -11,15 +11,22 @@ export function LeaveDialog({
   return (
     <Dialog
       open
+      appearance="sticker"
+      align="center"
       onClose={onCancel}
       title="Rời phòng cho cả hai?"
       description={`Phiên luyện của bạn và ${partnerName} sẽ kết thúc.`}
       footer={
         <>
-          <Button variant="secondary" onClick={onCancel}>
+          <Button appearance="sticker" variant="secondary" onClick={onCancel}>
             Ở lại phòng
           </Button>
-          <Button variant="danger" onClick={onConfirm} loading={pending}>
+          <Button
+            appearance="sticker"
+            variant="danger"
+            onClick={onConfirm}
+            loading={pending}
+          >
             {pending ? 'Đang rời phòng…' : 'Rời và xem tổng kết'}
           </Button>
         </>
