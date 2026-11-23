@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
+import { ConnectionState, Track } from 'livekit-client';
 import { Button, Icon, IconButton } from '../../components/ui/controls.jsx';
+import { PillMotion } from '../../components/ui/PillMotion.jsx';
 import { CardTable } from './components/CardTable.jsx';
 import { ConsentBanner } from './components/ConsentBanner.jsx';
 import { DeckPicker } from './components/DeckPicker.jsx';
@@ -7,20 +9,17 @@ import { LeaveDialog } from './components/LeaveDialog.jsx';
 import { ParticipantVideo } from './components/ParticipantVideo.jsx';
 import { PrivateTools } from './components/PrivateTools.jsx';
 import { RoleCard } from './components/RoleCard.jsx';
+import { SessionChat } from './components/SessionChat.jsx';
+import { ConnectionRoom } from './components/ConnectionRoom.jsx';
 import { SessionSummary } from '../session-summary/SessionSummary.jsx';
-import {
-  decks,
-  knowledge,
-  scenarios,
-  stages,
-} from '../../demo/kaiwa-fixtures.js';
+import roomLogo from '../../assets/brand/chii-logo.svg';
 
 /** @typedef {import('../../demo/kaiwa-fixtures.js').Stage} Stage */
 /** @typedef {import('../../demo/kaiwa-fixtures.js').Phase} Phase */
 /** @typedef {import('../../demo/kaiwa-fixtures.js').Panel} Panel */
 /** @typedef {{action: 'swap'|'skip'|'complete', incoming: boolean}|null} Consent */
 
-/** @param {{initialStage: Stage, initialPanel: Panel|null, longContent: boolean, initialNoteError: boolean, showDemoTools: boolean, onHome: () => void}} props */
+/** @param {{initialStage: Stage, initialPanel: Panel|null, longContent: boolean, initialNoteError: boolean, showDemoTools: boolean, onHome: () => void, live?: ReturnType<typeof import('./use-session-room.js').useSessionRoom>, demoData?: typeof import('../../demo/kaiwa-fixtures.js')}} props */
 export function KaiwaRoom({
   initialStage,
   initialPanel,
@@ -28,8 +27,21 @@ export function KaiwaRoom({
   initialNoteError,
   showDemoTools,
   onHome,
+  live,
+  demoData,
 }) {
-  const [stage, setStage] = useState(initialStage);
+  const {
+    decks = [],
+    knowledge = [],
+    scenarios = [],
+    stages = {},
+  } = demoData ?? {};
+  const [demoStage, setStage] = useState(initialStage);
+  const stage = live
+    ? live.session?.status === 'reconnecting'
+      ? 'reconnecting'
+      : 'selecting'
+    : demoStage;
   const [phase, setPhase] = useState(
     /** @type {Phase} */ (
       ['selecting', 'drawing', 'exhausted'].includes(initialStage)
@@ -60,12 +72,43 @@ export function KaiwaRoom({
   );
   const [leave, setLeave] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [chatDraft, setChatDraft] = useState('');
+  const [lastRead, setLastRead] = useState('');
+  const [sendingChat, setSendingChat] = useState(false);
+  const sendingRef = useRef(false);
+  const lastMessageId = live?.messages.at(-1)?.id ?? '';
+  const media = live?.media;
+  const identity = media?.room.localParticipant.identity ?? '';
+  const selfMember = live?.session?.members.find(
+    (member) => member.actorKey === identity,
+  );
+  const partner = live?.session?.members.find(
+    (member) => member.actorKey !== identity,
+  );
+  const remote =
+    partner && media?.room.remoteParticipants.get(partner.actorKey);
+  const connected = media?.room.state === ConnectionState.Connected;
+  const actualMic = live
+    ? !!media?.room.localParticipant.isMicrophoneEnabled
+    : mic;
+  const actualCamera = live
+    ? !!media?.room.localParticipant.isCameraEnabled
+    : camera;
   const triggerRefs = useRef(
     /** @type {Record<string, HTMLButtonElement|null>} */ ({}),
   );
   const scenario = scenarios[cardIndex];
-  const paused = stage === 'reconnecting';
-  const contentPhase = stage === 'exhausted' ? 'exhausted' : phase;
+  const paused = stage === 'reconnecting' || (!!live && !connected);
+  const contentPhase =
+    live && !demoData
+      ? live.session?.currentCard
+        ? 'practice'
+        : live.session?.deckVersionId
+          ? 'drawing'
+          : 'selecting'
+      : stage === 'exhausted'
+        ? 'exhausted'
+        : phase;
   const active = contentPhase === 'practice' && !paused && stage !== 'ended';
   /** @param {Stage} next */
   function changeStage(next) {
@@ -90,9 +133,11 @@ export function KaiwaRoom({
   }
   /** @param {Panel} next */
   function togglePanel(next) {
+    if (next === 'chat' || panel === 'chat') setLastRead(lastMessageId);
     setPanel(panel === next ? null : next);
   }
   function closePanel() {
+    if (panel === 'chat') setLastRead(lastMessageId);
     if (panel) triggerRefs.current[panel]?.focus();
     setPanel(null);
   }
@@ -130,32 +175,93 @@ export function KaiwaRoom({
     changeStage('ended');
   }
   const toolButtons = (
-    <div className="ck-tools" aria-label="Công cụ riêng">
+    <div className="ck-tools ck-motion-group" aria-label="Công cụ riêng">
+      <PillMotion />
       {
         /** @type {[Panel,string,string][]} */ ([
-          ['hints', 'Gợi ý', 'book'],
+          ['hints', 'Kiến thức', 'book'],
           ['note', 'Ghi chú', 'note'],
           ['chat', 'Chat', 'chat'],
         ]).map(([key, label, icon]) => (
-          <button
-            type="button"
-            className="ck-icon-button"
-            ref={(element) => {
+          <Button
+            variant="ghost"
+            size="compact"
+            className={`ck-room-tool ${panel === key ? 'ck-room-tool--active' : ''}`}
+            buttonRef={(element) => {
               triggerRefs.current[key] = element;
             }}
             key={key}
-            title={label}
-            aria-label={label}
+            aria-label={
+              key === 'chat' &&
+              live &&
+              panel !== 'chat' &&
+              lastMessageId !== lastRead
+                ? `${label} · tin mới`
+                : label
+            }
             aria-pressed={panel === key}
             aria-controls={panel === key ? 'ck-private-panel' : undefined}
             onClick={() => togglePanel(key)}
           >
             <Icon name={icon} />
-          </button>
+            {label}
+            {key === 'chat' &&
+              live &&
+              panel !== 'chat' &&
+              lastMessageId !== lastRead && (
+                <span className="ck-chat-unread" aria-hidden="true">
+                  Mới
+                </span>
+              )}
+          </Button>
         ))
       }
     </div>
   );
+  const deviceControls = (
+    <div className="ck-device-controls" aria-label="Thiết bị của bạn">
+      <Button
+        variant="ghost"
+        size="compact"
+        leadingIcon={<Icon name={actualMic ? 'mic' : 'micOff'} />}
+        loading={media?.pendingDevices.has('microphone')}
+        aria-label="Micro"
+        aria-pressed={actualMic}
+        disabled={
+          !!live && (!connected || media?.pendingDevices.has('microphone'))
+        }
+        onClick={() => {
+          if (live) {
+            void media?.setDevice('microphone', !actualMic);
+            return;
+          }
+          setMic(!mic);
+        }}
+      />
+      <Button
+        variant="ghost"
+        size="compact"
+        leadingIcon={<Icon name={actualCamera ? 'camera' : 'cameraOff'} />}
+        loading={media?.pendingDevices.has('camera')}
+        aria-label="Camera"
+        aria-pressed={actualCamera}
+        disabled={!!live && (!connected || media?.pendingDevices.has('camera'))}
+        onClick={() => {
+          if (live) {
+            void media?.setDevice('camera', !actualCamera);
+            return;
+          }
+          setCamera(!camera);
+        }}
+      />
+    </div>
+  );
+  if (
+    live &&
+    (!live.session || live.session.status === 'preparing' || !identity)
+  ) {
+    return <ConnectionRoom live={live} onHome={onHome} />;
+  }
   return (
     <>
       {showDemoTools && (
@@ -205,30 +311,58 @@ export function KaiwaRoom({
       <header className="ck-room-header">
         <button
           type="button"
-          className="ck-brand"
+          className="ck-room-logo"
           aria-label="Về trang chính"
           onClick={() => (stage === 'ended' ? onHome() : setLeave(true))}
         >
-          <span lang="ja">ち</span>chiikaiwa
+          <img src={roomLogo} alt="" width="42" height="46" />
         </button>
         <div className="ck-room-heading">
           <h1>{stage === 'ended' ? 'Tổng kết phiên' : 'Phòng Kaiwa'}</h1>
-          <span>Minh Anh & Haru</span>
-        </div>
-        <div className="ck-room-meta">
           <span className={`ck-status ${paused ? 'ck-status--warning' : ''}`}>
             {stage === 'ended'
               ? 'Đã kết thúc'
               : paused
                 ? 'Đang phục hồi'
-                : 'Phiên mẫu · 2 người'}
-          </span>
-          <span className="ck-time">
-            <Icon name="clock" size={16} />
-            {phase === 'selecting' ? '01:00' : '08:24'}
+                : live
+                  ? `Đã kết nối ${Number(connected) + Number(!!remote)}/2`
+                  : 'Đã kết nối 2/2'}
           </span>
         </div>
-        {stage !== 'ended' && toolButtons}
+        <div className="ck-room-meta">
+          <span>Thời lượng</span>
+          <span className="ck-time">
+            <Icon name="clock" size={16} />
+            {live
+              ? `${Math.floor((live.session?.activeDurationMs ?? 0) / 60000)}:${String(Math.floor((live.session?.activeDurationMs ?? 0) / 1000) % 60).padStart(2, '0')}`
+              : phase === 'selecting'
+                ? '01:00'
+                : '08:24'}
+          </span>
+        </div>
+        {stage !== 'ended' && (
+          <div className="ck-room-actions">
+            <Button
+              variant="ghost"
+              size="compact"
+              leadingIcon={<Icon name="screen" />}
+              disabled={!!live || paused || stage === 'sharing'}
+              onClick={() =>
+                setFeedback('Chia sẻ màn hình chưa kết nối trong bản xem thử.')
+              }
+            >
+              Chia sẻ
+            </Button>
+            {toolButtons}
+            <Button
+              variant="danger"
+              size="compact"
+              onClick={() => setLeave(true)}
+            >
+              Rời phòng
+            </Button>
+          </div>
+        )}
       </header>
       {stage === 'ended' ? (
         <SessionSummary
@@ -238,6 +372,7 @@ export function KaiwaRoom({
           note={note}
           noteStatus={noteStatus}
           saved={saved}
+          knowledge={knowledge}
           onHome={onHome}
         />
       ) : (
@@ -246,7 +381,9 @@ export function KaiwaRoom({
             <div className="ck-recovery" role="status">
               <Icon name="clock" size={17} />
               <span>
-                Chờ Haru kết nối lại · Còn 04:32 (mẫu). Thao tác chung tạm dừng.
+                {live
+                  ? `Đang chờ phục hồi kết nối${live.session?.reconnectUntil ? ` · Hạn ${new Date(live.session.reconnectUntil).toLocaleTimeString('vi-VN')}` : ''}. Thao tác chung tạm dừng.`
+                  : 'Chờ Haru kết nối lại · Còn 04:32 (mẫu). Thao tác chung tạm dừng.'}
               </span>
             </div>
           )}
@@ -256,16 +393,31 @@ export function KaiwaRoom({
           >
             <aside className="ck-participants" aria-label="Hai người luyện">
               <ParticipantVideo
-                name="Haru"
-                self={false}
-                camera={false}
-                paused={paused}
-              />
-              <ParticipantVideo
-                name="Minh Anh"
+                name={live ? (selfMember?.displayName ?? 'Bạn') : 'Minh Anh'}
                 self
-                camera={camera}
-                paused={false}
+                camera={actualCamera}
+                paused={!!live && !connected}
+                videoTrack={
+                  media?.room.localParticipant.getTrackPublication(
+                    Track.Source.Camera,
+                  )?.videoTrack
+                }
+                microphone={live ? actualMic : undefined}
+              />
+              {deviceControls}
+              <ParticipantVideo
+                name={live ? (partner?.displayName ?? 'Bạn luyện') : 'Haru'}
+                self={false}
+                camera={live ? !!remote?.isCameraEnabled : false}
+                paused={live ? !connected || !remote : paused}
+                videoTrack={
+                  remote?.getTrackPublication(Track.Source.Camera)?.videoTrack
+                }
+                audioTrack={
+                  remote?.getTrackPublication(Track.Source.Microphone)
+                    ?.audioTrack
+                }
+                microphone={live ? !!remote?.isMicrophoneEnabled : undefined}
               />
               <span className="ck-private-caption">
                 <Icon name="lock" size={12} />
@@ -273,27 +425,44 @@ export function KaiwaRoom({
               </span>
             </aside>
             <section className="ck-scenario" aria-label="Thẻ tình huống">
-              <div className="ck-scenario-toolbar">
-                <span>
-                  <Icon name="cards" size={16} />
-                  {controller
-                    ? 'Bạn đang điều khiển'
-                    : 'Bạn luyện đang điều khiển'}
-                </span>
-                {!controller && (
-                  <button
-                    className="ck-text-button"
-                    disabled={paused}
-                    onClick={() => setController(true)}
-                  >
-                    Lấy quyền điều khiển
-                  </button>
+              <div className="ck-scenario-header">
+                {contentPhase === 'selecting' && (
+                  <div className="ck-section-heading">
+                    <span className="ck-step-label">BƯỚC 1</span>
+                    <h2>Chọn bộ hội thoại</h2>
+                    <p>Chọn một bộ phù hợp với trình độ của hai bạn.</p>
+                  </div>
                 )}
-                <span className="ck-level">
-                  {phase === 'selecting'
-                    ? 'Chọn trong 60 giây'
-                    : 'N4 · Đời sống'}
-                </span>
+                <div className="ck-scenario-toolbar">
+                  <span>
+                    <Icon name="cards" size={16} />
+                    {(
+                      live
+                        ? live.session?.controllerKey === identity
+                        : controller
+                    )
+                      ? 'Bạn đang điều khiển'
+                      : 'Bạn luyện đang điều khiển'}
+                  </span>
+                  {!live && !controller && (
+                    <button
+                      className="ck-text-button"
+                      disabled={paused}
+                      onClick={() => setController(true)}
+                    >
+                      Lấy quyền điều khiển
+                    </button>
+                  )}
+                  {contentPhase === 'selecting' && (
+                    <span className="ck-level">
+                      {live
+                        ? `Còn ${Math.ceil((live.session?.selectionRemainingMs ?? 0) / 1000)} giây chọn bộ`
+                        : phase === 'selecting'
+                          ? 'Chọn trong 60 giây'
+                          : 'N4 · Đời sống'}
+                    </span>
+                  )}
+                </div>
               </div>
               <div
                 className="ck-scenario-scroll"
@@ -307,11 +476,33 @@ export function KaiwaRoom({
                     <span>Nội dung chia sẻ màn hình</span>
                   </div>
                 )}
-                {contentPhase === 'selecting' ? (
+                {live && !demoData ? (
+                  <div className="ck-live-card">
+                    {live.session?.currentCard ? (
+                      <>
+                        <h2>{live.session.currentCard.title}</h2>
+                        <p>{live.session.currentCard.context}</p>
+                        <h3>{live.session.currentCard.myRole}</h3>
+                        <p>{live.session.currentCard.objective}</p>
+                      </>
+                    ) : (
+                      <div className="ck-empty">
+                        <Icon name="cards" size={38} />
+                        <h3>
+                          {live.session?.deckVersionId
+                            ? 'Chưa có thẻ đang luyện'
+                            : 'Chưa chọn bộ hội thoại'}
+                        </h3>
+                        <p>Hai bạn có thể trò chuyện trong khi chờ chọn thẻ.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : contentPhase === 'selecting' ? (
                   <DeckPicker
                     decks={decks}
                     disabled={paused || !controller}
                     onSelect={() => advancePhase('drawing')}
+                    previewOnly={!!live && !!demoData}
                   />
                 ) : contentPhase === 'drawing' ? (
                   <CardTable
@@ -344,7 +535,7 @@ export function KaiwaRoom({
                   />
                 )}
               </div>
-              {contentPhase === 'practice' && (
+              {!live && contentPhase === 'practice' && (
                 <div className="ck-scenario-actions">
                   <IconButton
                     name="swap"
@@ -401,49 +592,83 @@ export function KaiwaRoom({
                   setNoteStatus('draft');
                 }}
                 onNoteSave={() => setNoteStatus('saved')}
+                liveContent={
+                  live ? (
+                    panel === 'chat' ? (
+                      <SessionChat
+                        messages={live.messages}
+                        members={live.session?.members ?? []}
+                        identity={identity}
+                        connected={connected}
+                        draft={chatDraft}
+                        onDraft={setChatDraft}
+                        sending={sendingChat}
+                        onSend={async (text) => {
+                          if (sendingRef.current) return;
+                          if (!media) throw new Error('Chưa kết nối chat.');
+                          sendingRef.current = true;
+                          setSendingChat(true);
+                          try {
+                            await media.send(text);
+                            setChatDraft((current) =>
+                              current === text ? '' : current,
+                            );
+                          } finally {
+                            sendingRef.current = false;
+                            setSendingChat(false);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <p className="ck-muted">
+                        {panel === 'hints'
+                          ? 'Kiến thức chưa khả dụng cho tình huống này.'
+                          : 'Ghi chú riêng chưa khả dụng.'}
+                      </p>
+                    )
+                  ) : undefined
+                }
               />
             )}
           </main>
-          <footer className="ck-callbar">
-            <span>
-              <Icon name="lock" size={14} />
-              Phòng riêng
-            </span>
-            <div className="ck-device-controls">
-              <IconButton
-                name="mic"
-                label={mic ? 'Tắt micro' : 'Bật micro'}
-                pressed={mic}
-                onClick={() => {
-                  setMic(!mic);
-                  setFeedback('Micro được mô phỏng, không truy cập thiết bị.');
-                }}
-              />
-              <IconButton
-                name="camera"
-                label={camera ? 'Tắt camera' : 'Bật camera'}
-                pressed={camera}
-                onClick={() => {
-                  setCamera(!camera);
-                  setFeedback('Camera được mô phỏng, không truy cập thiết bị.');
-                }}
-              />
-              <IconButton
-                name="screen"
-                label="Chia sẻ màn hình"
-                disabled={paused || stage === 'sharing'}
-                onClick={() =>
-                  setFeedback(
-                    'Chia sẻ chưa kết nối. Dùng trạng thái Chia sẻ màn hình để xem bản mẫu.',
-                  )
-                }
-              />
+          {live && (
+            <div className="ck-room-notices" aria-live="polite">
+              {[
+                live.error,
+                live.mediaError,
+                ...(media?.deviceErrors.values() ?? []),
+              ]
+                .filter(Boolean)
+                .map((message, index) => (
+                  <p className="ck-error" key={index}>
+                    {message}
+                  </p>
+                ))}
+              {!connected && (
+                <Button
+                  disabled={live.connecting || live.leaving}
+                  onClick={() => {
+                    void live.connect();
+                  }}
+                >
+                  Thử lại kết nối
+                </Button>
+              )}
+              {media && !media.room.canPlaybackAudio && (
+                <Button
+                  onClick={() => {
+                    void media.room
+                      .startAudio()
+                      .catch(() =>
+                        setFeedback('Chưa phát được âm thanh. Hãy thử lại.'),
+                      );
+                  }}
+                >
+                  Bật âm thanh cuộc gọi
+                </Button>
+              )}
             </div>
-            <Button variant="danger" onClick={() => setLeave(true)}>
-              <Icon name="exit" size={17} />
-              Rời phòng
-            </Button>
-          </footer>
+          )}
         </>
       )}
       {feedback && (
@@ -457,7 +682,18 @@ export function KaiwaRoom({
         </div>
       )}
       {leave && (
-        <LeaveDialog onCancel={() => setLeave(false)} onConfirm={endSession} />
+        <LeaveDialog
+          onCancel={() => setLeave(false)}
+          onConfirm={
+            live
+              ? () => {
+                  void live.leave();
+                }
+              : endSession
+          }
+          pending={live?.leaving}
+          partnerName={live ? (partner?.displayName ?? 'bạn luyện') : undefined}
+        />
       )}
     </>
   );

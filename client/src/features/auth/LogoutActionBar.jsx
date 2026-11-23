@@ -1,0 +1,104 @@
+import { useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { Button } from '../../components/ui/controls.jsx';
+import { Avatar, Badge } from '../../components/ui/surfaces.jsx';
+import { activeLocationRef } from '../home/navigation-tracker.js';
+import { mapAuthApiError } from './auth-validation.js';
+import { useAuth } from './use-auth.js';
+
+export function LogoutActionBar() {
+  const { kind, user, role, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState(
+    /** @type {string | null} */ (null),
+  );
+  const pendingRef = useRef(false);
+
+  if (kind !== 'user' && kind !== 'guest') {
+    return null;
+  }
+
+  const actorLabel =
+    kind === 'user'
+      ? user?.displayName || user?.email || 'Người học'
+      : 'Khách dùng thử';
+
+  const handleLogout = async () => {
+    if (pendingRef.current || isLoggingOut) {
+      return;
+    }
+    pendingRef.current = true;
+    setIsLoggingOut(true);
+    setLogoutError(null);
+    const originKey = location.key;
+    const originPathname = location.pathname;
+
+    try {
+      await logout();
+      const currentLocation = activeLocationRef.current;
+      if (
+        currentLocation?.key === originKey &&
+        currentLocation.pathname === originPathname
+      ) {
+        navigate('/login', { replace: true });
+      }
+    } catch (err) {
+      const errCode = /** @type {{code?: string}} */ (err)?.code;
+      if (errCode === 'AUTH_SUPERSEDED') {
+        return;
+      }
+      const mapped = mapAuthApiError(err, 'logout');
+      setLogoutError(mapped.bannerMessage);
+    } finally {
+      pendingRef.current = false;
+      setIsLoggingOut(false);
+    }
+  };
+
+  return (
+    <div className="ck-session-bar" data-testid="auth-session-bar">
+      <div className="ck-session-bar__inner">
+        <div className="ck-session-bar__identity">
+          <Avatar name={actorLabel} size={32} />
+          <Badge tone="accent">
+            {role === 'admin'
+              ? 'Admin'
+              : kind === 'guest'
+                ? 'Khách'
+                : 'Học viên'}
+          </Badge>
+          <span className="ck-session-bar__name">{actorLabel}</span>
+        </div>
+
+        <div className="ck-session-bar__actions">
+          {kind === 'user' && role !== 'admin' ? (
+            <Link to="/profile" className="ck-session-bar__link">
+              Hồ sơ
+            </Link>
+          ) : null}
+          <Button
+            type="button"
+            variant="secondary"
+            size="compact"
+            loading={isLoggingOut}
+            onClick={handleLogout}
+          >
+            {isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất'}
+          </Button>
+        </div>
+      </div>
+
+      {logoutError ? (
+        <div
+          className="ck-session-bar__error"
+          role="alert"
+          aria-live="assertive"
+        >
+          <span>{logoutError}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}

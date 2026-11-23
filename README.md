@@ -36,6 +36,7 @@ Trong terminal thứ hai:
 
 ```sh
 npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
@@ -43,7 +44,36 @@ npm run dev
 - API: `http://127.0.0.1:3000/api/v1` mặc định.
 - Health check: [GET /api/v1/health](http://127.0.0.1:5173/api/v1/health), trả 503 khi database không sẵn sàng.
 
+Lệnh `npm run db:seed` nạp dữ liệu học liệu chuẩn và tài khoản kiểm thử mẫu (cần cấu hình `SEED_ADMIN_PASSWORD` trong `.env` theo hướng dẫn tại `.env.example`).
+
 Vite proxy `/api` tới backend theo `PORT` trong environment hoặc `.env`. Khởi động lại development server sau khi đổi cấu hình. Không commit `.env`.
+
+### Dùng MongoDB Atlas
+
+Nếu đã được cấp quyền Atlas, làm như sau:
+
+1. Mở `.env` (đã copy từ `.env.example`). Comment dòng `MONGODB_URI` local, bỏ dấu `#` ở dòng `MONGODB_URI` Atlas, rồi điền username/password database được cấp.
+2. Giữ `MONGODB_DB_NAME=chiikaiwa_dev`.
+
+Không để hai dòng `MONGODB_URI` cùng bật. Không commit `.env` hoặc đưa mật khẩu vào file mẫu.
+
+Mở terminal tại thư mục gốc repo và chạy:
+
+```sh
+npm run db:status
+npm run db:migrate
+npm run dev
+```
+
+Khi dùng Atlas, bỏ qua `npm run db:dev`. Các lệnh trên dùng `chiikaiwa_dev`; giữ `chiikaiwa_demo` riêng.
+
+Muốn kiểm tra transaction rollback trên Atlas, chạy lệnh này sau migration:
+
+```sh
+npm run db:verify-atlas-transaction
+```
+
+Lệnh chỉ chạy với Atlas và `chiikaiwa_dev`. Nó tự ghi dữ liệu thử, kiểm tra rollback rồi dọn dữ liệu đó. Không chạy lệnh này trên `chiikaiwa_demo`.
 
 ## Commands
 
@@ -60,6 +90,8 @@ Vite proxy `/api` tới backend theo `PORT` trong environment hoặc `.env`. Kh�
 | `npm start`                                | Chạy API không watch                                               |
 | `npm run preview --workspace client`       | Xem frontend đã build; không chạy API                              |
 | `npm run db:status` / `npm run db:migrate` | Xem / thực hiện migration                                          |
+| `npm run db:seed`                          | Nạp dữ liệu học liệu và tài khoản kiểm thử (idempotent seed)       |
+| `npm run db:verify-atlas-transaction`      | Kiểm chứng rollback transaction trên Atlas `chiikaiwa_dev`         |
 
 Integration tests tự tạo và dọn database tạm, không đọc `.env`. Nếu dùng binary MongoDB đã cài để chạy tests, đặt `MONGOMS_SYSTEM_BINARY` trong environment của terminal.
 
@@ -117,7 +149,9 @@ Giữ nghiệp vụ trong service và xử lý HTTP trong controller. Không imp
 
 ## Database migrations
 
-Application startup không tự tạo collection/index hoặc chạy migration. Thêm schema và index theo từng module qua migration trước khi mở API ghi dữ liệu. Hiện chưa có migration hoặc seed nghiệp vụ.
+Application startup không tự tạo collection/index hoặc chạy migration. Migration nền hiện tại tạo các collection cần thiết và áp index theo design 06; không nạp dữ liệu nghiệp vụ. Chạy migration trên database đích trước khi mở API ghi dữ liệu.
+
+Chạy migration đăng ký cấu hình FSRS-6 trước khi sử dụng `POST /api/v1/study/cards/reveal`. API trả `503 SERVICE_UNAVAILABLE` nếu cấu hình cần dùng chưa có hoặc sai. Migration giữ nguyên cấu hình đã đăng ký và từ chối bản lưu có cùng ID nhưng khác tham số.
 
 Xem [migration guide](server/persistence/migrations/README.md) để thêm migration, xử lý lock và kiểm tra checksum.
 

@@ -22,6 +22,8 @@
 
 <!-- Lệnh đã chạy, kết quả, kiểm tra thủ công và phần chưa kiểm chứng. -->
 
+<!-- Nếu thay đổi REST API: xác nhận đã cập nhật docs/api/openapi.yaml và chạy npm run openapi:check. -->
+
 ## Compatibility / Deployment
 
 <!-- None, hoặc ảnh hưởng API/schema, migration, thứ tự triển khai và phục hồi. -->

@@ -17,26 +17,28 @@
 - [Chạy local](development/local.md): frontend, API và database.
 - [Contributing](../CONTRIBUTING.md): quy trình triển khai và điều kiện hoàn thành.
 - [Scrum và quản lý công việc](development/scrum.md): sprint 2 tuần, Project Tracker, Task ID và Definition of Done.
+- [Project Progress Handoff](PROGRESS-TRACKER.md): khi hoàn thành hoặc bàn giao task, cập nhật kết quả, file liên quan, kiểm chứng và việc tiếp theo theo mẫu trong file. Tiến độ hằng ngày vẫn cập nhật trên Project Tracker.
 - [Git workflow](development/git-workflow.md): branch, commit, PR và merge.
 - [Coding conventions](development/coding-conventions.md): tổ chức source và quy tắc triển khai.
 - [Testing](development/testing.md): lựa chọn kiểm thử và cách chạy check.
-- [UI hiện hành](development/ui.md): giao diện Chiikaiwa, phòng ba vùng, thẻ Nhật/Việt và bản Storybook static.
+- [OpenAPI và Swagger](api/README.md): xem tài liệu API, cập nhật endpoint/schema và hướng dẫn prompt cho AI.
+- [UI hiện hành](development/ui.md): giao diện Chiikaiwa, phòng ba vùng và thẻ Nhật/Việt.
 - [Migration guide](../server/persistence/migrations/README.md): tạo và vận hành migration.
 - [Agent instructions](../AGENTS.md): chỉ dẫn thực thi cho agent.
 
 ## Chọn tài liệu theo công việc
 
-| Công việc                    | Tài liệu cần đối chiếu                                             |
-| ---------------------------- | ------------------------------------------------------------------ |
-| Bắt đầu một chức năng        | SRS, backlog và kiến trúc; đọc thêm các phần bên dưới theo phạm vi |
-| Nhận task, cập nhật tiến độ  | Scrum, Task Tracker và Task Handoff trên Project Tracker           |
-| Branch, commit, PR, release  | Git workflow và template PR                                        |
-| Giao diện                    | UI/UX và contract API liên quan                                    |
-| API, phân quyền              | SRS, API, kiến trúc và database liên quan                          |
-| Schema, index, migration     | Database, kiến trúc, API và migration guide                        |
-| Tích hợp dịch vụ, deployment | Kiến trúc, yêu cầu phi chức năng và cấu hình thực tế               |
-| Sửa lỗi                      | Yêu cầu nguồn, code và test tái hiện lỗi                           |
-| Tài liệu, tooling            | Hướng dẫn development và manifest/config liên quan                 |
+| Công việc                    | Tài liệu cần đối chiếu                                                                                               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Bắt đầu một chức năng        | SRS, backlog và kiến trúc; đọc thêm các phần bên dưới theo phạm vi                                                   |
+| Nhận task, cập nhật tiến độ  | Scrum và Task Tracker trên Project Tracker; ghi kết quả bàn giao vào [Project Progress Handoff](PROGRESS-TRACKER.md) |
+| Branch, commit, PR, release  | Git workflow và template PR                                                                                          |
+| Giao diện                    | UI/UX và contract API liên quan                                                                                      |
+| API, phân quyền              | SRS, API, kiến trúc và database liên quan                                                                            |
+| Schema, index, migration     | Database, kiến trúc, API và migration guide                                                                          |
+| Tích hợp dịch vụ, deployment | Kiến trúc, yêu cầu phi chức năng và cấu hình thực tế                                                                 |
+| Sửa lỗi                      | Yêu cầu nguồn, code và test tái hiện lỗi                                                                             |
+| Tài liệu, tooling            | Hướng dẫn development và manifest/config liên quan                                                                   |
 
 ## Quản lý tài liệu
 

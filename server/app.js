@@ -1,13 +1,58 @@
-import { randomUUID } from 'node:crypto';
 import express from 'express';
 import helmet from 'helmet';
-import { checkDatabase } from './persistence/database.js';
-import { errorHandler } from './middleware/error-handler.js';
+import { randomUUID } from 'node:crypto';
 
-/** @param {{checkHealth?: () => Promise<void>}} [options] */
-export function createApp({ checkHealth = checkDatabase } = {}) {
+import { readAuthEnv } from './config/env.js';
+import { createCsrfMiddleware } from './middleware/csrf.js';
+import { errorHandler } from './middleware/error-handler.js';
+import { AppError } from './middleware/http-error.js';
+import { createAdminContentRouter } from './modules/content/content-admin-router.js';
+import {
+  createAdminReportsRouter,
+  createAdminUsersRouter,
+} from './modules/safety/admin-router.js';
+import { createLearnerContentRouter } from './modules/content/content-learner-router.js';
+import { createCoordinationRouter } from './modules/coordination/coordination-router.js';
+import { createAuthRouter } from './modules/identity/auth-router.js';
+import { createProfileRouter } from './modules/identity/profile-router.js';
+import { createInvitationRouter } from './modules/invitations/invitation-router.js';
+import { createSavedItemRouter } from './modules/learning/saved-item-router.js';
+import { createStudyCardRouter } from './modules/learning/study-card-router.js';
+import { createQuizRouter } from './modules/quiz/quiz-router.js';
+import { createSessionsRouter } from './modules/sessions/sessions-router.js';
+import {
+  createLivekitWebhookHandler,
+  finishWebhookEffects,
+} from './modules/sessions/livekit-webhook-handler.js';
+import { createSessionPresenceConsumer } from './modules/sessions/session-lifecycle-service.js';
+import { assertPairCanEnterSession as defaultAssertPairCanEnterSession } from './modules/safety/safety-service.js';
+import { createOpenApiRouter } from './openapi.js';
+import { checkDatabase } from './persistence/database.js';
+
+/**
+ * @param {{
+ *   checkHealth?: () => Promise<void>,
+ *   handleLivekitWebhook?: import('express').RequestHandler,
+ *   onVerifiedPresence?: import('./modules/sessions/livekit-webhook-service.js').PresenceConsumer,
+ *   assertPairCanEnterSession?: typeof defaultAssertPairCanEnterSession,
+ *   sendPasswordResetEmail?: (params: { toEmail: string, displayName?: string, resetToken: string }) => Promise<unknown>,
+ *   waitUntil?: (promise: Promise<unknown>) => void
+ * }} [options]
+ */
+export function createApp({
+  checkHealth = checkDatabase,
+  onVerifiedPresence = createSessionPresenceConsumer(),
+  handleLivekitWebhook = createLivekitWebhookHandler({
+    onVerifiedPresence,
+    afterCommit: finishWebhookEffects,
+  }),
+  assertPairCanEnterSession = defaultAssertPairCanEnterSession,
+  sendPasswordResetEmail,
+  waitUntil,
+} = {}) {
   const app = express();
   app.disable('x-powered-by');
+  app.use(createOpenApiRouter());
   app.use(helmet());
   app.use((_request, response, next) => {
     response.locals.meta = {
@@ -28,7 +73,38 @@ export function createApp({ checkHealth = checkDatabase } = {}) {
     });
     next();
   });
+  // Signature verification needs the original bytes, before any JSON parser.
+  app.post(
+    '/api/v1/webhooks/livekit',
+    express.raw({
+      type: 'application/webhook+json',
+      limit: '1mb',
+      inflate: false,
+    }),
+    (request, response, next) => {
+      if (!request.is('application/webhook+json')) {
+        return next(
+          new AppError({
+            status: 415,
+            code: 'UNSUPPORTED_MEDIA_TYPE',
+            message: 'Webhook phải sử dụng application/webhook+json.',
+          }),
+        );
+      }
+      if (!handleLivekitWebhook) {
+        return next(
+          new AppError({
+            status: 503,
+            code: 'SERVICE_UNAVAILABLE',
+            message: 'Dịch vụ webhook chưa sẵn sàng.',
+          }),
+        );
+      }
+      return handleLivekitWebhook(request, response, next);
+    },
+  );
   app.use(express.json({ limit: '1mb' }));
+
   app.get('/api/v1/health', async (_request, response) => {
     try {
       await checkHealth();
@@ -39,6 +115,54 @@ export function createApp({ checkHealth = checkDatabase } = {}) {
         .json({ data: { status: 'unavailable' }, meta: response.locals.meta });
     }
   });
+
+  // Require application/json for mutating API requests with non-empty body (excluding webhooks)
+  app.use('/api/v1', (request, _response, next) => {
+    if (
+      ['POST', 'PATCH', 'PUT'].includes(request.method.toUpperCase()) &&
+      !request.path.startsWith('/webhooks')
+    ) {
+      const contentLength = Number(request.headers['content-length'] ?? '0');
+      const hasBody =
+        contentLength > 0 || Boolean(request.headers['transfer-encoding']);
+      if (hasBody && !request.is('application/json')) {
+        return next(
+          new AppError({
+            status: 415,
+            code: 'UNSUPPORTED_MEDIA_TYPE',
+            message: 'Yêu cầu phải sử dụng định dạng application/json.',
+          }),
+        );
+      }
+    }
+    return next();
+  });
+
+  // Enforce CSRF token & Origin allowlist on all browser mutating requests under /api/v1
+  app.use(
+    '/api/v1',
+    createCsrfMiddleware({
+      getOrigins: () => readAuthEnv().csrfOrigins,
+    }),
+  );
+
+  app.use(
+    '/api/v1/auth',
+    createAuthRouter({ sendPasswordResetEmail, waitUntil }),
+  );
+  app.use('/api/v1', createProfileRouter());
+  app.use('/api/v1', createCoordinationRouter());
+  app.use('/api/v1', createInvitationRouter({ assertPairCanEnterSession }));
+
+  app.use('/api/v1/sessions', createSessionsRouter());
+  app.use('/api/v1/admin/content', createAdminContentRouter());
+  app.use('/api/v1/admin/users', createAdminUsersRouter());
+  app.use('/api/v1/admin/reports', createAdminReportsRouter());
+  app.use('/api/v1', createLearnerContentRouter());
+  app.use('/api/v1/me/saved-items', createSavedItemRouter());
+  app.use('/api/v1/study/cards', createStudyCardRouter());
+  app.use('/api/v1', createQuizRouter());
+
   app.use((_request, response) => {
     response.status(404).json({
       error: {

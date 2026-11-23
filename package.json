@@ -6,16 +6,16 @@
   "packageManager": "npm@11.21.1",
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@storybook/addon-docs": "10.6.6",
-    "@storybook/react-vite": "10.6.6",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
+    "@types/events": "3.0.3",
     "@types/express": "5.0.6",
     "@types/node": "24.19.2",
     "@types/punycode": "2.1.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/supertest": "7.2.1",
+    "@types/swagger-ui-express": "4.1.8",
     "concurrently": "10.0.6",
     "eslint": "10.14.0",
     "eslint-config-prettier": "10.1.8",
@@ -25,7 +25,6 @@
     "jsdom": "31.0.0",
     "mongodb-memory-server-core": "11.3.0",
     "prettier": "3.9.10",
-    "storybook": "10.6.6",
     "supertest": "7.3.1",
     "typescript": "7.0.2",
     "vitest": "5.1.0"
@@ -39,12 +38,14 @@
     "server"
   ],
   "scripts": {
-    "storybook": "storybook dev --port 6006 --host 127.0.0.1 --no-open --disable-telemetry",
-    "build-storybook": "storybook build --disable-telemetry",
     "dev": "concurrently --kill-others --names api,client \"npm run dev --workspace server\" \"npm run dev --workspace client\"",
     "db:dev": "node --env-file-if-exists=.env scripts/database-dev.js",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.js",
     "db:status": "node --env-file-if-exists=.env scripts/migrate.js --status",
+    "db:seed": "node --env-file-if-exists=.env scripts/seed.js",
+    "db:verify-atlas-transaction": "node --env-file-if-exists=.env scripts/verify-atlas-transaction.js",
+    "openapi:check": "vitest run --project server tests/server/openapi-contract.test.js",
+    "audit:ci": "node scripts/dependency-audit.js",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -54,7 +55,7 @@
     "test:integration": "vitest run --project integration",
     "build": "npm run build --workspace client && node --check server/app.js && node --check api/index.js",
     "start": "node --env-file-if-exists=.env server/start.js",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration && npm run build && npm run build-storybook"
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration && npm run build"
   },
   "prettier": {
     "singleQuote": true,

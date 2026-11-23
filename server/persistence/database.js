@@ -28,6 +28,21 @@ export async function connectDatabase() {
   return db;
 }
 
+/**
+ * Run database writes atomically on the configured replica set.
+ * @template T
+ * @param {(session: import('mongoose').ClientSession) => Promise<T>} work
+ * @returns {Promise<T>}
+ */
+export async function withTransaction(work) {
+  await connectDatabase();
+  return mongoose.connection.transaction(work, {
+    readPreference: 'primary',
+    readConcern: { level: 'snapshot' },
+    writeConcern: { w: 'majority' },
+  });
+}
+
 export async function checkDatabase() {
   const db = await connectDatabase();
   await db.command({ ping: 1 });

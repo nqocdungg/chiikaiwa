@@ -10,6 +10,7 @@ export default defineConfig({
           name: 'integration',
           environment: 'node',
           include: ['tests/integration/**/*.test.js'],
+          fileParallelism: false,
           hookTimeout: 120000,
           testTimeout: 20000,
         },

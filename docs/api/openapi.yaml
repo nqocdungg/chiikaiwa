@@ -1,0 +1,3632 @@
+openapi: 3.1.0
+
+info:
+  title: Chiikaiwa API
+  version: 0.1.0
+  description: >-
+    Contract máy đọc được cho API Chiikaiwa. Phạm vi ban đầu bao phủ health
+    check và BE-009; xem docs/api/README.md trước khi thêm endpoint.
+
+servers:
+  - url: /api/v1
+    description: Cùng origin với ứng dụng
+
+tags:
+  - name: Auth
+  - name: Sessions
+  - name: System
+  - name: Profile
+  - name: Invitations
+  - name: Invitation Requests
+  - name: Content Admin
+  - name: Learning Content
+  - name: Flashcards
+  - name: Quizzes
+  - name: Admin Operations
+
+paths:
+  /sessions/{id}:
+    get:
+      tags:
+        - Sessions
+      operationId: getSession
+      summary: ??c phi?n theo quy?n th?nh vi?n
+      description: Reconcile deadline tr??c projection. GET kh?ng c?ng d?n
+        clock/counter v?o database. Disconnect d?ng clock; ph?c h?i ??y ?? thu?c
+        task ti?p theo.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - &a2
+          name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+      responses:
+        '200':
+          description: Session hi?n h?nh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+  /sessions/{id}/leave:
+    post:
+      tags:
+        - Sessions
+      operationId: leaveSession
+      summary: K?t th?c phi?n cho c? hai th?nh vi?n
+      description:
+        Body r?ng, kh?ng expectedVersion. Retry kh?ng k?t th?c l?n hai ho?c
+        gia h?n kh?ch. Commit ended tr??c thu h?i media; l?i d?ch v? gi? cleanup
+        pending, response v?n l? Session ended.
+      security: &a3
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: &a4
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              maxProperties: 0
+      responses:
+        '200':
+          description: Session ended; media c? th? ?ang retry thu h?i
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+  /sessions/{id}/media-token:
+    post:
+      tags:
+        - Sessions
+      operationId: issueSessionMediaToken
+      summary: C?p token ??ng room v? identity c?a th?nh vi?n
+      description:
+        TTL t?i ?a 10 ph?t, kh?ng v??t deadline quy?n. Ki?m tra l?i sau k?;
+        kh?ng cache token trong receipt. Ended t? ch?i SESSION_ENDED.
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: *a4
+      responses:
+        '200':
+          description: Credential ch? d?ng v?i SDK media
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - meta
+                additionalProperties: false
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - url
+                      - token
+                      - expiresAt
+                    properties:
+                      url:
+                        type: string
+                      token:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+  /sessions/{id}/deck-options:
+    get:
+      tags: [Sessions]
+      operationId: listSessionDeckOptions
+      summary: Liệt kê bộ chủ đề có thể chọn
+      description: Chỉ thành viên của phiên chưa kết thúc được đọc danh sách.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - *a2
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 512 }
+      responses:
+        '200':
+          description: Danh sách bộ xuất bản và số tình huống của đúng revision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDeckOptionsResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          description: Phiên đã kết thúc (SESSION_ENDED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/deck-selection:
+    post:
+      tags: [Sessions]
+      operationId: selectSessionDeck
+      summary: Chọn và trải một bộ chủ đề
+      description: Trả 404 RESOURCE_NOT_FOUND nếu revision không thuộc bộ đang xuất bản hoặc không còn là revision được chọn mới.
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectSessionDeckRequest'
+      responses:
+        '200':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/control/claim:
+    post:
+      tags: [Sessions]
+      operationId: claimSessionControl
+      summary: Lấy quyền điều khiển phiên
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionVersionRequest'
+      responses:
+        '200':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/draws:
+    post:
+      tags: [Sessions]
+      operationId: drawSessionCard
+      summary: Bốc đúng lá ở slot được chọn
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DrawSessionCardRequest'
+      responses:
+        '200':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/cards/{cardId}/hints:
+    get:
+      tags: [Sessions]
+      operationId: getSessionCardHints
+      summary: Đọc gợi ý của lá đã bốc
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - *a2
+        - name: cardId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ObjectId' }
+      responses:
+        '200':
+          description: Gợi ý và kiến thức theo revision của lá
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionHintsResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/actions:
+    post:
+      tags: [Sessions]
+      operationId: proposeSessionCardAction
+      summary: Gửi đề nghị đồng thuận cho lá hiện tại
+      security: *a3
+      parameters:
+        - *a2
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeSessionCardActionRequest'
+      responses:
+        '201':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionActionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /sessions/{id}/actions/{actionId}/responses:
+    post:
+      tags: [Sessions]
+      operationId: respondToSessionCardAction
+      summary: Phản hồi đề nghị của đối tác
+      security: *a3
+      parameters:
+        - *a2
+        - name: actionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespondToSessionCardActionRequest'
+      responses:
+        '200':
+          description: Trạng thái riêng của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '404':
+          $ref: '#/components/responses/RequestError'
+        '409':
+          $ref: '#/components/responses/RequestError'
+        '410':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/RequestError'
+        '429':
+          $ref: '#/components/responses/RequestError'
+        '503':
+          $ref: '#/components/responses/RequestError'
+
+  /webhooks/livekit:
+    post:
+      tags: [System]
+      operationId: receiveLivekitWebhook
+      summary: Xác minh webhook LiveKit và cập nhật hiện diện
+      description: >-
+        Server-to-server; không dùng cookie, CSRF hoặc Idempotency-Key.
+        Xác minh Authorization và hash của raw body bằng SDK LiveKit trước khi ghi.
+        Receipt eventId được giữ 7 ngày; SID, thời điểm và trạng thái vẫn bảo vệ
+        sau khi receipt bị dọn. Receipt, presence và consumer vòng đời dùng cùng
+        transaction. Sự kiện participant/room_finished của phiên đã biết trả 503
+        nếu chưa nối consumer BE-012; không ghi receipt thành công giả.
+        Không suy ra presence hoặc bắt đầu phiên từ room_started.
+        Khi đủ hai thành viên trở lại trước hạn phục hồi, chuyển reconnecting
+        về active sau khi kiểm tra quyền; giữ controller, bộ/thẻ/vai và phần
+        thời gian chọn bộ còn lại, không tăng lại số phiên đã bắt đầu.
+      security:
+        - livekitWebhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/webhook+json:
+            schema:
+              type: object
+              required: [id, event, createdAt]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                event:
+                  type: string
+                createdAt:
+                  type: [string, integer]
+                  description: UNIX timestamp theo giây; SDK giải mã thành int64
+                room:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    sid:
+                      type: string
+                  additionalProperties: true
+                participant:
+                  type: object
+                  properties:
+                    identity:
+                      type: string
+                    sid:
+                      type: string
+                  additionalProperties: true
+              additionalProperties: true
+      responses:
+        '204':
+          description: Đã xử lý, bỏ qua an toàn hoặc eventId đã xử lý; không có body
+        '401':
+          description: WEBHOOK_UNAUTHORIZED — thiếu/sai chữ ký, hash hoặc payload không giải mã được
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: PAYLOAD_TOO_LARGE — raw body vượt 1 MiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE — sai Content-Type hoặc body nén
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: SERVICE_UNAVAILABLE — cấu hình, dữ liệu, đối soát hoặc consumer chưa sẵn sàng; retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Kiểm tra trạng thái API và database
+      responses:
+        '200':
+          description: Dịch vụ sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Database chưa sẵn sàng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /invitations:
+    post:
+      tags: [Invitations]
+      operationId: createInvitation
+      summary: Tạo mã mời có hạn 10 phút
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+            example: {}
+      responses:
+        '201':
+          description: Invitation đã được tạo; chỉ host nhận code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /invitations/{invitationId}:
+    parameters:
+      - $ref: '#/components/parameters/InvitationId'
+    get:
+      tags: [Invitations]
+      operationId: getInvitation
+      summary: Đọc invitation trong phạm vi host hoặc requester liên quan
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      responses:
+        '200':
+          description: Invitation hiện tại; code chỉ xuất hiện với host khi còn open
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Invitations]
+      operationId: cancelInvitation
+      summary: Host hủy invitation
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ExpectedVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Invitation đã được hủy
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /invitations/{invitationId}/requests:
+    get:
+      tags: [Invitation Requests]
+      operationId: listInvitationRequests
+      summary: Host liệt kê request của invitation
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/InviteRequestStatus'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trang request theo thứ tự mới nhất
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteRequestListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /invitation-requests:
+    post:
+      tags: [Invitation Requests]
+      operationId: createInvitationRequest
+      summary: Người học gửi request bằng mã mời
+      description: Checks two-way pair blocks in the transaction before reserving the requester or reopening a request; returns 409 PAIR_BLOCKED for a blocked pair.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: '^[A-HJ-NP-Z2-9]{10}$'
+            example:
+              code: ABCD234567
+      responses:
+        '201':
+          description: Request đã được tạo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /invitation-requests/{requestId}:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    get:
+      tags: [Invitation Requests]
+      operationId: getInvitationRequest
+      summary: Host hoặc requester đọc invitation request
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      responses:
+        '200':
+          description: Invitation request hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Invitation Requests]
+      operationId: cancelInvitationRequest
+      summary: Requester hủy request đang chờ
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/ExpectedVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Request đã được hủy
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /invitation-requests/{requestId}/responses:
+    post:
+      tags: [Invitation Requests]
+      operationId: respondToInvitationRequest
+      summary: Host chấp nhận hoặc từ chối request
+      description: >-
+        Accept fail-closed với SERVICE_UNAVAILABLE cho tới khi pair-safety guard
+        của BE-008 được nối vào ứng dụng.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, decision]
+              properties:
+                expectedVersion:
+                  type: integer
+                  minimum: 0
+                decision:
+                  type: string
+                  enum: [accept, reject]
+            example:
+              expectedVersion: 0
+              decision: accept
+      responses:
+        '200':
+          description: Request sau quyết định của host
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteRequestResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /guest-trials:
+    post:
+      tags: [Invitations]
+      operationId: createGuestTrial
+      summary: Tạo lượt thử khách bằng mã mời
+      description: >-
+        Không yêu cầu phiên tài khoản hay cookie khách để gọi lần đầu; nếu đã có
+        `ck_session`, trả 409 `IDENTITY_CONFLICT`. Mã mời sai, hết hạn hoặc đã
+        dùng đều trả 409 `INVITATION_UNAVAILABLE`. Khi tạo mới, server đặt cookie
+        HttpOnly `ck_guest` trong `Set-Cookie`; credential không xuất hiện trong
+        JSON. Retry với cùng cookie khách và cùng `Idempotency-Key` trả request
+        cũ; khác code trả 409 `IDEMPOTENCY_CONFLICT`; key mới khi khách còn giữ
+        lượt trả 409 `ACTOR_BUSY`. Cookie khách không tồn tại hoặc đã thu hồi
+        trả 401 `SESSION_EXPIRED`; hết hạn trả 410 `GUEST_EXPIRED`.
+      security:
+        - csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: '^[A-HJ-NP-Z2-9]{10}$'
+            example:
+              code: ABCD234567
+      responses:
+        '201':
+          description: >-
+            Request đã được tạo hoặc replay. Lượt tạo mới có `guest.status` là
+            `waiting`; replay cùng key có thể trả trạng thái hiện tại của khách.
+          headers:
+            Set-Cookie:
+              description: >-
+                Chỉ có khi tạo khách mới: cookie `ck_guest` HttpOnly, Secure,
+                SameSite=Lax, Path=/, không có Domain.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestTrialResponse'
+        '400':
+          description: Body JSON không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getAuthMe
+      summary: Đọc danh tính tài khoản hoặc khách hiện tại
+      description: >-
+        Không gia hạn hạn dùng thử của khách. Khách `waiting` không có
+        `sessionId`; khách `active`/`summary` trả đúng `sessionId`; `summary` có
+        `expiresAt`. Không trả trường nội bộ như `credentialHash`, `emailKey`
+        hay `authVersion`.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      responses:
+        '200':
+          description: Danh tính hiện tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthMeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+
+  /auth/password-change:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Đổi mật khẩu của tài khoản đang hoạt động
+      description: >-
+        Kiểm tra mật khẩu hiện tại, cập nhật passwordHash, tăng authVersion và
+        version, thu hồi mọi phiên đăng nhập cũ và vô hiệu các token đặt lại mật
+        khẩu chưa dùng trong transaction TX-02. Không dùng Idempotency-Key.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '204':
+          description: Đổi mật khẩu thành công và thu hồi mọi phiên đăng nhập cũ
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/password-reset-requests:
+    post:
+      tags: [Auth]
+      operationId: requestPasswordReset
+      summary: Yêu cầu gửi liên kết đặt lại mật khẩu dùng một lần
+      description: >-
+        Tạo token đặt lại mật khẩu hiệu lực 15 phút (chỉ lưu SHA-256 tokenHash)
+        cho tài khoản đang hoạt động trong transaction và đăng ký tác vụ gửi
+        qua Brevo HTTPS API cùng hậu xử lý token qua Vercel waitUntil để không
+        chặn phản hồi HTTP 202 (không phải durable queue và không tự retry khi
+        lượt gửi thất bại). Luôn trả phản hồi 202 trung tính không tiết lộ email
+        có tồn tại hoặc bị khóa hay không, kể cả khi lượt gửi riêng lẻ thất bại
+        sau phản hồi (chỉ trả 503 trước khi tra email theo trạng thái cấu hình
+        dịch vụ chung). Không thay mật khẩu nếu gửi thư thất bại.
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequestInput'
+      responses:
+        '202':
+          description: Phản hồi trung tính cho mọi yêu cầu hợp lệ về cú pháp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetRequestResponse'
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /auth/password-resets:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Đặt lại mật khẩu bằng liên kết một lần
+      description: >-
+        Tiêu thụ nguyên tử token còn hạn (15 phút, dùng một lần), cập nhật mật
+        khẩu, tăng authVersion, vô hiệu các token reset còn lại và thu hồi mọi
+        phiên đăng nhập cũ trong transaction TX-02. Không tự đăng nhập sau khi
+        đặt lại. Token sai, đã hết hạn hoặc đã dùng đều trả 400
+        RESET_TOKEN_INVALID.
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetInput'
+      responses:
+        '204':
+          description: Đặt lại mật khẩu thành công; không tự đăng nhập
+        '400':
+          $ref: '#/components/responses/RequestError'
+        '403':
+          $ref: '#/components/responses/RequestError'
+        '413':
+          $ref: '#/components/responses/RequestError'
+        '415':
+          $ref: '#/components/responses/RequestError'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /admin/content/{id}/publish:
+    post:
+      tags: [Content Admin]
+      operationId: publishContentItem
+      summary: Xuất bản revision bất biến cho học liệu (BE-013, 07 §10)
+      description: >-
+        Tạo một content_versions mới bất biến, khử trùng lặp các ID tham chiếu và
+        cập nhật con trỏ publishedVersionId trong cùng MongoDB transaction.
+        Nếu thiếu references hoặc không đạt ngưỡng tối thiểu sẽ trả lỗi 422 CONTENT_INCOMPLETE.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion:
+                  type: integer
+                  minimum: 0
+            example:
+              expectedVersion: 0
+      responses:
+        '200':
+          description: Bản ghi học liệu sau khi xuất bản
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ContentIncomplete'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /admin/content/{id}/hide:
+    post:
+      tags: [Content Admin]
+      operationId: hideContentItem
+      summary: Ẩn học liệu nhưng giữ nguyên revision tham chiếu (BE-013, 07 §10)
+      description: >-
+        Chuyển trạng thái sang hidden, bảo toàn publishedVersionId để các phiên,
+        lượt quiz hoặc mục đã lưu trước đó không bị gãy liên kết.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion:
+                  type: integer
+                  minimum: 0
+            example:
+              expectedVersion: 1
+      responses:
+        '200':
+          description: Bản ghi học liệu sau khi ẩn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /topics:
+    get:
+      tags: [Learning Content]
+      operationId: listPublishedTopics
+      summary: Lấy danh sách bộ chủ đề đã xuất bản dành cho Learner (07 §7)
+      description: >-
+        Chỉ trả các bộ deck có status là published. Dùng phân trang keyset cursor.
+        Tuyệt đối không chứa roleA, roleB hay đáp án ngân hàng.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: level
+          in: query
+          schema:
+            type: string
+            enum: [N5, N4, N3, N2, N1]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Danh sách tóm tắt các bộ chủ đề đã xuất bản
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /topic-versions/{id}:
+    get:
+      tags: [Learning Content]
+      operationId: getTopicVersionDetail
+      summary: Lấy chi tiết phiên bản bộ chủ đề dành cho Learner hoặc Guest (07 §7)
+      description: >-
+        Trả thông tin metadata, số lượng kịch bản và câu hỏi của đúng phiên bản bộ.
+        Không chứa nội dung kịch bản hay đáp án.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+      responses:
+        '200':
+          description: Chi tiết phiên bản bộ chủ đề
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicVersionDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /topic-versions/{id}/knowledge:
+    get:
+      tags: [Learning Content]
+      operationId: getTopicVersionKnowledge
+      summary: Lấy danh sách kiến thức của đúng bản nguồn chủ đề (07 §7)
+      description: >-
+        Trả danh sách KnowledgeItem của đúng bản nguồn chủ đề, phục vụ người học
+        xem học liệu mà không cần tham gia cuộc gọi trước (FR-LRN-01).
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Danh sách kiến thức thuộc phiên bản chủ đề
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /knowledge/{id}:
+    get:
+      tags: [Learning Content]
+      operationId: getKnowledgeDetail
+      summary: Lấy chi tiết mục kiến thức (07 §7)
+      description: >-
+        Nếu có versionId thì lấy đúng bản lịch sử đã lưu; nếu không có thì lấy bản
+        xuất bản mới nhất. Tuyệt đối không trả roleA, roleB hay đáp án ngân hàng.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - name: versionId
+          in: query
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+      responses:
+        '200':
+          description: Chi tiết mục kiến thức
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /me/saved-items:
+    get:
+      tags: [Learning Content]
+      operationId: listSavedItems
+      summary: Liệt kê mục đã lưu của người gọi
+      description: Với khách, nội dung dùng revision mới nhất có nguồn đã lưu trong bộ của lượt thử.
+      security: &savedReadSecurity
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: sessionId
+          in: query
+          description: Chỉ lấy các mục có nguồn thuộc phiên này
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - &savedLimit
+          name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - &savedCursor
+          name: cursor
+          in: query
+          schema: { type: string, maxLength: 512 }
+      responses:
+        '200':
+          description: Mục đang được lưu, theo ngày lưu và ID giảm dần
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedItemsResponse'
+        '400': &savedBadRequest
+          description: MALFORMED_REQUEST hoặc INVALID_CURSOR
+          content: &savedError
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401': &savedUnauthorized
+          $ref: '#/components/responses/Unauthorized'
+        '403': &savedForbidden
+          description: ACCOUNT_LOCKED hoặc CSRF_INVALID khi ghi
+          content: *savedError
+        '404': &savedNotFound
+          $ref: '#/components/responses/NotFound'
+        '410': &savedExpired
+          description: GUEST_EXPIRED
+          content: *savedError
+        '422': &savedInvalid
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags: [Learning Content]
+      operationId: saveKnowledgeItem
+      summary: Lưu kiến thức và nguồn
+      description: >-
+        Dùng chung một mục cho mỗi kiến thức. Khi lưu từ phiên, phải gửi cả sessionId và
+        scenarioVersionId của lá đã bốc. Với khách, phản hồi dùng revision mới nhất có nguồn
+        đã lưu trong bộ của lượt thử, kể cả khi gửi lại cùng yêu cầu.
+      security: &savedWriteSecurity
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [knowledgeVersionId, deckVersionId]
+              dependentRequired:
+                sessionId: [scenarioVersionId]
+                scenarioVersionId: [sessionId]
+              properties:
+                knowledgeVersionId: &savedId
+                  $ref: '#/components/schemas/ObjectId'
+                deckVersionId: *savedId
+                sessionId: *savedId
+                scenarioVersionId: *savedId
+      responses:
+        '200':
+          description: Mục đã lưu và bản kiến thức hiện được phép xem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedItemResponse'
+        '400': *savedBadRequest
+        '401': *savedUnauthorized
+        '403': *savedForbidden
+        '404': *savedNotFound
+        '409': &savedConflict
+          $ref: '#/components/responses/Conflict'
+        '410': *savedExpired
+        '413':
+          description: PAYLOAD_TOO_LARGE
+          content: *savedError
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE
+          content: *savedError
+        '422': *savedInvalid
+        '429': &savedRateLimited
+          $ref: '#/components/responses/RateLimited'
+
+  /me/saved-items/{id}:
+    delete:
+      tags: [Learning Content]
+      operationId: removeSavedItem
+      summary: Bỏ lưu kiến thức
+      description: Đổi trạng thái lưu theo expectedVersion, giữ nguồn và tiến độ ôn.
+      security: *savedWriteSecurity
+      parameters:
+        - &savedPathId
+          name: id
+          in: path
+          required: true
+          schema: *savedId
+        - $ref: '#/components/parameters/ExpectedVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Đã bỏ lưu
+        '400': *savedBadRequest
+        '401': *savedUnauthorized
+        '403': *savedForbidden
+        '404': *savedNotFound
+        '409': *savedConflict
+        '410': *savedExpired
+        '422': *savedInvalid
+        '429': *savedRateLimited
+
+  /me/saved-items/{id}/sources:
+    get:
+      tags: [Learning Content]
+      operationId: listSavedItemSources
+      summary: Đọc nguồn của mục đã lưu
+      description: Chủ sở hữu vẫn xem được đúng revision nguồn sau khi bỏ lưu.
+      security: *savedReadSecurity
+      parameters:
+        - *savedPathId
+        - *savedLimit
+        - *savedCursor
+      responses:
+        '200':
+          description: Nguồn theo ngày tạo và ID giảm dần
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedSourcesResponse'
+        '400': *savedBadRequest
+        '401': *savedUnauthorized
+        '403': *savedForbidden
+        '404': *savedNotFound
+        '410': *savedExpired
+        '422': *savedInvalid
+
+  /me/profile:
+    patch:
+      tags: [Profile]
+      operationId: updateMyProfile
+      summary: Cập nhật hồ sơ người dùng hiện tại
+      description: >-
+        Cập nhật một phần hồ sơ theo cơ chế CAS (`expectedVersion`) và
+        idempotency (`Idempotency-Key`). Các trường không gửi giữ nguyên; các
+        trường tùy chọn trong `profile` gửi `null` để xóa. Header tùy chọn
+        `X-Expected-Actor` gắn yêu cầu với tài khoản đã mở biểu mẫu; nếu khác
+        phiên đăng nhập hiện tại sẽ trả `409 IDENTITY_CONFLICT` trước khi ghi.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ExpectedActor'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfilePatchRequest'
+      responses:
+        '200':
+          description: Hồ sơ người dùng sau cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfResponse'
+        '400':
+          description: Yêu cầu không hợp lệ (MALFORMED_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Thiếu/sai CSRF hoặc tài khoản bị khóa (CSRF_INVALID, ACCOUNT_LOCKED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          description: Payload vượt giới hạn kích thước (PAYLOAD_TOO_LARGE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Định dạng nén không được hỗ trợ (UNSUPPORTED_MEDIA_TYPE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /study/cards/query:
+    post:
+      tags: [Flashcards]
+      operationId: queryStudyCards
+      summary: Truy vấn mặt hỏi và tiến độ ôn tập
+      description: >-
+        Chế độ due gồm thẻ mới và thẻ đến hạn tại giờ server. Sắp xếp theo ngày tạo mục kiến thức
+        (topic), ngày lưu (saved) hoặc ngày thêm vào bộ (personalDeck), sau đó theo ID của bản ghi
+        tương ứng, đều giảm dần. Cursor chỉ dùng lại cho cùng danh tính, phạm vi và chế độ.
+        Với học liệu ẩn, trả bản xuất bản mới nhất mà người học có nguồn hợp lệ.
+        Hai thao tác study/cards không cần Idempotency-Key.
+      security: &studySecurity
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scope, mode]
+              properties:
+                scope:
+                  $ref: '#/components/schemas/StudyScope'
+                mode:
+                  enum: [all, due]
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                  default: 20
+                cursor:
+                  type: string
+                  maxLength: 512
+      responses:
+        '200':
+          description: Trang thẻ đã được kiểm tra quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyQueryResponse'
+        '400':
+          description: JSON lỗi hoặc INVALID_CURSOR
+          content: &studyError
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401': &studyUnauthorized
+          $ref: '#/components/responses/Unauthorized'
+        '403': &studyForbidden
+          description: CSRF_INVALID hoặc ACCOUNT_LOCKED
+          content: *studyError
+        '404': &studyNotFound
+          $ref: '#/components/responses/NotFound'
+        '410': &studyGone
+          description: GUEST_EXPIRED hoặc RESOURCE_DELETING
+          content: *studyError
+        '413': &studyTooLarge
+          description: PAYLOAD_TOO_LARGE
+          content: *studyError
+        '415': &studyUnsupported
+          description: UNSUPPORTED_MEDIA_TYPE
+          content: *studyError
+        '422': &studyInvalid
+          $ref: '#/components/responses/ValidationFailed'
+  /study/cards/reveal:
+    post:
+      tags: [Flashcards]
+      operationId: revealStudyCard
+      summary: Mở đáp án và nhận vé đánh giá
+      description: Tính ba lịch dự kiến theo giờ server và cấp vé ký có hạn tối đa 30 phút, không vượt hạn quyền của khách. Không ghi tiến độ hay lượt ôn.
+      security: *studySecurity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scope, cardKey]
+              properties:
+                scope:
+                  $ref: '#/components/schemas/StudyScope'
+                cardKey:
+                  $ref: '#/components/schemas/StudyCardKey'
+      responses:
+        '200':
+          description: Mặt hỏi, mặt đáp, tiến độ, preview và vé đánh giá
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyRevealResponse'
+        '400':
+          description: JSON lỗi
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '410': *studyGone
+        '413': *studyTooLarge
+        '415': *studyUnsupported
+        '422': *studyInvalid
+        '503':
+          description: Cấu hình lịch ôn chưa sẵn sàng
+          content: *studyError
+
+  /quizzes:
+    post:
+      tags: [Quizzes]
+      operationId: createQuiz
+      summary: Tạo lượt làm quiz
+      description: |
+        Tạo lượt quiz gồm tối đa 5 câu hỏi không trùng từ ngân hàng câu hỏi của bộ chủ đề.
+        Gửi lại cùng khóa và nội dung trả cùng lượt ở dạng QuizPublic với trạng thái và version hiện tại.
+        Đọc kết quả đã nộp qua GET /quizzes/{id}.
+      security: *studySecurity
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuizRequest'
+      responses:
+        '201':
+          description: Lượt quiz mới hoặc lượt đã tạo cho cùng yêu cầu
+          headers:
+            Location:
+              description: URI của lượt quiz
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizPublicResponse'
+        '400':
+          description: Dữ liệu yêu cầu không hợp lệ
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '409':
+          description: Ngân hàng không có câu hỏi khả dụng (QUIZ_UNAVAILABLE) hoặc Idempotency-Key đã dùng với nội dung khác (IDEMPOTENCY_CONFLICT)
+          content: *studyError
+        '410': *studyGone
+        '413': *studyTooLarge
+        '415': *studyUnsupported
+        '422': *studyInvalid
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /quizzes/{id}:
+    get:
+      tags: [Quizzes]
+      operationId: getQuiz
+      summary: Xem chi tiết lượt quiz
+      description: Trả QuizPublic nếu đang làm, hoặc QuizResult nếu đã nộp.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - $ref: '#/components/parameters/QuizId'
+      responses:
+        '200':
+          description: Chi tiết lượt quiz
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/QuizPublicResponse'
+                  - $ref: '#/components/schemas/QuizResultResponse'
+        '400':
+          description: ID không hợp lệ (MALFORMED_REQUEST)
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '410': *studyGone
+
+  /quizzes/{id}/submission:
+    post:
+      tags: [Quizzes]
+      operationId: submitQuiz
+      summary: Nộp bài chấm điểm quiz
+      description: |
+        Chấm điểm phía server, chuyển trạng thái sang submitted và lưu kết quả bất biến.
+        Gửi lại cùng nội dung trả kết quả đã lưu. Dùng lại khóa với expectedVersion hoặc câu trả lời khác trả 409 IDEMPOTENCY_CONFLICT.
+      security: *studySecurity
+      parameters:
+        - $ref: '#/components/parameters/QuizId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitQuizRequest'
+      responses:
+        '200':
+          description: Kết quả chấm quiz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizResultResponse'
+        '400':
+          description: Dữ liệu yêu cầu không hợp lệ
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '404': *studyNotFound
+        '409':
+          description: Lượt quiz đã được nộp (QUIZ_ALREADY_SUBMITTED), Idempotency-Key đã dùng với nội dung khác (IDEMPOTENCY_CONFLICT), hoặc xung đột phiên bản (VERSION_CONFLICT)
+          content: *studyError
+        '410': *studyGone
+        '413': *studyTooLarge
+        '415': *studyUnsupported
+        '422': *studyInvalid
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /me/quizzes:
+    get:
+      tags: [Quizzes]
+      operationId: listQuizzes
+      summary: Lấy danh sách lịch sử quiz của người gọi
+      description: Phân trang theo cursor và createdAt giảm dần.
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: sourceSessionId
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        '200':
+          description: Danh sách quiz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizListResponse'
+        '400':
+          description: Con trỏ giải mã thất bại (INVALID_CURSOR) hoặc sourceSessionId sai định dạng (MALFORMED_REQUEST)
+          content: *studyError
+        '401': *studyUnauthorized
+        '403': *studyForbidden
+        '410': *studyGone
+        '422': *studyInvalid
+
+  /admin/users:
+    get:
+      tags:
+        - Admin Operations
+      operationId: listAdminUsers
+      summary: Danh sách tài khoản người dùng cho quản trị viên (07 §10, BE-026)
+      description: >-
+        Trả danh sách tài khoản người dùng kèm phân trang cursor keyset, hỗ trợ
+        lọc theo trạng thái active hoặc locked.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, locked]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        '200':
+          description: Danh sách người dùng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListResponse'
+        '400':
+          description: Con trỏ giải mã thất bại (INVALID_CURSOR)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /admin/users/{id}/status:
+    patch:
+      tags:
+        - Admin Operations
+      operationId: updateAdminUserStatus
+      summary: Khóa hoặc mở khóa tài khoản người dùng (07 §10, BE-026, TX-05)
+      description: >-
+        Cập nhật trạng thái tài khoản (active hoặc locked) với kiểm soát phiên bản
+        CAS qua expectedVersion và cơ chế Idempotency-Key (retry cùng key trả trạng thái hiện hành).
+        Không cho phép khóa tài khoản có vai trò admin.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserStatusRequest'
+      responses:
+        '200':
+          description: Cập nhật trạng thái tài khoản thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserStatusResponse'
+        '400':
+          description: ID sai định dạng (MALFORMED_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          description: Payload vượt quá 1 MiB (PAYLOAD_TOO_LARGE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Không phải application/json (UNSUPPORTED_MEDIA_TYPE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /admin/reports:
+    get:
+      tags:
+        - Admin Operations
+      operationId: listAdminReports
+      summary: Danh sách báo cáo người dùng cho quản trị viên (07 §10, BE-026)
+      description: >-
+        Trả danh sách báo cáo vi phạm kèm phân trang cursor keyset, hỗ trợ lọc
+        theo trạng thái báo cáo (new, inProgress, resolved, rejected).
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ReportStatus'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        '200':
+          description: Danh sách báo cáo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportListResponse'
+        '400':
+          description: Con trỏ giải mã thất bại (INVALID_CURSOR)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /admin/reports/{id}:
+    get:
+      tags:
+        - Admin Operations
+      operationId: getAdminReport
+      summary: Chi tiết một báo cáo vi phạm (07 §10, BE-026)
+      description: Xem chi tiết báo cáo vi phạm theo ID.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+      responses:
+        '200':
+          description: Chi tiết báo cáo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '400':
+          description: ID sai định dạng (MALFORMED_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+    patch:
+      tags:
+        - Admin Operations
+      operationId: updateAdminReport
+      summary: Xử lý trạng thái và kết quả báo cáo (07 §10, BE-026)
+      description: >-
+        Cập nhật trạng thái và kết quả xử lý của báo cáo với kiểm soát phiên bản
+        CAS qua expectedVersion và Idempotency-Key (retry cùng key trả trạng thái hiện hành).
+        Cho phép mở lại báo cáo (status new/inProgress sau resolved/rejected); khi chuyển về new,
+        handledBy và handledAt được gỡ bỏ. Resolution chỉ thay đổi khi request gửi trường này;
+        nếu bỏ trường, giá trị đã lưu được giữ nguyên. Khi status là new, resolution có thể là
+        kết quả được lưu từ lần xử lý trước.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportUpdateRequest'
+      responses:
+        '200':
+          description: Cập nhật báo cáo thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '400':
+          description: ID sai định dạng (MALFORMED_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          description: Payload vượt quá 1 MiB (PAYLOAD_TOO_LARGE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Không phải application/json (UNSUPPORTED_MEDIA_TYPE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+components:
+  securitySchemes:
+    livekitWebhookSignature:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: JWT do LiveKit ký có hash raw body; dùng nguyên giá trị header của LiveKit
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: ck_session
+      description: Cookie phiên tài khoản do server cấp
+    guestCookie:
+      type: apiKey
+      in: cookie
+      name: ck_guest
+      description: Cookie phiên khách do server cấp
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Phải khớp cookie CSRF và Origin được phép
+
+  parameters:
+    QuizId:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    ExpectedVersion:
+      name: expectedVersion
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ExpectedActor:
+      name: X-Expected-Actor
+      in: header
+      required: false
+      description: >-
+        Tùy chọn. Gắn yêu cầu ghi với tài khoản đã mở biểu mẫu, nhận ObjectId
+        24 ký tự hex hoặc chuỗi dạng `user:<ObjectId>`. Khi bỏ qua, server xử lý
+        theo phiên hiện tại. Khi được gửi (kể cả chuỗi rỗng) và khác
+        `identity.userId` hoặc `identity.actorKey` của phiên hiện tại, server từ
+        chối trước khi ghi với `409 IDENTITY_CONFLICT`.
+      schema:
+        type: string
+        pattern: '^(user:)?[0-9a-fA-F]{24}$'
+
+  schemas:
+    SavedItem:
+      type: object
+      additionalProperties: false
+      required: [id, knowledge, savedAt, version]
+      properties:
+        id: *savedId
+        knowledge:
+          $ref: '#/components/schemas/KnowledgeItem'
+        savedAt: &savedDate
+          type: string
+          format: date-time
+        version: { type: integer, minimum: 0 }
+    SavedSource:
+      type: object
+      additionalProperties: false
+      required: [knowledgeVersionId, deckVersionId, createdAt]
+      dependentRequired:
+        sessionId: [scenarioVersionId]
+        scenarioVersionId: [sessionId]
+      properties:
+        knowledgeVersionId: *savedId
+        deckVersionId: *savedId
+        sessionId: *savedId
+        scenarioVersionId: *savedId
+        createdAt: *savedDate
+    SavedItemResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta: &savedMeta
+          $ref: '#/components/schemas/Meta'
+        data:
+          $ref: '#/components/schemas/SavedItem'
+    SavedItemsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta: *savedMeta
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            nextCursor: &savedNext
+              type: [string, 'null']
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SavedItem'
+    SavedSourcesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta: *savedMeta
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            nextCursor: *savedNext
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SavedSource'
+    StudyScope:
+      description: Khách chỉ dùng topic của lượt thử và saved tạm.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, topicVersionId]
+          properties:
+            type: { const: topic }
+            topicVersionId:
+              $ref: '#/components/schemas/ObjectId'
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type: { const: saved }
+        - type: object
+          additionalProperties: false
+          required: [type, deckId]
+          properties:
+            type: { const: personalDeck }
+            deckId:
+              $ref: '#/components/schemas/ObjectId'
+    StudyCardKey:
+      type: string
+      pattern: '^(knowledge|manual):[a-f0-9]{24}$'
+    StudyProgress:
+      type: object
+      additionalProperties: false
+      required: [cardKey, state, reps, lapses, version]
+      properties:
+        cardKey:
+          $ref: '#/components/schemas/StudyCardKey'
+        state:
+          enum: [new, learning, review, relearning]
+        dueAt: &studyTime
+          type: string
+          format: date-time
+        lastReviewAt: *studyTime
+        reps: &studyCount
+          type: integer
+          minimum: 0
+        lapses: *studyCount
+        version: *studyCount
+    StudyQueryResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            nextCursor:
+              type: [string, 'null']
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [cardKey, front, progress]
+                oneOf:
+                  - required: [contentVersionId]
+                  - required: [manualVersion]
+                properties:
+                  cardKey:
+                    $ref: '#/components/schemas/StudyCardKey'
+                  front:
+                    type: string
+                  contentVersionId:
+                    $ref: '#/components/schemas/ObjectId'
+                  manualVersion: *studyCount
+                  progress:
+                    $ref: '#/components/schemas/StudyProgress'
+    StudyRevealResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            [
+              cardKey,
+              front,
+              back,
+              progress,
+              reviewTicket,
+              ticketExpiresAt,
+              preview,
+            ]
+          properties:
+            cardKey:
+              $ref: '#/components/schemas/StudyCardKey'
+            front:
+              type: string
+            back:
+              type: string
+              description: Với kiến thức chuẩn, gồm nghĩa tiếng Việt, cách đọc nếu có và ví dụ Nhật–Việt. Các phần cách nhau bằng dòng trống.
+            progress:
+              $ref: '#/components/schemas/StudyProgress'
+            reviewTicket:
+              type: string
+              description: Vé ký do server cấp. Client truyền nguyên vé khi đánh giá.
+            ticketExpiresAt: *studyTime
+            preview:
+              type: array
+              minItems: 3
+              maxItems: 3
+              items:
+                type: object
+                additionalProperties: false
+                required: [rating, label, dueAt]
+                properties:
+                  rating:
+                    enum: [1, 2, 3]
+                  label:
+                    enum: [Again, Hard, Good]
+                  dueAt: *studyTime
+    SessionDeckOptionsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            nextCursor:
+              type: [string, 'null']
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  [id, versionId, title, level, description, scenarioCount]
+                properties:
+                  id:
+                    $ref: '#/components/schemas/ObjectId'
+                  versionId:
+                    $ref: '#/components/schemas/ObjectId'
+                  title: { type: string }
+                  level: { type: string, enum: [N5, N4, N3, N2, N1] }
+                  description: { type: string }
+                  scenarioCount: { type: integer, minimum: 0 }
+    SessionHintsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required: [hints, knowledge]
+          properties:
+            hints:
+              type: array
+              items: { type: string }
+            knowledge:
+              type: array
+              items:
+                $ref: '#/components/schemas/SessionHintKnowledge'
+    SessionActionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        meta:
+          $ref: '#/components/schemas/Meta'
+        data:
+          type: object
+          additionalProperties: false
+          required: [session]
+          properties:
+            session:
+              $ref: '#/components/schemas/Session'
+    SessionVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+    SelectSessionDeckRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, deckVersionId]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        deckVersionId: { $ref: '#/components/schemas/ObjectId' }
+    DrawSessionCardRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, slot]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        slot: { type: integer, minimum: 0 }
+    ProposeSessionCardActionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, kind, cardId]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        kind: { enum: [swapRoles, skip, completeAndNext] }
+        cardId: { $ref: '#/components/schemas/ObjectId' }
+    RespondToSessionCardActionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, decision]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        decision: { enum: [accept, reject] }
+    Session:
+      type: object
+      required:
+        - id
+        - status
+        - version
+        - members
+        - activeDurationMs
+        - selectionRemainingMs
+        - slots
+        - screenShare
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum:
+            - preparing
+            - active
+            - reconnecting
+            - ended
+        version: &a2
+          type: integer
+          minimum: 0
+        controllerKey: &a3
+          type: string
+        members:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/Partner'
+        startedAt: &a1
+          type: string
+          format: date-time
+        endedAt: *a1
+        endReason:
+          type: string
+          enum:
+            - left
+            - connection_timeout
+            - selection_timeout
+            - blocked
+            - account_locked
+            - system_error
+        suggestedMinutes:
+          type: integer
+          enum:
+            - 10
+            - 20
+            - 30
+        activeDurationMs: *a2
+        selectionRemainingMs: *a2
+        reconnectUntil: *a1
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionSlot'
+        currentCard:
+          $ref: '#/components/schemas/SessionCurrentCard'
+        pendingAction:
+          $ref: '#/components/schemas/SessionPendingAction'
+        screenShare:
+          $ref: '#/components/schemas/SessionScreenShare'
+      additionalProperties: false
+    SessionSlot:
+      type: object
+      required:
+        - slot
+        - status
+      properties:
+        slot: *a2
+        status:
+          type: string
+          enum:
+            - faceDown
+            - current
+            - completed
+            - skipped
+            - unfinished
+      additionalProperties: false
+    SessionCurrentCard:
+      type: object
+      required:
+        - id
+        - scenarioVersionId
+        - title
+        - context
+        - objective
+        - myRole
+        - status
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        scenarioVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        title: *a3
+        context: *a3
+        objective: *a3
+        myRole: *a3
+        status: *a3
+      additionalProperties: false
+    SessionPendingAction:
+      type: object
+      required:
+        - id
+        - kind
+        - cardId
+        - proposedBy
+        - proposedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - swapRoles
+            - skip
+            - completeAndNext
+        cardId:
+          $ref: '#/components/schemas/ObjectId'
+        proposedBy: *a3
+        proposedAt: *a1
+      additionalProperties: false
+    SessionScreenShare:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          type: string
+          enum:
+            - idle
+            - granting
+            - active
+            - revoking
+        ownerKey: *a3
+      additionalProperties: false
+    SessionResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          $ref: '#/components/schemas/Session'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    ObjectId:
+      type: string
+      pattern: '^[0-9a-fA-F]{24}$'
+      example: 507f1f77bcf86cd799439011
+    InvitationStatus:
+      type: string
+      enum: [open, used, cancelled, expired]
+    InviteRequestStatus:
+      type: string
+      enum: [pending, accepted, rejected, cancelled, expired]
+    Meta:
+      type: object
+      required: [requestId, serverTime]
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        serverTime:
+          type: string
+          format: date-time
+      additionalProperties: true
+    Partner:
+      type: object
+      required: [actorKey, displayName]
+      properties:
+        actorKey:
+          type: string
+        displayName:
+          type: string
+        avatarKey:
+          type: string
+        profile:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    Invitation:
+      type: object
+      required: [id, status, version, expiresAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        code:
+          type: string
+          pattern: '^[A-HJ-NP-Z2-9]{10}$'
+          description: Chỉ trả cho host khi invitation còn open
+        status:
+          $ref: '#/components/schemas/InvitationStatus'
+        version:
+          type: integer
+          minimum: 0
+        expiresAt:
+          type: string
+          format: date-time
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+      additionalProperties: false
+    InviteRequest:
+      type: object
+      required: [id, invitationId, requester, status, version, expiresAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        invitationId:
+          $ref: '#/components/schemas/ObjectId'
+        requester:
+          $ref: '#/components/schemas/Partner'
+        status:
+          $ref: '#/components/schemas/InviteRequestStatus'
+        version:
+          type: integer
+          minimum: 0
+        expiresAt:
+          type: string
+          format: date-time
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+      additionalProperties: false
+    InvitationResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Invitation'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    InviteRequestResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/InviteRequest'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    InviteRequestList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InviteRequest'
+        nextCursor:
+          type: string
+      additionalProperties: false
+    InviteRequestListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/InviteRequestList'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    GuestStatus:
+      type: string
+      enum: [waiting, active, summary]
+    GuestProjection:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/GuestStatus'
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+        expiresAt:
+          type: string
+          format: date-time
+    GuestTrial:
+      type: object
+      additionalProperties: false
+      required: [request, guest]
+      properties:
+        request:
+          $ref: '#/components/schemas/InviteRequest'
+        guest:
+          $ref: '#/components/schemas/GuestProjection'
+    GuestTrialResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/GuestTrial'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    AuthMe:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, user]
+          properties:
+            kind:
+              const: user
+            user:
+              $ref: '#/components/schemas/Self'
+        - type: object
+          additionalProperties: false
+          required: [kind, guest]
+          properties:
+            kind:
+              const: guest
+            guest:
+              $ref: '#/components/schemas/GuestProjection'
+    AuthMeResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/AuthMe'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+      additionalProperties: false
+    HealthResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Health'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    PasswordChangeRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+      additionalProperties: false
+    PasswordResetRequestInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+      additionalProperties: false
+    PasswordResetRequestNotice:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+      additionalProperties: false
+    PasswordResetRequestResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/PasswordResetRequestNotice'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    PasswordResetInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 512
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+      additionalProperties: false
+    ContentItem:
+      type: object
+      required: [id, kind, status, latestRevision, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        kind:
+          type: string
+          enum: [deck, scenario, knowledge, question]
+        status:
+          type: string
+          enum: [draft, published, hidden]
+        latestRevision:
+          type: integer
+          minimum: 0
+        version:
+          type: integer
+          minimum: 0
+        publishedVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        draftPayload:
+          type: object
+        level:
+          type: string
+          enum: [N5, N4, N3, N2, N1]
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    ContentItemResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/ContentItem'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    TopicSummary:
+      type: object
+      required: [id, versionId, title, level, description]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        versionId:
+          $ref: '#/components/schemas/ObjectId'
+        title:
+          type: string
+        level:
+          type: string
+          enum: [N5, N4, N3, N2, N1]
+        description:
+          type: string
+      additionalProperties: false
+    TopicList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSummary'
+        nextCursor:
+          type: string
+          nullable: true
+      additionalProperties: false
+    TopicListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/TopicList'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    TopicVersionDetail:
+      type: object
+      required:
+        [
+          id,
+          contentId,
+          title,
+          level,
+          description,
+          knowledgeCount,
+          questionCount,
+        ]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        contentId:
+          $ref: '#/components/schemas/ObjectId'
+        title:
+          type: string
+        level:
+          type: string
+          enum: [N5, N4, N3, N2, N1]
+        description:
+          type: string
+        knowledgeCount:
+          type: integer
+          minimum: 0
+        questionCount:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    TopicVersionDetailResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/TopicVersionDetail'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    KnowledgeExample:
+      type: object
+      required: [japanese, vietnamese]
+      properties:
+        japanese:
+          type: string
+        vietnamese:
+          type: string
+      additionalProperties: false
+    KnowledgeItem:
+      type: object
+      required: [id, versionId, type, expression, meaning, examples]
+      properties:
+        id: &knowledgeItemId
+          $ref: '#/components/schemas/ObjectId'
+        versionId: &knowledgeItemVersionId
+          $ref: '#/components/schemas/ObjectId'
+        type: &knowledgeItemType
+          type: string
+          enum: [vocabulary, grammar]
+        expression:
+          type: string
+        reading:
+          type: string
+        meaning:
+          type: string
+        examples: &knowledgeItemExamples
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeExample'
+      additionalProperties: false
+    SessionHintKnowledge:
+      type: object
+      required: [id, versionId, type, expression, meaning, examples, isSaved]
+      properties:
+        id: *knowledgeItemId
+        versionId: *knowledgeItemVersionId
+        type: *knowledgeItemType
+        expression: { type: string }
+        reading: { type: string }
+        meaning: { type: string }
+        examples: *knowledgeItemExamples
+        isSaved: { type: boolean }
+      additionalProperties: false
+    KnowledgeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeItem'
+        nextCursor:
+          type: string
+          nullable: true
+      additionalProperties: false
+    KnowledgeListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/KnowledgeList'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    KnowledgeDetailResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/KnowledgeItem'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    FieldError:
+      type: object
+      required: [path, code, message]
+      properties:
+        path:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+      additionalProperties: false
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          properties:
+            fields:
+              type: array
+              items:
+                $ref: '#/components/schemas/FieldError'
+          additionalProperties: true
+      additionalProperties: false
+    ErrorResponse:
+      type: object
+      required: [error, meta]
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      additionalProperties: false
+    UserProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        level:
+          type: string
+          enum: [N5, N4, N3, N2, N1]
+        nativeLanguageCode:
+          type: string
+        goal:
+          type: string
+          enum:
+            - dailyCommunication
+            - travel
+            - studyAndWork
+            - examPreparation
+            - culturalExchange
+        interests:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items:
+            type: string
+        countryCode:
+          type: string
+        ageGroup:
+          type: string
+          enum: [under18, 18to22, 23to30, over30]
+        gender:
+          type: string
+          enum: [male, female, other]
+    Self:
+      type: object
+      additionalProperties: false
+      required: [id, email, displayName, avatarKey, role, profile, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        avatarKey:
+          type: string
+        role:
+          type: string
+          enum: [learner, admin]
+        profile:
+          $ref: '#/components/schemas/UserProfile'
+        version:
+          type: integer
+          minimum: 0
+    SelfResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Self'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ProfilePatchRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+        displayName:
+          type: string
+        avatarKey:
+          type: string
+        profile:
+          type: object
+          additionalProperties: false
+          properties:
+            level:
+              type: [string, 'null']
+              enum: [N5, N4, N3, N2, N1, null]
+            nativeLanguageCode:
+              type: [string, 'null']
+            goal:
+              type: [string, 'null']
+              enum:
+                - dailyCommunication
+                - travel
+                - studyAndWork
+                - examPreparation
+                - culturalExchange
+                - null
+            interests:
+              type: array
+              maxItems: 3
+              uniqueItems: true
+              items:
+                type: string
+            countryCode:
+              type: [string, 'null']
+            ageGroup:
+              type: [string, 'null']
+              enum: [under18, 18to22, 23to30, over30, null]
+            gender:
+              type: [string, 'null']
+              enum: [male, female, other, null]
+
+    CreateQuizRequest:
+      type: object
+      additionalProperties: false
+      required: [deckVersionId]
+      properties:
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+
+    QuizQuestionPublic:
+      type: object
+      additionalProperties: false
+      required: [questionVersionId, type, prompt]
+      properties:
+        questionVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        type:
+          type: string
+          enum: [multipleChoice, shortAnswer]
+        prompt:
+          type: string
+        options:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, text]
+            properties:
+              id:
+                type: string
+              text:
+                type: string
+
+    QuizPublic:
+      type: object
+      additionalProperties: false
+      required: [id, deckVersionId, status, total, version, questions]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [inProgress, submitted]
+        total:
+          type: integer
+          minimum: 1
+          maximum: 5
+        version:
+          type: integer
+          minimum: 0
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizQuestionPublic'
+
+    QuizPublicResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/QuizPublic'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    QuizResultItem:
+      type: object
+      additionalProperties: false
+      required:
+        [questionVersionId, isCorrect, points, explanation, knowledgeVersionIds]
+      properties:
+        questionVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        isCorrect:
+          type: boolean
+        points:
+          type: integer
+          enum: [0, 1]
+        correctOptionId:
+          type: string
+        acceptedAnswers:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+        knowledgeVersionIds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectId'
+
+    QuizResult:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          deckVersionId,
+          status,
+          total,
+          version,
+          questions,
+          answers,
+          score,
+          submittedAt,
+          results,
+        ]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [submitted]
+        total:
+          type: integer
+          minimum: 1
+          maximum: 5
+        version:
+          type: integer
+          minimum: 1
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizQuestionPublic'
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmitQuizAnswerItem'
+        score:
+          type: integer
+          minimum: 0
+          maximum: 5
+        submittedAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizResultItem'
+
+    QuizResultResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/QuizResult'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SubmitQuizAnswerItem:
+      type: object
+      additionalProperties: false
+      required: [questionVersionId]
+      properties:
+        questionVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        optionId:
+          type: string
+          maxLength: 64
+        text:
+          type: string
+          maxLength: 500
+
+    SubmitQuizRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, answers]
+      properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+        answers:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/SubmitQuizAnswerItem'
+
+    QuizSummaryItem:
+      type: object
+      additionalProperties: false
+      required: [id, deckVersionId, status, total, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        deckVersionId:
+          $ref: '#/components/schemas/ObjectId'
+        sourceSessionId:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [inProgress, submitted]
+        total:
+          type: integer
+        score:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
+
+    QuizListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/QuizSummaryItem'
+            nextCursor:
+              type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    AdminUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, displayName, status, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        status:
+          type: string
+          enum: [active, locked]
+        version:
+          type: integer
+          minimum: 0
+
+    AdminUserListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminUser'
+            nextCursor:
+              type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    AdminUserStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status, expectedVersion]
+      properties:
+        status:
+          type: string
+          enum: [active, locked]
+        expectedVersion:
+          type: integer
+          minimum: 0
+
+    AdminUserStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [id, status, version]
+          properties:
+            id:
+              $ref: '#/components/schemas/ObjectId'
+            status:
+              type: string
+              enum: [active, locked]
+            version:
+              type: integer
+              minimum: 0
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ReportStatus:
+      type: string
+      enum: [new, inProgress, resolved, rejected]
+
+    Report:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - reporterKey
+        - reportedKey
+        - sessionId
+        - reason
+        - status
+        - version
+        - createdAt
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        reporterKey:
+          type: string
+        reportedKey:
+          type: string
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+        reason:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          maxLength: 2000
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        resolution:
+          type: string
+          maxLength: 2000
+        handledBy:
+          $ref: '#/components/schemas/ObjectId'
+        handledAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+
+    ReportResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Report'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ReportListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Report'
+            nextCursor:
+              type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ReportUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [status, expectedVersion]
+      properties:
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        expectedVersion:
+          type: integer
+          minimum: 0
+        resolution:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+  responses:
+    RequestError:
+      description: L?i theo ErrorResponse v? API specification
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Thiếu hoặc không còn phiên xác thực hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Không có quyền, sai CSRF/Origin hoặc tài khoản đã bị khóa (FORBIDDEN, CSRF_INVALID, ACCOUNT_LOCKED)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Tài nguyên không tồn tại hoặc ngoài phạm vi truy cập
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: >-
+        Xung đột trạng thái hoặc danh tính (`VERSION_CONFLICT`,
+        `IDEMPOTENCY_CONFLICT`, `IDENTITY_CONFLICT`, `ACTOR_BUSY`,
+        `INVITATION_UNAVAILABLE`, ...)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: Quyền truy cập tạm của khách đã hết hạn hoặc bị thu hồi (GUEST_EXPIRED)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationFailed:
+      description: Request không đạt validation contract
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ContentIncomplete:
+      description: Học liệu thiếu references hoặc không đạt ngưỡng tối thiểu trước khi xuất bản (422)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: Vượt giới hạn request; xem header Retry-After
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: Dependency an toàn chưa sẵn sàng; không tạo session
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

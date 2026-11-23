@@ -1,101 +1,226 @@
-import { useState } from 'react';
-import { Button, Icon } from '../../components/ui/controls.jsx';
-import { Friends } from '../../components/Friends.jsx';
+import { Link, useNavigate, useOutletContext } from 'react-router';
+import { Button } from '../../components/ui/controls.jsx';
+import chiikawaPeek from '../../assets/mascots/chiikawa-peek.webp';
+import hachiwareFace from '../../assets/mascots/hachiware-face.webp';
+import usagiFace from '../../assets/mascots/usagi-face.webp';
+import { StudyIcon } from '../../components/ui/StudyIcon.jsx';
+import { StudyScene } from '../../components/ui/StudyScene.jsx';
+import '../../components/ui/study-studio.css';
+import './home.css';
 
-/** @param {{onStart: () => void}} props */
-export function Home({ onStart }) {
-  const [preview, setPreview] = useState('');
+const activeFlows = {
+  inSession: {
+    description: 'Bạn đang có một phiên hội thoại đang hoạt động.',
+    action: 'Vào lại phòng',
+  },
+  searching: {
+    description: 'Bạn đang trong hàng đợi tìm bạn luyện Tomodachi.',
+    action: 'Xem trạng thái',
+    to: '/match',
+  },
+  proposed: {
+    description: 'Đã tìm thấy bạn luyện phù hợp. Đang chờ xác nhận phiên.',
+    action: 'Xem trạng thái',
+    to: '/match',
+  },
+  inviting: {
+    description: 'Bạn đang có yêu cầu phòng mời đang được xử lý.',
+    action: 'Xem phòng mời',
+    to: '/invitation',
+  },
+  requestingInvite: {
+    description: 'Bạn đang có yêu cầu phòng mời đang được xử lý.',
+    action: 'Xem phòng mời',
+    to: '/invitation',
+  },
+};
+
+export function Home() {
+  const navigate = useNavigate();
+  const {
+    coordination,
+    coordinationLoading,
+    coordinationError,
+    handleRetryCoordination,
+    isStartDisabled,
+  } =
+    /** @type {ReturnType<typeof import('./use-home-coordination.js').useHomeCoordination>} */ (
+      useOutletContext()
+    );
+  const activeFlow =
+    activeFlows[/** @type {keyof typeof activeFlows} */ (coordination?.mode)];
+  const resumePath =
+    coordination?.mode === 'inSession' && coordination.resourceId
+      ? '/room/' + encodeURIComponent(coordination.resourceId)
+      : activeFlow && 'to' in activeFlow
+        ? activeFlow.to
+        : undefined;
+
   return (
-    <>
-      <header className="ck-home-header">
-        <a
-          className="ck-brand"
-          href="#ck-home"
-          aria-label="Chiikaiwa, trang chính"
-        >
-          <span lang="ja">ち</span>chiikaiwa
-        </a>
-        <nav aria-label="Điều hướng chính">
-          <a href="#ck-home" aria-current="page">
-            Trang chính
-          </a>
-          <button onClick={onStart}>Luyện hội thoại</button>
-        </nav>
-        <div className="ck-profile">
-          <span className="ck-avatar">M</span>
-          <span>
-            Minh Anh<small>N4</small>
-          </span>
-        </div>
-      </header>
-      <main id="ck-home" className="ck-home">
-        <div className="ck-home-layout">
-          <section className="ck-welcome">
-            <h1>
-              Một câu chào,
-              <br />
-              một câu chuyện mới.
-            </h1>
-            <p>Luyện hội thoại tiếng Nhật cùng một người bạn.</p>
-            <div className="ck-actions">
-              <Button variant="primary" onClick={onStart}>
-                Tìm bạn luyện <Icon name="arrow" />
-              </Button>
-              <Button onClick={() => setPreview('Mã mời')}>Dùng mã mời</Button>
-            </div>
-            <span className="ck-device-note">
-              <Icon name="camera" size={16} />
-              Mic và camera là tùy chọn.
-            </span>
-          </section>
-          <section className="ck-study">
-            <Friends />
-            <h2>Góc học của bạn</h2>
-            {[
-              { name: 'Học theo chủ đề', icon: 'book' },
-              { name: 'Ôn cá nhân', icon: 'cards' },
-              { name: 'Lịch sử luyện tập', icon: 'clock' },
-            ].map((item) => (
-              <button
-                className="ck-study-link"
-                key={item.name}
-                onClick={() => setPreview(item.name)}
-              >
-                <Icon name={item.icon} />
-                <span>{item.name}</span>
-                <Icon name="arrow" size={18} />
-              </button>
-            ))}
-          </section>
-        </div>
-        {preview && (
-          <section className="ck-home-preview" role="status">
-            <div>
-              <h2>{preview}</h2>
-              <p>
-                {preview === 'Mã mời'
-                  ? 'Tạo hoặc nhập mã có hiệu lực 10 phút. Luồng mã mời chưa kết nối trong bản demo.'
-                  : preview === 'Học theo chủ đề'
-                    ? 'Học từ vựng, cấu trúc, flashcard và quiz theo chủ đề. Luồng học liệu chưa kết nối trong bản demo.'
-                    : preview === 'Ôn cá nhân'
-                      ? 'Chưa có kiến thức đã lưu trong dữ liệu mẫu. Luồng ôn tập chưa kết nối.'
-                      : 'Chưa có phiên trước đây trong dữ liệu mẫu.'}
-              </p>
-            </div>
-            <button
-              className="ck-icon-button"
-              aria-label="Đóng nội dung minh họa"
-              onClick={() => setPreview('')}
+    <div
+      id="ck-home"
+      className="ck-home-studio"
+      onPointerDown={(event) => {
+        if (
+          event.pointerType !== 'touch' ||
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+          !(event.target instanceof Element)
+        )
+          return;
+        event.target
+          .closest('.ck-home-action:not(:disabled), .ck-home-shortcut')
+          ?.setAttribute('data-home-touched', '');
+      }}
+      onAnimationEnd={(event) => {
+        if (
+          event.animationName === 'ck-home-bubbles-press' &&
+          event.target instanceof Element
+        ) {
+          event.target.removeAttribute('data-home-touched');
+        }
+      }}
+    >
+      <h1 className="sr-only">Trang chính</h1>
+      {coordinationError ? (
+        <section className="ck-home-status ck-home-status--error" role="status">
+          <div>
+            <h2>Không thể kiểm tra trạng thái điều phối</h2>
+            <p>
+              Đã xảy ra lỗi khi đồng bộ trạng thái phòng luyện. Vui lòng thử lại
+              trước khi bắt đầu.
+            </p>
+          </div>
+          <Button variant="secondary" onClick={handleRetryCoordination}>
+            Thử lại
+          </Button>
+        </section>
+      ) : activeFlow ? (
+        <section className="ck-home-status" role="status">
+          <div>
+            <h2>Luồng luyện tập đang diễn ra</h2>
+            <p>{activeFlow.description}</p>
+          </div>
+          {resumePath && (
+            <Link to={resumePath} className="ck-button ck-button--primary">
+              {activeFlow.action} <StudyIcon name="arrow" />
+            </Link>
+          )}
+        </section>
+      ) : null}
+
+      <section
+        className="ck-home-feature"
+        aria-labelledby="ck-home-feature-title"
+      >
+        <div className="ck-home-intro">
+          <h2 id="ck-home-feature-title">
+            <span className="ck-home-heading-accent">Hôm nay mình</span>
+            <br /> nói gì nhỉ?
+          </h2>
+          <p>
+            Gặp bạn luyện 1–1 và thử nói tiếng Nhật qua những tình huống đời
+            thường.
+          </p>
+          <div className="ck-home-start">
+            <Button
+              variant="primary"
+              size="hero"
+              className="ck-home-action ck-home-action--main"
+              leadingIcon={<StudyIcon name="chat" size={28} />}
+              trailingIcon={<StudyIcon name="chevron" size={24} />}
+              onClick={() => navigate('/match')}
+              disabled={isStartDisabled}
             >
-              <Icon name="close" />
-            </button>
-          </section>
-        )}
-        <footer className="ck-home-footer">
-          <span>ちいさな会話 · chiikaiwa</span>
-          <span>Bản demo · Dữ liệu mẫu</span>
-        </footer>
-      </main>
-    </>
+              Tìm bạn luyện nói
+            </Button>
+            <img
+              className="ck-home-start-mascot"
+              src={chiikawaPeek}
+              alt=""
+              width="60"
+              height="60"
+            />
+            {coordinationLoading && (
+              <p className="ck-home-loading" role="status">
+                Đang kiểm tra trạng thái điều phối…
+              </p>
+            )}
+          </div>
+          <div
+            className="ck-home-invite-group"
+            role="group"
+            aria-labelledby="ck-home-invite-label"
+          >
+            <p id="ck-home-invite-label">Luyện cùng bạn bè</p>
+            <div className="ck-home-invites">
+              <Button
+                variant="secondary"
+                size="compact"
+                className="ck-home-action"
+                leadingIcon={<StudyIcon name="invite" />}
+                onClick={() => navigate('/invitation?mode=create')}
+                disabled={isStartDisabled}
+              >
+                Tạo mã mời
+              </Button>
+              <Button
+                variant="secondary"
+                size="compact"
+                className="ck-home-action"
+                leadingIcon={<StudyIcon name="join" />}
+                onClick={() => navigate('/invitation?mode=join')}
+                disabled={isStartDisabled}
+              >
+                Nhập mã
+              </Button>
+            </div>
+          </div>
+        </div>
+        <StudyScene />
+      </section>
+
+      <nav className="ck-home-study" aria-label="Lối tắt học tập">
+        <Link
+          to="/topics"
+          className="ck-home-shortcut"
+          aria-labelledby="ck-home-topics-label"
+          aria-describedby="ck-home-topics-description"
+        >
+          <span className="ck-home-shortcut-icon">
+            <img src={hachiwareFace} alt="" width="52" height="52" />
+          </span>
+          <span>
+            <strong id="ck-home-topics-label">Kho chủ đề</strong>
+            <span
+              id="ck-home-topics-description"
+              className="ck-home-shortcut-description"
+            >
+              Chọn tình huống để luyện nói.
+            </span>
+          </span>
+          <StudyIcon name="chevron" size={22} />
+        </Link>
+        <Link
+          to="/saved"
+          className="ck-home-shortcut"
+          aria-labelledby="ck-home-saved-label"
+          aria-describedby="ck-home-saved-description"
+        >
+          <span className="ck-home-shortcut-icon">
+            <img src={usagiFace} alt="" width="52" height="52" />
+          </span>
+          <span>
+            <strong id="ck-home-saved-label">Ôn cá nhân</strong>
+            <span
+              id="ck-home-saved-description"
+              className="ck-home-shortcut-description"
+            >
+              Ôn lại các câu đã lưu.
+            </span>
+          </span>
+          <StudyIcon name="chevron" size={22} />
+        </Link>
+      </nav>
+    </div>
   );
 }

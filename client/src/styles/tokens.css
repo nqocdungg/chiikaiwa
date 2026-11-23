@@ -1,0 +1,104 @@
+:root {
+  color-scheme: light;
+
+  /* Semantic color tokens */
+  --color-background: #fffcf8;
+  --color-surface: #fffcf8;
+  --color-surface-raised: #ffffff;
+  --color-room-sidebar: #f4efea;
+  --color-text: #433d3d;
+  --color-text-muted: #766b70;
+  --color-accent: #9b526e;
+  --color-brand-soft: #f4cbda;
+  --color-selected: #f8dfe8;
+  --color-border: #e9d6de;
+  --color-control-border: #9b7180;
+  --color-info-bg: #eef7fa;
+  --color-info-text: #487588;
+  --color-danger: #a8324a;
+  --color-danger-bg: #fff0f3;
+  --color-success: #2f6b4f;
+  --color-success-bg: #edf7f0;
+  --color-warning: #795600;
+  --color-warning-bg: #fff6d9;
+  --color-focus: #9b526e;
+  --color-overlay: rgb(67 61 61 / 28%);
+
+  /* Button roles from the current FlowButton samples */
+  --button-primary-bg: #efadc3;
+  --button-primary-border: #b8748d;
+  --button-primary-shadow: #a9677e;
+  --button-primary-text: #49383e;
+  --button-secondary-bg: #fffaf4;
+  --button-secondary-border: #c98ca1;
+  --button-secondary-shadow: #b3748a;
+  --button-secondary-text: #59444b;
+  --button-ghost-text: #846d75;
+
+  /* Typography */
+  --font-body: 'Be Vietnam Pro', 'Nunito', 'Segoe UI', sans-serif;
+  --font-heading: 'Baloo 2', 'Nunito', 'Segoe UI', sans-serif;
+  --font-japanese:
+    'Noto Sans JP', 'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+  --font-size-caption: 0.75rem;
+  --font-size-label: 0.875rem;
+  --font-size-body: 1rem;
+  --font-size-japanese: 1.25rem;
+  --font-size-section: 1.5rem;
+  --font-size-title: 2rem;
+  --font-size-hero: 3rem;
+  --line-height-caption: 1.25rem;
+  --line-height-label: 1.25rem;
+  --line-height-body: 1.5rem;
+  --line-height-japanese: 2rem;
+  --line-height-section: 2rem;
+  --line-height-title: 2.5rem;
+  --line-height-hero: 3.5rem;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* Shape, controls, elevation, and layers */
+  --control-height-compact: 2.75rem;
+  --control-height: 3rem;
+  --control-height-hero: 3.5rem;
+  --control-icon-size: 1.25rem;
+  --radius-input: 0.75rem;
+  --radius-button: 0.875rem;
+  --radius-card: 1rem;
+  --radius-dialog: 1.5rem;
+  --radius-dialog-friendly: 1.875rem;
+  --radius-pill: 999px;
+  --shadow-button-primary: 0 3px 0 var(--button-primary-shadow);
+  --shadow-button-secondary: 0 3px 0 var(--button-secondary-shadow);
+  --shadow-card: 0 10px 30px rgb(105 71 86 / 8%);
+  --shadow-dialog: 0 16px 48px rgb(105 71 86 / 16%);
+  --layer-base: 0;
+  --layer-header: 10;
+  --layer-overlay: 40;
+  --layer-dialog: 50;
+  --layer-toast: 60;
+  --page-max-width: 80rem;
+  --page-gutter: 2rem;
+  --header-height: 5rem;
+  --motion-fast: 140ms;
+  --motion-normal: 200ms;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --page-gutter: 1rem;
+    --font-size-title: 1.75rem;
+    --line-height-title: 2.25rem;
+    --font-size-hero: 2rem;
+    --line-height-hero: 2.5rem;
+  }
+}

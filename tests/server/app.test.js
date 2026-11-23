@@ -1,6 +1,8 @@
+import express from 'express';
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../server/app.js';
+import { errorHandler } from '../../server/middleware/error-handler.js';
 
 describe('API foundation', () => {
   const app = createApp({ checkHealth: async () => {} });
@@ -42,5 +44,40 @@ describe('API foundation', () => {
       .send({ value: 'x'.repeat(1024 * 1024) })
       .expect(413);
     expect(oversized.body.error.code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
+  it('maps duplicate email keys to the documented conflict without leaking values', async () => {
+    const duplicateEmailApp = express();
+    duplicateEmailApp.post('/register', (_request, _response, next) => {
+      next({
+        code: 11000,
+        keyPattern: { emailKey: 1 },
+        keyValue: { emailKey: 'private@example.test' },
+      });
+    });
+    duplicateEmailApp.use(errorHandler);
+
+    const response = await request(duplicateEmailApp)
+      .post('/register')
+      .expect(409);
+
+    expect(response.body.error.code).toBe('EMAIL_EXISTS');
+    expect(response.text).not.toContain('private@example.test');
+    expect(response.text).not.toContain('emailKey');
+  });
+
+  it('keeps unrecognized duplicate keys as internal errors', async () => {
+    const unknownDuplicateApp = express();
+    unknownDuplicateApp.post('/write', (_request, _response, next) => {
+      next({ code: 11000, keyPattern: { operationId: 1 } });
+    });
+    unknownDuplicateApp.use(errorHandler);
+
+    const response = await request(unknownDuplicateApp)
+      .post('/write')
+      .expect(500);
+
+    expect(response.body.error.code).toBe('INTERNAL_ERROR');
+    expect(response.text).not.toContain('operationId');
   });
 });

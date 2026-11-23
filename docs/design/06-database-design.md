@@ -2,8 +2,8 @@
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Phiên bản | 1.1 |
-| Ngày | 28/10/2026 |
+| Phiên bản | 1.2 |
+| Ngày | 06/11/2026 |
 | Phạm vi | MVP cho nhóm 5 thành viên, triển khai trong 3–4 tuần |
 | Nền tảng | MongoDB Atlas Free; Mongoose; backend Node.js/Express viết bằng JavaScript |
 | Cơ sở yêu cầu | Tổng quan dự án, SRS, Product Backlog và Kiến trúc hệ thống |
@@ -342,7 +342,9 @@ Tập học lấy từ bộ chủ đề, danh sách đã lưu hoặc bộ cá nh
 | Collection | Trường |
 |---|---|
 | `review_logs` | `ownerKey`, `cardKey`, `operationId: String`, `payloadHash: String`, `rating: Number 1/2/3`, `reviewedAt: Date`, `contentVersionId?`, `manualVersion?: Number`, `beforeState`, `afterState`, `schedulerConfigId: String`, `purgeAt?`. |
-| `scheduler_configs` | `_id: String` là hash cấu hình chuẩn hóa; `model: FSRS-6`, `libraryName: String`, `libraryVersion: String`, `weights: Number[21]`, `retention: 0.90`, `learningStepsMinutes: [1,10]`, `relearningStepsMinutes: [10]`, `enableFuzz: false`, `maximumIntervalDays: Number`, `roundingPolicy: String`, `stepPolicy: String`, `createdAt`. |
+| `scheduler_configs` | `_id: String` là hash cấu hình chuẩn hóa; `model: FSRS-6`, `libraryName: ts-fsrs`, `libraryVersion: 6.0.0`, `weights: Number[21]`, `retention: 0.90`, `learningStepsMinutes: [1,10]`, `relearningStepsMinutes: [10]`, `enableFuzz: false`, `enableShortTerm: true`, `maximumIntervalDays: 36500`, `fractionalDays: false`, `roundingPolicy: String`, `stepPolicy: String`, `createdAt`. |
+
+Theo quyết định BE-006, `roundingPolicy = ts-fsrs@6.0.0/native` và `stepPolicy = ts-fsrs@6.0.0/native;graduatingInterval=1;allowModelOverride=false`; ý nghĩa tại SRS mục 6.2. `_id` dùng SHA-256 của JSON UTF-8 không khoảng trắng, bỏ `_id`/`createdAt`, giữ thứ tự trường: model, libraryName, libraryVersion, weights, retention, learningStepsMinutes, relearningStepsMinutes, enableFuzz, enableShortTerm, maximumIntervalDays, fractionalDays, roundingPolicy, stepPolicy. Thứ tự phần tử các mảng được giữ nguyên. Lưu cấu hình lần đầu kèm `createdAt`, không cập nhật đè bản có cùng ID; reader kiểm tra đủ giá trị cấu hình, không chỉ tin ID do caller truyền vào.
 
 beforeState/afterState chứa toàn bộ trạng thái scheduler tại mục 8.3 gồm version tương ứng, không chứa note hoặc mặt thẻ. contentVersionId ghi bản thực sự hiển thị khi đánh giá. Nếu Admin xuất bản trong lúc đang học, không gán nhầm revision mới cho lượt đã mở. Thẻ thủ công lưu version nội dung, không lưu bản sao nội dung vào log.
 
