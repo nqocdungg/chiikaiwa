@@ -19,6 +19,9 @@ import {
 import { up as applyIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 import {
   createFixtureJwt,
+  DEFAULT_JWT_AUDIENCE,
+  DEFAULT_JWT_ISSUER,
+  DEFAULT_JWT_SECRET,
   FIXTURE_GUEST_IDS,
   FIXTURE_SESSION_IDS,
   FIXTURE_USER_IDS,
@@ -75,6 +78,9 @@ beforeAll(async () => {
   vi.stubEnv('MONGODB_URI', replicaSet.getUri());
   vi.stubEnv('MONGODB_DB_NAME', 'chiikaiwa_quiz_api_integration_test');
   vi.stubEnv('APP_ORIGIN', origin);
+  vi.stubEnv('JWT_SECRET', DEFAULT_JWT_SECRET);
+  vi.stubEnv('JWT_ISSUER', DEFAULT_JWT_ISSUER);
+  vi.stubEnv('JWT_AUDIENCE', DEFAULT_JWT_AUDIENCE);
   db = await connectDatabase();
   await applyIndexes(db);
   csrf = await fetchCsrfContext(app);
