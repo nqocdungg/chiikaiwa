@@ -1797,6 +1797,31 @@ paths:
         '410': *studyGone
         '422': *studyInvalid
 
+  /admin/statistics:
+    get:
+      tags:
+        - Admin Operations
+      operationId: getAdminStatistics
+      summary: Thống kê hoạt động tích lũy cho quản trị viên (07 §10, BE-034)
+      description: >-
+        Trả đúng bốn bộ đếm tổng hợp từ document lifetime. Từ chối truy cập
+        ngoài Admin; không suy ra số liệu từ log có thể đã được xóa.
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Bốn bộ đếm hoạt động tích lũy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStatisticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
   /admin/users:
     get:
       tags:
@@ -3396,6 +3421,35 @@ components:
                 $ref: '#/components/schemas/QuizSummaryItem'
             nextCursor:
               type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    AdminStatisticsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - registeredAccounts
+            - startedSessions
+            - reviewCount
+            - submittedQuizCount
+          properties:
+            registeredAccounts:
+              type: integer
+              minimum: 0
+            startedSessions:
+              type: integer
+              minimum: 0
+            reviewCount:
+              type: integer
+              minimum: 0
+            submittedQuizCount:
+              type: integer
+              minimum: 0
         meta:
           $ref: '#/components/schemas/Meta'
 

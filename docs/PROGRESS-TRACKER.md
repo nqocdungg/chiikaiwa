@@ -552,4 +552,26 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ## Sprint 3
 
-Chưa có cập nhật.
+### BE-034 — Thống kê hoạt động tích lũy
+
+- Ngày cập nhật: 2026-11-23
+- Trạng thái: Còn dở — endpoint và các bộ đếm TX-01/TX-06/TX-10 đã triển khai; chưa đủ điều kiện Done.
+- PR: Chưa có; nhánh `feature/BE-034-lifetime-statistics` từ `develop@9b2a674`.
+- Đã làm: Thêm `GET /api/v1/admin/statistics`, chỉ cho Admin và trả đúng bốn bộ đếm; thiếu document hoặc trường bộ đếm không hợp lệ trả `503 SERVICE_UNAVAILABLE`, không tạo số 0 giả. Chuẩn hóa ghi lifetime bằng một update nguyên tử trong cùng transaction nghiệp vụ và khởi tạo đủ bốn bộ đếm. Thêm helper `incrementReviewCount` cho điểm tích hợp TX-09; chưa có service review BE-025 để gọi helper trong production.
+- File liên quan:
+  - `server/modules/statistics/admin-statistics-router.js`
+  - `server/modules/statistics/statistics-repository.js`
+  - `server/modules/statistics/statistics-service.js`
+  - `server/modules/identity/identity-service.js`
+  - `server/modules/sessions/session-lifecycle-service.js`
+  - `server/modules/quiz/quiz-repository.js`
+  - `server/modules/quiz/quiz-service.js`
+  - `server/app.js`
+  - `docs/api/openapi.yaml`
+  - `tests/server/admin-http.test.js`
+  - `tests/server/openapi-contract.test.js`
+  - `tests/integration/admin-statistics.integration.test.js`
+  - `docs/PROGRESS-TRACKER.md`
+- Kiểm chứng: `npm run check` PASS trên Node 24.21.0/npm 11.19.0: format, lint, typecheck, 40 file unit/HTTP/component (573 tests), 24 file integration (344 tests) và build. `npm run openapi:check` PASS (15/15). `git diff --check` PASS. Build có cảnh báo chunk Vite lớn hơn 500 kB.
+- Tiếp theo: Khi BE-025 có service review, gọi `incrementReviewCount` trong cùng transaction với review log và tiến độ; kiểm chứng OPS-005 restore lifetime từ cùng snapshot và bảo toàn bộ đếm sau cleanup; nhận review của Ngọc Dung rồi mở PR về `develop`.
+- Lưu ý/blocker: Chưa tìm thấy branch/PR BE-025 hoặc triển khai OPS-005 trong source hiện có. Không sửa thiết kế 01–07; chưa commit/push hoặc đánh dấu Done.

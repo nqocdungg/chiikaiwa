@@ -47,6 +47,7 @@ const expectedPaths = [
   '/quizzes/{id}',
   '/quizzes/{id}/submission',
   '/me/quizzes',
+  '/admin/statistics',
   '/admin/users',
   '/admin/users/{id}/status',
   '/admin/reports',

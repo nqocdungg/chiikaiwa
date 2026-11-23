@@ -7,6 +7,7 @@ import {
   sessionDeadline,
   CONNECTION_TIMEOUT_MS,
 } from './session-clock.js';
+import { incrementLifetimeCounter } from '../statistics/statistics-repository.js';
 
 const { ObjectId } = mongoose.Types;
 
@@ -259,19 +260,10 @@ export function createSessionPresenceConsumer({
           startedAt: checkedAt,
           controllerKey: after.members[index].actorKey,
         });
-        await db.collection('statistics').updateOne(
-          /** @type {any} */ ({ _id: 'lifetime' }),
-          {
-            $inc: { startedSessions: 1 },
-            $set: { updatedAt: observedAt },
-            $setOnInsert: {
-              registeredAccounts: 0,
-              reviewCount: 0,
-              submittedQuizCount: 0,
-            },
-          },
-          { upsert: true, session },
-        );
+        await incrementLifetimeCounter(db, 'startedSessions', {
+          session,
+          now: observedAt,
+        });
       }
     } else if (!bothConnected) {
       Object.assign(set, sessionClocks(before, observedAt));
