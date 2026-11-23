@@ -12,3 +12,11 @@ eca4ebaa3b07f24e6d01ad13a2c13aa7e5a66300:docs/design/07-api-specification.md:gen
 # Synthetic JWT and LiveKit test secrets used only in safety guard integration test setup, not service credentials.
 418a2dba6384c3a28654ee852a6421cffcef3eb4:tests/integration/safety-guard.integration.test.js:generic-api-key:126
 418a2dba6384c3a28654ee852a6421cffcef3eb4:tests/integration/safety-guard.integration.test.js:generic-api-key:129
+# Synthetic Idempotency-Key UUIDs from BE-026 HTTP tests; these are test request identifiers, not credentials.
+8d542510d846966574fce8c6ddafb76e1c276f25:tests/server/admin-http.test.js:generic-api-key:89
+8d542510d846966574fce8c6ddafb76e1c276f25:tests/server/admin-http.test.js:generic-api-key:126
+8d542510d846966574fce8c6ddafb76e1c276f25:tests/integration/admin-users.integration.test.js:generic-api-key:443
+# Synthetic JWT and LiveKit signing secrets set only in BE-026 integration test environments.
+8d542510d846966574fce8c6ddafb76e1c276f25:tests/integration/admin-reports.integration.test.js:generic-api-key:77
+8d542510d846966574fce8c6ddafb76e1c276f25:tests/integration/admin-users.integration.test.js:generic-api-key:88
+8d542510d846966574fce8c6ddafb76e1c276f25:tests/integration/admin-users.integration.test.js:generic-api-key:91

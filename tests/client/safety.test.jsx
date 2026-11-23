@@ -401,18 +401,28 @@ describe('FE-013 Safety flows (SC-17 Report/Block & SC-18 Block List)', () => {
   });
 
   it('renders SC-10 SessionSummaryPage with real session data and opens SC-17 without active-call warning', async () => {
-    vi.spyOn(api, 'get').mockResolvedValueOnce({
+    const getSpy = vi.spyOn(api, 'get').mockResolvedValueOnce({
       data: {
-        id: SESSION_ID,
-        status: 'ended',
-        endReason: 'left',
-        version: 4,
-        activeDurationMs: 185000,
-        selectionRemainingMs: 0,
-        members: [
-          { actorKey: `user:${SELF_USER_ID}`, displayName: 'Hạnh Nhi' },
-          { actorKey: PARTNER_KEY, displayName: 'An Nhiên' },
-        ],
+        session: {
+          id: SESSION_ID,
+          status: 'ended',
+          endReason: 'left',
+          version: 4,
+          activeDurationMs: 185000,
+          selectionRemainingMs: 0,
+          members: [
+            { actorKey: `user:${SELF_USER_ID}`, displayName: 'Hạnh Nhi' },
+            { actorKey: PARTNER_KEY, displayName: 'An Nhiên' },
+          ],
+        },
+        drawnCards: [],
+        personal: {
+          sessionId: SESSION_ID,
+          noteVersion: 0,
+          version: 0,
+        },
+        savedSources: [],
+        quizAttempts: [],
       },
       meta: {},
       epoch: getIdentityEpoch(),
@@ -428,14 +438,18 @@ describe('FE-013 Safety flows (SC-17 Report/Block & SC-18 Block List)', () => {
       { initialEntries: [`/sessions/${SESSION_ID}/summary`] },
     );
 
-    expect(await screen.findByText('An Nhiên')).toBeVisible();
-    expect(screen.getByText('3:05')).toBeVisible();
+    expect(await screen.findByText(/An Nhiên/)).toBeVisible();
+    expect(screen.getByText('3 phút 05 giây')).toBeVisible();
+    expect(getSpy).toHaveBeenCalledWith(`/sessions/${SESSION_ID}/summary`, {
+      signal: expect.any(AbortSignal),
+    });
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Báo cáo / Chặn đối tác' }),
     );
     const dialog = screen.getByRole('dialog', { name: 'An toàn trong phiên' });
     expect(dialog).toBeVisible();
+    expect(within(dialog).getByText('An Nhiên')).toBeVisible();
     expect(
       within(dialog).queryByRole('button', { name: 'Rời phòng' }),
     ).toBeNull();

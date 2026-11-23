@@ -1,237 +1,405 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
-import { Button, Icon } from '../../components/ui/controls.jsx';
-import { Avatar, Badge, Card } from '../../components/ui/surfaces.jsx';
-import { getIdentityEpoch } from '../../services/cache.js';
-import { ApiError } from '../../services/errors.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router';
+import { Button } from '../../components/ui/controls.jsx';
+import { Dialog } from '../../components/ui/Dialog.jsx';
 import { useAuth } from '../auth/use-auth.js';
-import { getSession } from '../kaiwa/session-api.js';
+import {
+  deleteSessionNote,
+  getSessionPersonal,
+  getSessionSummary,
+  putSessionNote,
+  putSessionSelfAssessment,
+} from '../kaiwa/session-learning-api.js';
+import { createIdempotencyKey } from '../../services/api-client.js';
+import { ApiError } from '../../services/errors.js';
+import { libraryPath, readLibrary } from '../library/library-api.js';
 import { SafetyActionDialog } from '../safety/SafetyActionDialog.jsx';
 import {
-  formatSafetyError,
   resolvePartnerDisplayName,
   resolveSessionPartner,
 } from '../safety/safety-api.js';
+import { SessionSummary } from './SessionSummary.jsx';
 
-const END_REASON_LABELS = {
-  completed: 'Đã hoàn thành',
-  left: 'Một thành viên đã rời phòng',
-  blocked: 'Phiên kết thúc do chặn đối tác',
-  selectionTimeout: 'Hết thời gian chọn bộ chủ đề',
-  reconnectTimeout: 'Hết thời gian chờ kết nối lại',
-  accountLocked: 'Tài khoản bị khóa',
-  guestExpired: 'Hết thời hạn dùng thử của khách',
-};
-
-/**
- * Formats activeDurationMs into mm:ss.
- * @param {number | undefined} durationMs
- * @returns {string}
- */
-function formatDuration(durationMs) {
-  const totalSeconds = Math.max(0, Math.floor((durationMs ?? 0) / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+/** @param {unknown} error @param {string} fallback */
+function message(error, fallback) {
+  return error instanceof Error ? error.message : fallback;
 }
 
-/**
- * SC-10 route view: displays real session summary metadata and SC-17 safety actions
- * (report / block partner) for verified session members.
- */
+/** @param {any[]} sources @param {AbortSignal} signal */
+async function readSavedKnowledge(sources, signal) {
+  const wanted = new Set(sources.map((source) => source.knowledgeVersionId));
+  const decks = [...new Set(sources.map((source) => source.deckVersionId))];
+  const found = new Map();
+  for (const deckVersionId of decks) {
+    let cursor = null;
+    do {
+      signal.throwIfAborted();
+      const page =
+        /** @type {{items: import('../library/library-api.js').Knowledge[], nextCursor?: string|null}} */ (
+          await readLibrary(
+            libraryPath(
+              `/topic-versions/${encodeURIComponent(deckVersionId)}/knowledge`,
+              { cursor },
+            ),
+            signal,
+          )
+        );
+      for (const item of page.items) {
+        if (wanted.has(item.versionId)) found.set(item.versionId, item);
+      }
+      cursor = page.nextCursor ?? null;
+    } while (cursor && found.size < wanted.size);
+  }
+  return sources
+    .map((source) => found.get(source.knowledgeVersionId))
+    .filter((item, index, items) => item && items.indexOf(item) === index);
+}
+
 export function SessionSummaryPage() {
   const { sessionId = '' } = useParams();
   const navigate = useNavigate();
-  const auth = useAuth();
-
-  const [session, setSession] = useState(
-    /** @type {import('../kaiwa/session-api.js').Session | null} */ (null),
+  const location = useLocation();
+  const carriedNote =
+    /** @type {{sessionId?: string, noteDraft?: string, noteFailure?: {status: 'error'|'conflict', message: string}|null}|null} */ (
+      location.state
+    );
+  const pendingNoteRef = useRef(
+    carriedNote?.sessionId === sessionId &&
+      typeof carriedNote.noteDraft === 'string'
+      ? carriedNote
+      : null,
   );
-  const [loading, setLoading] = useState(true);
-  const [reloadToken, setReloadToken] = useState(0);
-  const [error, setError] = useState(/** @type {string | null} */ (null));
+  const { kind, user, invalidateSession } = useAuth();
+  const [summary, setSummary] = useState(
+    /** @type {import('../kaiwa/session-learning-api.js').SessionSummaryData|null} */ (
+      null
+    ),
+  );
+  const [savedKnowledge, setSavedKnowledge] = useState(
+    /** @type {any[]} */ ([]),
+  );
+  const [pending, setPending] = useState(true);
+  const [error, setError] = useState('');
+  const [note, setNote] = useState('');
+  const [noteStatus, setNoteStatus] = useState('saved');
+  const [noteError, setNoteError] = useState('');
+  const [assessment, setAssessment] = useState(
+    /** @type {{confidence: number|null, comment: string}} */ ({
+      confidence: null,
+      comment: '',
+    }),
+  );
+  const [assessmentStatus, setAssessmentStatus] = useState('idle');
+  const [assessmentError, setAssessmentError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
-  const [safetyNotice, setSafetyNotice] = useState(
-    /** @type {string | null} */ (null),
+  const [safetyNotice, setSafetyNotice] = useState('');
+  const noteRef = useRef('');
+  const assessmentRef = useRef(assessment);
+  const noteRetry = useRef(
+    /** @type {{intent: string, key: string}|null} */ (null),
+  );
+  const assessmentRetry = useRef(
+    /** @type {{intent: string, key: string}|null} */ (null),
   );
 
-  const handleRetrySession = () => {
-    setLoading(true);
-    setError(null);
-    setReloadToken((count) => count + 1);
-  };
-
-  useEffect(() => {
-    let isActive = true;
-    const abortController = new AbortController();
-    const startEpoch = getIdentityEpoch();
-
-    getSession(sessionId, abortController.signal)
-      .then((res) => {
-        if (!isActive || startEpoch !== getIdentityEpoch()) {
-          return;
-        }
-        setSession(res.data);
-        setError(null);
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          return;
-        }
-        if (!isActive || startEpoch !== getIdentityEpoch()) {
-          return;
-        }
-        if (err instanceof ApiError && err.isGuestExpired()) {
+  const load = useCallback(async () => {
+    const controller = new AbortController();
+    setPending(true);
+    setError('');
+    try {
+      const data = await getSessionSummary(sessionId, controller.signal);
+      const knowledge = await readSavedKnowledge(
+        data.savedSources,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      setSummary(data);
+      setSavedKnowledge(knowledge);
+      const pendingNote = pendingNoteRef.current;
+      noteRef.current = pendingNote?.noteDraft ?? data.personal.note ?? '';
+      setNote(noteRef.current);
+      const hasPendingNote =
+        pendingNote && noteRef.current !== (data.personal.note ?? '');
+      setNoteStatus(
+        hasPendingNote ? (pendingNote.noteFailure?.status ?? 'draft') : 'saved',
+      );
+      setNoteError(
+        hasPendingNote ? (pendingNote.noteFailure?.message ?? '') : '',
+      );
+      assessmentRef.current = {
+        confidence: data.personal.selfAssessment?.confidence ?? null,
+        comment: data.personal.selfAssessment?.comment ?? '',
+      };
+      setAssessment(assessmentRef.current);
+      setAssessmentStatus(data.personal.selfAssessment ? 'saved' : 'idle');
+    } catch (failure) {
+      if (failure instanceof DOMException && failure.name === 'AbortError') {
+        return;
+      }
+      if (!controller.signal.aborted) {
+        if (failure instanceof ApiError && failure.isGuestExpired()) {
           navigate('/expired', { replace: true });
           return;
         }
-        if (err instanceof ApiError && err.isAuthRequired()) {
-          auth.invalidateSession?.(
+        if (failure instanceof ApiError && failure.isAuthRequired()) {
+          invalidateSession?.(
             'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
           );
           navigate('/login', { replace: true });
           return;
         }
-        const formatted = formatSafetyError(
-          err,
-          'Không thể tải thông tin tổng kết phiên. Vui lòng thử lại.',
-        );
-        setError(formatted.message);
-      })
-      .finally(() => {
-        if (isActive && startEpoch === getIdentityEpoch()) {
-          setLoading(false);
-        }
-      });
+        setError(message(failure, 'Không tải được tổng kết phiên.'));
+      }
+    } finally {
+      if (!controller.signal.aborted) setPending(false);
+    }
+    return () => controller.abort();
+  }, [invalidateSession, navigate, sessionId]);
 
+  useEffect(() => {
+    let stopped = false;
+    queueMicrotask(() => {
+      if (!stopped) void load();
+    });
     return () => {
-      isActive = false;
-      abortController.abort();
+      stopped = true;
     };
-  }, [auth, navigate, reloadToken, sessionId]);
+  }, [load]);
 
-  const partner = resolveSessionPartner(session?.members, {
-    kind: auth.kind,
-    userId: auth.user?.id ?? null,
+  async function saveNote() {
+    if (!summary || noteStatus === 'saving') return;
+    const value = noteRef.current;
+    const intent = `${summary.personal.noteVersion}:${value}`;
+    const key =
+      noteRetry.current?.intent === intent
+        ? noteRetry.current.key
+        : createIdempotencyKey();
+    noteRetry.current = null;
+    setNoteStatus('saving');
+    setNoteError('');
+    try {
+      const personal = await putSessionNote(
+        sessionId,
+        summary.personal.noteVersion,
+        value,
+        { idempotencyKey: key },
+      );
+      setSummary((current) => current && { ...current, personal });
+      setNoteStatus(noteRef.current === value ? 'saved' : 'draft');
+      if (noteRef.current === value && pendingNoteRef.current) {
+        pendingNoteRef.current = null;
+        navigate(location.pathname, { replace: true, state: null });
+      }
+    } catch (failure) {
+      if (failure instanceof ApiError && failure.isRetryable())
+        noteRetry.current = { intent, key };
+      setNoteStatus(
+        failure instanceof ApiError && failure.isVersionConflict()
+          ? 'conflict'
+          : 'error',
+      );
+      setNoteError(
+        failure instanceof ApiError && failure.isVersionConflict()
+          ? 'Ghi chú đã thay đổi ở nơi khác. Bản đang nhập vẫn được giữ.'
+          : message(failure, 'Chưa lưu được ghi chú.'),
+      );
+    }
+  }
+
+  async function removeNote() {
+    if (!summary || deleting) return;
+    setDeleting(true);
+    setNoteError('');
+    try {
+      await deleteSessionNote(sessionId, summary.personal.noteVersion, {
+        idempotencyKey: createIdempotencyKey(),
+      });
+      const personal = await getSessionPersonal(sessionId);
+      setSummary((current) => current && { ...current, personal });
+      noteRef.current = '';
+      setNote('');
+      setNoteStatus('saved');
+      setConfirmDelete(false);
+    } catch (failure) {
+      setNoteStatus(
+        failure instanceof ApiError && failure.isVersionConflict()
+          ? 'conflict'
+          : 'error',
+      );
+      setNoteError(
+        failure instanceof ApiError && failure.isVersionConflict()
+          ? 'Ghi chú đã thay đổi ở nơi khác. Hãy tải lại trước khi xóa.'
+          : message(failure, 'Chưa xóa được ghi chú.'),
+      );
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function saveAssessment() {
+    if (
+      !summary ||
+      assessment.confidence === null ||
+      assessmentStatus === 'saving'
+    )
+      return;
+    const value = assessmentRef.current;
+    const intent = `${summary.personal.version}:${value.confidence}:${value.comment}`;
+    const key =
+      assessmentRetry.current?.intent === intent
+        ? assessmentRetry.current.key
+        : createIdempotencyKey();
+    assessmentRetry.current = null;
+    setAssessmentStatus('saving');
+    setAssessmentError('');
+    try {
+      const personal = await putSessionSelfAssessment(
+        sessionId,
+        summary.personal.version,
+        {
+          confidence: /** @type {number} */ (value.confidence),
+          ...(value.comment ? { comment: value.comment } : {}),
+        },
+        { idempotencyKey: key },
+      );
+      setSummary((current) => current && { ...current, personal });
+      setAssessmentStatus(
+        assessmentRef.current.confidence === value.confidence &&
+          assessmentRef.current.comment === value.comment
+          ? 'saved'
+          : 'draft',
+      );
+    } catch (failure) {
+      if (failure instanceof ApiError && failure.isRetryable())
+        assessmentRetry.current = { intent, key };
+      setAssessmentStatus(
+        failure instanceof ApiError && failure.isVersionConflict()
+          ? 'conflict'
+          : 'error',
+      );
+      setAssessmentError(
+        failure instanceof ApiError && failure.isVersionConflict()
+          ? 'Tự đánh giá đã thay đổi ở nơi khác. Nội dung đang nhập vẫn được giữ.'
+          : message(failure, 'Chưa lưu được tự đánh giá.'),
+      );
+    }
+  }
+
+  async function refreshPersonalVersion() {
+    try {
+      const personal = await getSessionPersonal(sessionId);
+      setSummary((current) => current && { ...current, personal });
+      setNoteStatus((current) => (current === 'conflict' ? 'draft' : current));
+      setAssessmentStatus((current) =>
+        current === 'conflict' ? 'draft' : current,
+      );
+      setNoteError('');
+      setAssessmentError('');
+    } catch (failure) {
+      const text = message(failure, 'Chưa tải được dữ liệu mới.');
+      setNoteError(text);
+      setAssessmentError(text);
+    }
+  }
+
+  if (pending)
+    return (
+      <p className="ck-summary-status" role="status">
+        Đang tải tổng kết phiên…
+      </p>
+    );
+  if (error || !summary)
+    return (
+      <section className="ck-summary-status" role="alert">
+        <h1>Chưa mở được tổng kết</h1>
+        <p>{error || 'Không tìm thấy dữ liệu tổng kết.'}</p>
+        <div className="ck-actions">
+          <Button onClick={() => void load()}>Thử lại</Button>
+          <Button
+            variant="ghost"
+            onClick={() => navigate(kind === 'guest' ? '/' : '/home')}
+          >
+            Về trang chính
+          </Button>
+        </div>
+      </section>
+    );
+
+  const partner = resolveSessionPartner(summary.session?.members, {
+    kind,
+    userId: user?.id ?? null,
   });
   const partnerName = resolvePartnerDisplayName(partner);
-  const isGuest = auth.kind === 'guest';
-  const endReasonKey =
-    /** @type {keyof typeof END_REASON_LABELS | undefined} */ (
-      /** @type {{ endReason?: string }} */ (session)?.endReason
-    );
-  const endReasonText = endReasonKey
-    ? (END_REASON_LABELS[endReasonKey] ?? endReasonKey)
-    : session?.status === 'ended'
-      ? 'Đã kết thúc'
-      : 'Đang diễn ra';
 
   return (
-    <section
-      data-screen-id="SC-10"
-      className="ck-account-page ck-safety-page ck-safety-page--summary"
-    >
-      <header className="ck-account-header">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Tổng kết phiên</h1>
-          <p className="mt-1 text-muted">
-            Xem thông tin phiên luyện và thao tác an toàn nếu cần thiết.
-          </p>
-        </div>
-        <div className="ck-account-meta">
-          <Link
-            to={isGuest ? '/invitation' : '/home'}
-            className="ck-button ck-button--secondary"
-          >
-            {isGuest ? 'Về phòng mời' : 'Về trang chính'}
-          </Link>
-          {!isGuest ? (
-            <Link to="/blocks" className="ck-text-button">
-              Danh sách chặn
-            </Link>
-          ) : null}
-        </div>
-      </header>
-
-      {safetyNotice ? (
-        <div
-          className="ck-alert ck-alert--success"
-          role="status"
-          aria-live="polite"
-        >
-          <p>{safetyNotice}</p>
-        </div>
-      ) : null}
-
-      <Card className="ck-safety-card">
-        {loading ? (
-          <div className="ck-safety-state" role="status" aria-live="polite">
-            <p className="text-muted">Đang tải thông tin phiên…</p>
-          </div>
-        ) : error ? (
-          <div className="ck-alert ck-alert--error" role="alert">
-            <div className="ck-alert__body">
-              <strong>Không thể tải tổng kết phiên</strong>
-              <p className="mt-1">{error}</p>
-            </div>
+    <>
+      <SessionSummary
+        summary={summary}
+        savedKnowledge={savedKnowledge}
+        note={note}
+        noteStatus={noteStatus}
+        noteError={noteError}
+        onNoteChange={(value) => {
+          noteRef.current = value;
+          setNote(value);
+          setNoteStatus('draft');
+          setNoteError('');
+        }}
+        onNoteSave={() => void saveNote()}
+        onNoteDelete={() => setConfirmDelete(true)}
+        onRefreshPersonal={() => void refreshPersonalVersion()}
+        assessment={assessment}
+        assessmentStatus={assessmentStatus}
+        assessmentError={assessmentError}
+        onAssessmentChange={(next) => {
+          assessmentRef.current = next;
+          setAssessment(next);
+          setAssessmentStatus('draft');
+          setAssessmentError('');
+        }}
+        onAssessmentSave={() => void saveAssessment()}
+        onHome={() => navigate(kind === 'guest' ? '/' : '/home')}
+        safetyNotice={safetyNotice}
+        onOpenSafety={partner ? () => setSafetyOpen(true) : undefined}
+      />
+      <Dialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Xóa ghi chú riêng?"
+        description="Tự đánh giá của phiên vẫn được giữ nguyên."
+        closeDisabled={deleting}
+        footer={
+          <>
             <Button
               variant="secondary"
-              size="compact"
-              onClick={handleRetrySession}
+              disabled={deleting}
+              onClick={() => setConfirmDelete(false)}
             >
-              Thử tải lại
+              Giữ ghi chú
             </Button>
-          </div>
-        ) : session ? (
-          <div className="ck-safety-summary">
-            <div className="ck-safety-target">
-              <Avatar name={partnerName} size={48} />
-              <div className="ck-safety-target__info">
-                <span className="ck-safety-target__label">
-                  Đối tác phiên luyện
-                </span>
-                <strong className="ck-safety-target__name">
-                  {partnerName}
-                </strong>
-              </div>
-              <Badge>{endReasonText}</Badge>
-            </div>
-
-            <dl className="ck-safety-summary__dl">
-              <div>
-                <dt>Thời lượng kết nối</dt>
-                <dd>{formatDuration(session.activeDurationMs)}</dd>
-              </div>
-              <div>
-                <dt>Trạng thái phiên</dt>
-                <dd>{endReasonText}</dd>
-              </div>
-            </dl>
-
-            {partner ? (
-              <div className="ck-safety-summary__actions">
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  leadingIcon={<Icon name="shield" size={18} />}
-                  onClick={() => setSafetyOpen(true)}
-                >
-                  Báo cáo / Chặn đối tác
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </Card>
-
-      {session && partner ? (
+            <Button
+              variant="danger"
+              loading={deleting}
+              onClick={() => void removeNote()}
+            >
+              Xóa ghi chú
+            </Button>
+          </>
+        }
+      >
+        <p>Thao tác này chỉ xóa ghi chú của bạn trong phiên này.</p>
+      </Dialog>
+      {partner ? (
         <SafetyActionDialog
           open={safetyOpen}
           onClose={() => setSafetyOpen(false)}
-          sessionId={session.id}
+          sessionId={sessionId}
           partner={partner}
           inActiveSession={false}
-          isGuest={isGuest}
+          isGuest={kind === 'guest'}
           onReported={() => {
             setSafetyNotice(
               'Báo cáo của bạn đã được tiếp nhận. Thao tác này không tự chặn đối tác.',
@@ -244,6 +412,6 @@ export function SessionSummaryPage() {
           }}
         />
       ) : null}
-    </section>
+    </>
   );
 }

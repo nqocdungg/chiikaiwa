@@ -586,3 +586,15 @@
     grid-template-columns: 1fr;
   }
 }
+
+.ck-summary .ck-safety-notice {
+  padding: 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
+  border-radius: var(--radius-input);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.ck-summary .ck-safety-notice p {
+  margin: 0;
+}

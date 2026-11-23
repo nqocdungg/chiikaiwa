@@ -160,23 +160,26 @@ export function decodeContentCursor(cursor, expectedFilters = {}) {
  * Chuyển đổi topic summary thành TopicSummaryDto (07 §7).
  *
  * @param {Record<string, any>} itemDoc
- * @param {Record<string, any>} [versionDoc]
+ * @param {Record<string, any>} versionDoc
  * @returns {{ id: string, versionId: string, title: string, level: string, description: string }}
  */
 export function toTopicSummaryDto(itemDoc, versionDoc) {
-  const payload = versionDoc?.payload ?? itemDoc.draftPayload ?? {};
+  if (!versionDoc?.payload) {
+    throw new Error('A published topic revision is required for its summary');
+  }
+  const payload = versionDoc.payload;
   return {
     id:
       itemDoc._id instanceof ObjectId
         ? itemDoc._id.toHexString()
         : String(itemDoc._id),
     versionId:
-      itemDoc.publishedVersionId instanceof ObjectId
-        ? itemDoc.publishedVersionId.toHexString()
-        : String(itemDoc.publishedVersionId),
-    title: itemDoc.title ?? payload.title ?? '',
-    level: itemDoc.level ?? payload.level ?? 'N5',
-    description: payload.description ?? '',
+      versionDoc._id instanceof ObjectId
+        ? versionDoc._id.toHexString()
+        : String(versionDoc._id),
+    title: payload.title,
+    level: payload.level,
+    description: payload.description,
   };
 }
 
