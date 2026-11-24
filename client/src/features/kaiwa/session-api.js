@@ -12,7 +12,7 @@ import { api } from '../../services/api-client.js';
  * @property {string} [reconnectUntil]
  * @property {string} [controllerKey]
  * @property {string} [deckVersionId]
- * @property {{title: string, context: string, objective: string, myRole: string}} [currentCard]
+ * @property {{id?: string, scenarioVersionId?: string, title: string, context: string, objective: string, myRole: string}} [currentCard]
  */
 
 /** @param {string} id @param {AbortSignal} [signal] */

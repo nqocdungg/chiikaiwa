@@ -20,6 +20,7 @@ import { createSavedItemRouter } from './modules/learning/saved-item-router.js';
 import { createStudyCardRouter } from './modules/learning/study-card-router.js';
 import { createQuizRouter } from './modules/quiz/quiz-router.js';
 import { createAdminStatisticsRouter } from './modules/statistics/admin-statistics-router.js';
+import { createSafetyRouter } from './modules/safety/safety-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
 import { createSessionLearningRouter } from './modules/sessions/session-learning-router.js';
 import {
@@ -166,6 +167,7 @@ export function createApp({
   app.use('/api/v1/me/saved-items', createSavedItemRouter());
   app.use('/api/v1', createStudyCardRouter());
   app.use('/api/v1', createQuizRouter());
+  app.use('/api/v1', createSafetyRouter());
 
   app.use((_request, response) => {
     response.status(404).json({

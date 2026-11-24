@@ -22,6 +22,7 @@ tags:
   - name: Learning Content
   - name: Flashcards
   - name: Quizzes
+  - name: Safety
   - name: Admin Operations
 
 paths:
@@ -2107,6 +2108,193 @@ paths:
         '410': *studyGone
         '422': *studyInvalid
 
+  /me/blocks:
+    get:
+      tags: [Safety]
+      operationId: listMyBlocks
+      summary: Lấy danh sách các bản chặn do người gọi tạo (BE-019, 07 §10)
+      description: >-
+        Chỉ trả các bản chặn mà người gọi là blockerKey, sắp xếp theo createdAt giảm dần rồi _id giảm dần.
+        Partner projection không bao gồm email hoặc dữ liệu riêng tư; khách được gắn nhãn "Khách".
+      security:
+        - sessionCookie: []
+        - guestCookie: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        '200':
+          description: Danh sách bản chặn của người gọi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockListResponse'
+        '400':
+          description: Con trỏ phân trang không hợp lệ (INVALID_CURSOR)
+          content: *studyError
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    post:
+      tags: [Safety]
+      operationId: createBlock
+      summary: Chặn đối tác từ một phiên đã tham gia (BE-019, 07 §10)
+      description: >-
+        Kiểm tra đúng hai thành viên của phiên, tạo bản chặn có hướng trong transaction TX-05,
+        kết thúc phiên đang mở (nếu có) với lý do blocked và thu hồi điều phối/media liên quan.
+        Gửi lại cùng Idempotency-Key và payload trả về cùng bản chặn; khác payload trả 409 IDEMPOTENCY_CONFLICT.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBlockRequest'
+      responses:
+        '200':
+          description: Bản chặn đã được ghi nhận
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateBlockResponse'
+        '400':
+          description: Dữ liệu hoặc header Idempotency-Key không hợp lệ
+          content: *studyError
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '413':
+          description: Payload vượt quá 1 MiB (PAYLOAD_TOO_LARGE)
+          content: *studyError
+        '415':
+          description: Thiếu Content-Type application/json (UNSUPPORTED_MEDIA_TYPE)
+          content: *studyError
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /me/blocks/{id}:
+    delete:
+      tags: [Safety]
+      operationId: deleteMyBlock
+      summary: Gỡ một bản chặn do chính người gọi tạo (BE-019, 07 §10)
+      description: >-
+        Chỉ xóa bản chặn thuộc sở hữu của người gọi; không ảnh hưởng bản chặn chiều ngược lại từ đối tác.
+        Bản chặn không tồn tại hoặc của người khác trả 404 RESOURCE_NOT_FOUND.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ObjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Đã gỡ bản chặn
+        '400':
+          description: ID bản chặn hoặc Idempotency-Key không hợp lệ
+          content: *studyError
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /reports:
+    post:
+      tags: [Safety]
+      operationId: createReport
+      summary: Gửi báo cáo đối tác gắn với một phiên đã tham gia (BE-019, 07 §10)
+      description: >-
+        Kiểm tra đúng hai thành viên của phiên, lưu báo cáo ở trạng thái new (không tự chặn, không kết thúc phiên,
+        không đặt TTL). Hỗ trợ Idempotency-Key chống gửi lặp.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+        - guestCookie: []
+          csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+      responses:
+        '201':
+          description: Báo cáo đã được tiếp nhận
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateReportResponse'
+        '400':
+          description: Dữ liệu hoặc header Idempotency-Key không hợp lệ
+          content: *studyError
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '413':
+          description: Payload vượt quá 1 MiB (PAYLOAD_TOO_LARGE)
+          content: *studyError
+        '415':
+          description: Thiếu Content-Type application/json (UNSUPPORTED_MEDIA_TYPE)
+          content: *studyError
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /admin/statistics:
     get:
       tags:
@@ -3950,6 +4138,110 @@ components:
                 $ref: '#/components/schemas/QuizSummaryItem'
             nextCursor:
               type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    BlockItem:
+      type: object
+      additionalProperties: false
+      required: [id, partner, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        partner:
+          $ref: '#/components/schemas/Partner'
+        createdAt:
+          type: string
+          format: date-time
+
+    BlockListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items, nextCursor]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/BlockItem'
+            nextCursor:
+              type: [string, 'null']
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CreateBlockRequest:
+      type: object
+      additionalProperties: false
+      required: [sessionId, targetActorKey]
+      properties:
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+        targetActorKey:
+          type: string
+          pattern: '^(user|guest):[0-9a-f]{24}$'
+          example: user:507f1f77bcf86cd799439012
+
+    CreateBlockResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [id]
+          properties:
+            id:
+              $ref: '#/components/schemas/ObjectId'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CreateReportRequest:
+      type: object
+      additionalProperties: false
+      required: [sessionId, targetActorKey, reason]
+      properties:
+        sessionId:
+          $ref: '#/components/schemas/ObjectId'
+        targetActorKey:
+          type: string
+          pattern: '^(user|guest):[0-9a-f]{24}$'
+          example: user:507f1f77bcf86cd799439012
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: Ngôn từ không phù hợp trong phiên luyện
+        description:
+          type: string
+          maxLength: 2000
+          example: Đối tác sử dụng lời lẽ thiếu tôn trọng khi luyện tập.
+
+    ReportCreated:
+      type: object
+      additionalProperties: false
+      required: [id, status, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ObjectId'
+        status:
+          type: string
+          enum: [new, inProgress, resolved, rejected]
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateReportResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/ReportCreated'
         meta:
           $ref: '#/components/schemas/Meta'
 
