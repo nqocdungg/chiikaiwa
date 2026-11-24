@@ -440,7 +440,41 @@ describe('BE-001 Authentication unit & HTTP contract checks', () => {
       ).toBe('192.168.1.50');
     });
 
+    it('extracts the first validated hop when x-vercel-forwarded-for is comma-separated', () => {
+      const commaListReq = /** @type {any} */ ({
+        socket: { remoteAddress: '10.20.0.5' },
+        headers: { 'x-vercel-forwarded-for': '198.51.100.1, 203.0.113.9' },
+      });
+      expect(
+        getClientIp(commaListReq, {
+          envSource: { NODE_ENV: 'production', VERCEL: '1' },
+        }),
+      ).toBe('198.51.100.1');
+
+      const mappedCommaReq = /** @type {any} */ ({
+        socket: { remoteAddress: '10.20.0.5' },
+        headers: {
+          'x-vercel-forwarded-for': '  ::ffff:198.51.100.1 , 203.0.113.9 ',
+        },
+      });
+      expect(
+        getClientIp(mappedCommaReq, {
+          envSource: { NODE_ENV: 'production', VERCEL: '1' },
+        }),
+      ).toBe('198.51.100.1');
+    });
+
     it('falls back to socket IP when x-vercel-forwarded-for is missing or invalid', () => {
+      const missingReq = /** @type {any} */ ({
+        socket: { remoteAddress: '::ffff:10.20.0.5' },
+        headers: {},
+      });
+      expect(
+        getClientIp(missingReq, {
+          envSource: { NODE_ENV: 'production', VERCEL: '1' },
+        }),
+      ).toBe('10.20.0.5');
+
       const invalidReq = /** @type {any} */ ({
         socket: { remoteAddress: '::ffff:10.20.0.5' },
         headers: { 'x-vercel-forwarded-for': 'not-an-ip' },
@@ -451,12 +485,12 @@ describe('BE-001 Authentication unit & HTTP contract checks', () => {
         }),
       ).toBe('10.20.0.5');
 
-      const commaInjectedReq = /** @type {any} */ ({
+      const invalidFirstHopReq = /** @type {any} */ ({
         socket: { remoteAddress: '10.20.0.5' },
-        headers: { 'x-vercel-forwarded-for': '198.51.100.1, 203.0.113.9' },
+        headers: { 'x-vercel-forwarded-for': 'not-an-ip, 203.0.113.9' },
       });
       expect(
-        getClientIp(commaInjectedReq, {
+        getClientIp(invalidFirstHopReq, {
           envSource: { NODE_ENV: 'production', VERCEL: '1' },
         }),
       ).toBe('10.20.0.5');

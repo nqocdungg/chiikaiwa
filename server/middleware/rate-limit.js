@@ -35,7 +35,8 @@ function isVercelRuntime(envSource) {
 
 /**
  * Extracts client IP address safely according to trusted proxy boundaries.
- * On Vercel (`VERCEL` env set), uses the platform-injected `x-vercel-forwarded-for` header when valid.
+ * On Vercel (`VERCEL` env set), uses the first validated hop from the platform-injected
+ * `x-vercel-forwarded-for` header, falling back to the socket IP when missing or invalid.
  * Outside Vercel, direct connections ignore client-supplied `x-forwarded-for` headers;
  * when the immediate socket peer is in `TRUSTED_PROXY_IPS`, resolves the rightmost
  * untrusted hop appended by the trusted proxy chain.
@@ -51,8 +52,12 @@ export function getClientIp(request, { envSource = process.env } = {}) {
 
   if (isVercelRuntime(envSource)) {
     const vercelForwarded = request.headers['x-vercel-forwarded-for'];
-    if (typeof vercelForwarded === 'string') {
-      const candidate = normalizeIpAddress(vercelForwarded);
+    const rawHeader = Array.isArray(vercelForwarded)
+      ? vercelForwarded[0]
+      : vercelForwarded;
+    if (typeof rawHeader === 'string') {
+      const firstHop = rawHeader.split(',')[0] ?? '';
+      const candidate = normalizeIpAddress(firstHop);
       if (candidate && isIP(candidate) !== 0) {
         return candidate;
       }

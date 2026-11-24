@@ -5,7 +5,7 @@
 - OpenAPI khai báo `429 RateLimited` cho hủy invitation, hủy request và phản hồi request; contract test kiểm cả ba operation cùng publish/hide, đồng thời integration test kiểm runtime `429 RATE_LIMITED` + `Retry-After` cho cả ba mutation của invitation.
 - Integration tests cố định `Date` trong từng ca để seed bucket và HTTP request dùng cùng cửa sổ; timer mạng và MongoDB vẫn chạy thật, đồng hồ được khôi phục sau mỗi ca.
 - Xóa alias `INVITATION_CODE_LOOKUP_*` không còn consumer trong invitation service.
-- `getClientIp` hỗ trợ `x-vercel-forwarded-for` (khi `VERCEL` được bật và IP hợp lệ), không nuốt âm thầm lỗi parse `TRUSTED_PROXY_IPS` (ghi `console.warn` và fallback an toàn về socket IP), kèm unit test cho Vercel IP extraction và hướng dẫn cấu hình trong `.env.example` / `README.md`.
+- `getClientIp` hỗ trợ đọc hop hợp lệ đầu tiên của `x-vercel-forwarded-for` khi `VERCEL` được bật (rơi về socket IP khi thiếu hoặc không hợp lệ), không nuốt âm thầm lỗi parse `TRUSTED_PROXY_IPS` (ghi `console.warn` và fallback an toàn về socket IP), kèm unit test cho Vercel IP extraction và hướng dẫn cấu hình trong `.env.example` / `README.md`.
 
 ## Heartbeat — Not Run
 
