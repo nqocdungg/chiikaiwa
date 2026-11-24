@@ -2,9 +2,10 @@
 
 ## Phạm vi local
 
-- OpenAPI khai báo `429 RateLimited` cho hủy invitation, hủy request và phản hồi request; contract test kiểm cả ba operation cùng publish/hide.
+- OpenAPI khai báo `429 RateLimited` cho hủy invitation, hủy request và phản hồi request; contract test kiểm cả ba operation cùng publish/hide, đồng thời integration test kiểm runtime `429 RATE_LIMITED` + `Retry-After` cho cả ba mutation của invitation.
 - Integration tests cố định `Date` trong từng ca để seed bucket và HTTP request dùng cùng cửa sổ; timer mạng và MongoDB vẫn chạy thật, đồng hồ được khôi phục sau mỗi ca.
 - Xóa alias `INVITATION_CODE_LOOKUP_*` không còn consumer trong invitation service.
+- `getClientIp` hỗ trợ `x-vercel-forwarded-for` (khi `VERCEL` được bật và IP hợp lệ), không nuốt âm thầm lỗi parse `TRUSTED_PROXY_IPS` (ghi `console.warn` và fallback an toàn về socket IP), kèm unit test cho Vercel IP extraction và hướng dẫn cấu hình trong `.env.example` / `README.md`.
 
 ## Heartbeat — Not Run
 
@@ -12,7 +13,7 @@ Branch hiện chưa triển khai endpoint matching heartbeat. Kiểm thử GET/p
 
 ## IP trên Vercel Preview — Not Run
 
-Chưa có bằng chứng từ hai mạng độc lập trên cùng Preview deployment. `getClientIp` hiện chỉ tin forwarded IP khi socket peer nằm trong `TRUSTED_PROXY_IPS`; khi không cấu hình, hàm dùng socket IP. Test trusted proxy local không chứng minh cấu hình Vercel đúng.
+Code đã hỗ trợ đọc `x-vercel-forwarded-for` khi `VERCEL` được bật và có unit test local, nhưng chưa có bằng chứng chạy thực tế từ hai mạng độc lập trên cùng Preview deployment. Test local không chứng minh được cấu hình header/routing trên môi trường Vercel thực.
 
 Cần kiểm chứng với hai mạng (ví dụ Wi-Fi và mạng di động), cùng deployment và cửa sổ quota, trên môi trường test được phép:
 

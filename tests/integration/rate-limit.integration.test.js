@@ -539,4 +539,47 @@ describe('BE-038 Request Rate Limits', () => {
       .set('Cookie', admin.authCookie)
       .expect(200);
   });
+
+  it('enforces 120/min/actor write rate limit on invitation cancel, request cancel, and request response endpoints', async () => {
+    const learner = await seedAuthenticatedUser({
+      displayName: 'Invitation Actor',
+    });
+    const { csrfToken, csrfCookie } = await getCsrfContext();
+    const dummyId = new ObjectId().toHexString();
+
+    await seedRateLimitBucket({
+      scope: 'write-actor',
+      subjectKey: learner.actorKey,
+      count: WRITE_RATE_LIMIT_MAX,
+      windowMs: WRITE_RATE_LIMIT_WINDOW_MS,
+    });
+
+    const invitationMutations = [
+      request(app)
+        .delete(`/api/v1/invitations/${dummyId}?expectedVersion=0`)
+        .set('Origin', ORIGIN)
+        .set('Cookie', `${csrfCookie}; ${learner.authCookie}`)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Idempotency-Key', randomUUID()),
+      request(app)
+        .delete(`/api/v1/invitation-requests/${dummyId}?expectedVersion=0`)
+        .set('Origin', ORIGIN)
+        .set('Cookie', `${csrfCookie}; ${learner.authCookie}`)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Idempotency-Key', randomUUID()),
+      request(app)
+        .post(`/api/v1/invitation-requests/${dummyId}/responses`)
+        .set('Origin', ORIGIN)
+        .set('Cookie', `${csrfCookie}; ${learner.authCookie}`)
+        .set('X-CSRF-Token', csrfToken)
+        .set('Idempotency-Key', randomUUID())
+        .send({ expectedVersion: 0, decision: 'accept' }),
+    ];
+
+    for (const req of invitationMutations) {
+      const res = await req.expect(429);
+      expect(res.body.error.code).toBe('RATE_LIMITED');
+      expect(Number(res.headers['retry-after'])).toBeGreaterThanOrEqual(1);
+    }
+  });
 });

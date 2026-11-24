@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
-import { normalizeIpAddress, readAuthEnv } from '../config/env.js';
+import { normalizeIpAddress, parseTrustedProxyIps } from '../config/env.js';
 import { connectDatabase } from '../persistence/database.js';
 import { AppError } from './http-error.js';
 
@@ -24,9 +24,20 @@ export function hashRateLimitSubject(value) {
 }
 
 /**
+ * Returns true when running in a Vercel deployment environment.
+ * @param {NodeJS.ProcessEnv} envSource
+ * @returns {boolean}
+ */
+function isVercelRuntime(envSource) {
+  const raw = envSource.VERCEL?.trim().toLowerCase();
+  return Boolean(raw && raw !== '0' && raw !== 'false');
+}
+
+/**
  * Extracts client IP address safely according to trusted proxy boundaries.
- * Direct connections ignore client-supplied X-Forwarded-For headers.
- * When the immediate socket peer is in TRUSTED_PROXY_IPS, resolves the rightmost
+ * On Vercel (`VERCEL` env set), uses the platform-injected `x-vercel-forwarded-for` header when valid.
+ * Outside Vercel, direct connections ignore client-supplied `x-forwarded-for` headers;
+ * when the immediate socket peer is in `TRUSTED_PROXY_IPS`, resolves the rightmost
  * untrusted hop appended by the trusted proxy chain.
  *
  * @param {import('express').Request} request
@@ -38,11 +49,31 @@ export function getClientIp(request, { envSource = process.env } = {}) {
     request.socket?.remoteAddress || request.ip || '127.0.0.1';
   const socketIp = normalizeIpAddress(String(rawSocketIp));
 
+  if (isVercelRuntime(envSource)) {
+    const vercelForwarded = request.headers['x-vercel-forwarded-for'];
+    if (typeof vercelForwarded === 'string') {
+      const candidate = normalizeIpAddress(vercelForwarded);
+      if (candidate && isIP(candidate) !== 0) {
+        return candidate;
+      }
+    }
+    return socketIp;
+  }
+
   /** @type {string[]} */
   let trustedProxyIps;
   try {
-    trustedProxyIps = readAuthEnv(envSource).trustedProxyIps;
-  } catch {
+    trustedProxyIps = parseTrustedProxyIps(envSource.TRUSTED_PROXY_IPS);
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: 'rate_limit_invalid_trusted_proxy_ips',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'TRUSTED_PROXY_IPS must contain valid IP addresses',
+      }),
+    );
     trustedProxyIps = [];
   }
 
