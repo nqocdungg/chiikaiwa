@@ -71,7 +71,15 @@ vi.mock('../../server/integrations/livekit/room-service.js', () => ({
   ) => participant.permission?.canPublishSources.includes(3),
   setScreenPermission: vi.fn(),
   listMediaParticipants: vi.fn(async () => {
-    throw new Error('Room Service unavailable in fixture');
+    const doc = await persisted();
+    return (doc?.presence ?? [])
+      .filter((/** @type {any} */ item) => item.connected)
+      .map((/** @type {any} */ item) => ({
+        identity: item.actorKey,
+        sid: item.connectionSid,
+        state: 2,
+        tracks: [],
+      }));
   }),
   readMediaParticipant: vi.fn(async () => null),
   removeMediaParticipant: vi.fn(async () => {}),
@@ -362,12 +370,102 @@ describe('BE-012 lifecycle on a real replica set', () => {
     });
     const persistedSession = await persisted();
     if (!persistedSession) throw new Error('Missing fixture session');
-    const { presenceCheckedAt, ...session } = persistedSession;
+    const { presenceCheckedAt, lastBothPresentAt, ...session } =
+      persistedSession;
     expect(presenceCheckedAt).toEqual(at);
+    expect(lastBothPresentAt).toEqual(at);
     expect(session).toEqual(before);
     expect(JSON.stringify(result.data)).not.toMatch(
       /roomName|connectionSid|email|passwordHash|mediaCleanup|activeSince/,
     );
+  });
+  it('pauses both clocks on an unavailable presence snapshot and resumes on recovery', async () => {
+    await start();
+    const input = { sessionId: String(SESSION_ID), getIdentity: identity, now };
+    at = new Date(at.getTime() + 12_000);
+    vi.mocked(listMediaParticipants).mockRejectedValueOnce(
+      new Error('timeout'),
+    );
+    expect((await readSession(input)).data).toMatchObject({
+      activeDurationMs: 0,
+      selectionRemainingMs: 60_000,
+    });
+    at = new Date(at.getTime() + 6_000);
+    expect((await readSession(input)).data).toMatchObject({
+      activeDurationMs: 0,
+      selectionRemainingMs: 60_000,
+    });
+    at = new Date(at.getTime() + 2_000);
+    expect((await readSession(input)).data).toMatchObject({
+      activeDurationMs: 2_000,
+      selectionRemainingMs: 58_000,
+    });
+  });
+  it('waits for an in-flight presence check before a concurrent GET can expire selection', async () => {
+    await start();
+    await db
+      .collection('practice_sessions')
+      .updateOne(
+        { _id: SESSION_ID },
+        { $set: { selectionRemainingMs: 1_000 } },
+      );
+    /** @type {(reason: Error) => void} */
+    let rejectRead = () => {};
+    vi.mocked(listMediaParticipants).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectRead = reject;
+        }),
+    );
+    const input = { sessionId: String(SESSION_ID), getIdentity: identity, now };
+    const first = readSession(input);
+    await vi.waitFor(async () => {
+      expect((await persisted())?.presenceCheck).toBeDefined();
+    });
+    await db
+      .collection('practice_sessions')
+      .updateOne({ _id: SESSION_ID }, { $inc: { version: 1 } });
+    at = new Date(at.getTime() + 2_000);
+    let secondFinished = false;
+    const second = readSession(input).then((result) => {
+      secondFinished = true;
+      return result;
+    });
+    await expect(
+      reconcileSession(SESSION_ID, await identity(), now),
+    ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(listMediaParticipants).toHaveBeenCalledTimes(1);
+    expect(secondFinished).toBe(false);
+    rejectRead(new Error('timeout'));
+    const results = await Promise.all([first, second]);
+    for (const result of results) {
+      expect(result.data).toMatchObject({
+        status: 'active',
+        activeDurationMs: 0,
+        selectionRemainingMs: 1_000,
+      });
+    }
+    expect((await persisted())?.presenceCheck).toBeUndefined();
+  });
+  it('recovers an abandoned presence check after its lease expires', async () => {
+    await start();
+    await db.collection('practice_sessions').updateOne(
+      { _id: SESSION_ID },
+      {
+        $set: {
+          presenceCheckedAt: at,
+          presenceCheck: { id: 'abandoned', until: new Date(Date.now() - 1) },
+        },
+      },
+    );
+    await readSession({
+      sessionId: String(SESSION_ID),
+      getIdentity: identity,
+      now,
+    });
+    expect(listMediaParticipants).toHaveBeenCalledTimes(1);
+    expect((await persisted())?.presenceCheck).toBeUndefined();
   });
   it('leave races/replays end once, settle time and free both actors; ended refuses token', async () => {
     await start();

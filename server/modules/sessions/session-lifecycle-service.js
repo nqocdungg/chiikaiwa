@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import mongoose from 'mongoose';
 import { connectDatabase } from '../../persistence/database.js';
-import { sessionVersionConflict } from './sessions-errors.js';
+import { mediaUnavailable, sessionVersionConflict } from './sessions-errors.js';
 import {
   sessionClocks,
   sessionDeadline,
@@ -86,6 +86,8 @@ export async function endSession(doc, at, reason, session) {
 /** @param {any} doc @param {Date} at @param {import('mongoose').ClientSession} session */
 export async function reconcileSessionDeadline(doc, at, session) {
   if (doc.status === 'ended') return doc;
+  // An expired lease still needs a new presence snapshot before clocks are trusted.
+  if (doc.presenceCheck) throw mediaUnavailable();
   const deadline = sessionDeadline(doc);
   return deadline && deadline.at <= at
     ? endSession(doc, deadline.at, deadline.reason, session)

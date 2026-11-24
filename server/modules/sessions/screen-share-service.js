@@ -17,19 +17,22 @@ import {
 import { projectSession } from './session-projection.js';
 import { sessionDeadline } from './session-clock.js';
 import {
+  mediaUnavailable,
   sessionEnded,
   sessionExpired,
   sessionVersionConflict,
 } from './sessions-errors.js';
+
+const PERMISSION_LEASE_MS = 20_000;
+const SCREEN_PUBLISH_GRACE_MS = 15_000;
 
 /** @param {any} doc */
 export async function reconcileScreenShare(doc) {
   const share = doc.screenShare;
   if (
     !share ||
-    !['granting', 'revoking'].includes(share.state) ||
-    doc.status === 'ended' ||
-    share.grantInFlight
+    !['granting', 'active', 'revoking'].includes(share.state) ||
+    doc.status === 'ended'
   )
     return;
   const db = await connectDatabase();
@@ -39,16 +42,34 @@ export async function reconcileScreenShare(doc) {
     version: doc.version,
     'screenShare.version': share.version,
   };
-  const grant = share.state === 'granting';
+  const now = new Date();
+  if (
+    share.permissionLeaseUntil > now ||
+    (share.state === 'active' && share.publishGraceUntil > now)
+  )
+    return;
+  const recovering = Boolean(share.permissionLeaseUntil || share.grantInFlight);
+  const grant = share.state === 'granting' && !recovering;
   if (
     grant &&
     (doc.status !== 'active' ||
       (sessionDeadline(doc)?.at.getTime() ?? Infinity) <= Date.now())
   )
     return;
-  const lock = { ...filter, 'screenShare.grantInFlight': { $ne: true } };
+  const lease = new Date(now.getTime() + PERMISSION_LEASE_MS);
+  const leaseFilter = {
+    _id: doc._id,
+    'screenShare.permissionLeaseUntil': lease,
+  };
+  const lock = {
+    ...filter,
+    'screenShare.permissionLeaseUntil': share.permissionLeaseUntil ?? {
+      $exists: false,
+    },
+  };
   const locked = await sessions.updateOne(lock, {
-    $set: { 'screenShare.grantInFlight': true },
+    $set: { 'screenShare.permissionLeaseUntil': lease },
+    $unset: { 'screenShare.grantInFlight': '' },
   });
   if (!locked.modifiedCount) return;
   let confirmed = false;
@@ -56,6 +77,15 @@ export async function reconcileScreenShare(doc) {
   try {
     const before = await listMediaParticipants(doc.roomName);
     const owner = before.find((p) => p.identity === share.ownerKey);
+    if (
+      share.state === 'active' &&
+      owner?.tracks.some((track) => track.source === TrackSource.SCREEN_SHARE)
+    ) {
+      await sessions.updateOne(leaseFilter, {
+        $unset: { 'screenShare.permissionLeaseUntil': '' },
+      });
+      return;
+    }
     if (
       grant &&
       owner &&
@@ -95,18 +125,26 @@ export async function reconcileScreenShare(doc) {
     }
   } catch {
     // An unacknowledged permission change can still execute on LiveKit.
-    if (permissionCallPending) return;
+    if (permissionCallPending || !grant) return;
   }
   const updated =
     confirmed &&
     (!grant ||
       !((sessionDeadline(doc)?.at.getTime() ?? Infinity) <= Date.now())) &&
     (await sessions.findOneAndUpdate(
-      filter,
+      { ...filter, ...leaseFilter },
       {
         $set: {
           screenShare: grant
-            ? { ...share, state: 'active', version: share.version + 1 }
+            ? {
+                state: 'active',
+                ownerKey: share.ownerKey,
+                operationId: share.operationId,
+                version: share.version + 1,
+                publishGraceUntil: new Date(
+                  Date.now() + SCREEN_PUBLISH_GRACE_MS,
+                ),
+              }
             : { state: 'idle', version: share.version + 1 },
         },
         $inc: { version: 1 },
@@ -117,14 +155,13 @@ export async function reconcileScreenShare(doc) {
   else if (grant) {
     const pending = await sessions.findOneAndUpdate(
       {
-        _id: doc._id,
+        ...leaseFilter,
         status: { $ne: 'ended' },
         'screenShare.ownerKey': share.ownerKey,
-        'screenShare.grantInFlight': true,
       },
       {
         $set: { 'screenShare.state': 'revoking' },
-        $unset: { 'screenShare.grantInFlight': '' },
+        $unset: { 'screenShare.permissionLeaseUntil': '' },
         $inc: { version: 1, 'screenShare.version': 1 },
       },
       { returnDocument: 'after' },
@@ -133,15 +170,14 @@ export async function reconcileScreenShare(doc) {
       await finishSessionEffects(pending);
       await reconcileScreenShare(pending);
     }
-  } else {
+  } else if (!recovering || share.state !== 'granting') {
     await sessions.updateOne(
       {
-        _id: doc._id,
+        ...leaseFilter,
         status: { $ne: 'ended' },
         'screenShare.ownerKey': share.ownerKey,
-        'screenShare.state': 'revoking',
       },
-      { $unset: { 'screenShare.grantInFlight': '' } },
+      { $unset: { 'screenShare.permissionLeaseUntil': '' } },
     );
   }
 }
@@ -156,7 +192,8 @@ export async function changeScreenShare({
   const id = sessionObjectId(sessionId);
   const identity = await getIdentity();
   const claim = expectedVersion !== undefined;
-  await reconcileSession(id, identity);
+  const before = await reconcileSession(id, identity);
+  if (claim) await reconcileScreenShare(before);
   const db = await connectDatabase();
   /** @type {any} */ let doc;
   const intent = randomUUID();
@@ -233,6 +270,12 @@ export async function changeScreenShare({
   const pending =
     share.operationId === reference &&
     ['granting', 'revoking'].includes(share.state);
+  if (
+    claim &&
+    !pending &&
+    (share.state !== 'active' || share.operationId !== reference)
+  )
+    throw mediaUnavailable();
   return {
     data: { session: await projectSession(doc, current.actorKey, at) },
     status: pending ? 202 : 200,
