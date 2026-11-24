@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../server/app.js';
-import { getClientIp } from '../../server/middleware/rate-limit.js';
+import {
+  getClientIp,
+  hashRateLimitSubject,
+  normalizeRateLimitIp,
+} from '../../server/middleware/rate-limit.js';
 import {
   hashPassword,
   signJwt,
@@ -521,6 +525,30 @@ describe('BE-001 Authentication unit & HTTP contract checks', () => {
       } finally {
         warnSpy.mockRestore();
       }
+    });
+
+    it('groups IPv6 addresses in the same /64 prefix into the same rate-limit bucket while keeping IPv4 and distinct /64s separate', () => {
+      const addrA = normalizeRateLimitIp('2001:db8:abcd:12::1');
+      const addrB = normalizeRateLimitIp(
+        '2001:0DB8:ABCD:0012:ffff:1234:5678:9abc',
+      );
+      expect(addrA).toBe('2001:0db8:abcd:0012::/64');
+      expect(addrB).toBe('2001:0db8:abcd:0012::/64');
+      expect(hashRateLimitSubject(addrA)).toBe(hashRateLimitSubject(addrB));
+
+      const otherSubnet = normalizeRateLimitIp('2001:db8:abcd:13::1');
+      expect(otherSubnet).toBe('2001:0db8:abcd:0013::/64');
+      expect(hashRateLimitSubject(otherSubnet)).not.toBe(
+        hashRateLimitSubject(addrA),
+      );
+
+      expect(normalizeRateLimitIp('203.0.113.1')).toBe('203.0.113.1');
+      expect(normalizeRateLimitIp('203.0.113.2')).toBe('203.0.113.2');
+      expect(normalizeRateLimitIp('::ffff:203.0.113.5')).toBe('203.0.113.5');
+      expect(normalizeRateLimitIp('0:0:0:0:0:ffff:203.0.113.5')).toBe(
+        '203.0.113.5',
+      );
+      expect(normalizeRateLimitIp('::ffff:cb00:7105')).toBe('203.0.113.5');
     });
   });
 });

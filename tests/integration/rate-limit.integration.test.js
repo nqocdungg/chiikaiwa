@@ -16,6 +16,7 @@ import { createApp } from '../../server/app.js';
 import { readAuthEnv } from '../../server/config/env.js';
 import {
   consumeRateLimit,
+  enforceWriteRateLimit,
   hashRateLimitSubject,
   INVITATION_CODE_RATE_LIMIT_MAX,
   WRITE_RATE_LIMIT_MAX,
@@ -581,5 +582,69 @@ describe('BE-038 Request Rate Limits', () => {
       expect(res.body.error.code).toBe('RATE_LIMITED');
       expect(Number(res.headers['retry-after'])).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it('groups rotating IPv6 host addresses within the same /64 prefix into one bucket for invitation-code-ip and IP-based write-actor', async () => {
+    const { csrfToken, csrfCookie } = await getCsrfContext();
+
+    vi.stubEnv('VERCEL', '1');
+    try {
+      for (let i = 1; i <= INVITATION_CODE_RATE_LIMIT_MAX; i += 1) {
+        const suffix = i.toString(16);
+        await request(app)
+          .post('/api/v1/guest-trials')
+          .set('Origin', ORIGIN)
+          .set('Cookie', csrfCookie)
+          .set('X-CSRF-Token', csrfToken)
+          .set('x-vercel-forwarded-for', `2001:db8:abcd:12::${suffix}`)
+          .set('Idempotency-Key', randomUUID())
+          .send({ code: 'ZZZZ234567' })
+          .expect(409);
+      }
+
+      const blockedSameSubnet = await request(app)
+        .post('/api/v1/guest-trials')
+        .set('Origin', ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .set('x-vercel-forwarded-for', '2001:db8:abcd:12:cafe:babe::9999')
+        .set('Idempotency-Key', randomUUID())
+        .send({ code: 'ZZZZ234567' })
+        .expect(429);
+      expect(blockedSameSubnet.body.error.code).toBe('RATE_LIMITED');
+      expect(
+        Number(blockedSameSubnet.headers['retry-after']),
+      ).toBeGreaterThanOrEqual(1);
+
+      await request(app)
+        .post('/api/v1/guest-trials')
+        .set('Origin', ORIGIN)
+        .set('Cookie', csrfCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .set('x-vercel-forwarded-for', '2001:db8:abcd:13::1')
+        .set('Idempotency-Key', randomUUID())
+        .send({ code: 'ZZZZ234567' })
+        .expect(409);
+    } finally {
+      vi.stubEnv('VERCEL', '');
+    }
+
+    await enforceWriteRateLimit({
+      db,
+      actorOrIpKey: 'ip:2001:db8:abcd:12::1',
+    });
+    await enforceWriteRateLimit({
+      db,
+      actorOrIpKey: 'ip:2001:0db8:abcd:0012:dead:beef::2',
+    });
+    const writeBucketDocs = await collection('rate_limits')
+      .find({
+        _id: {
+          $regex: `^write-actor:${hashRateLimitSubject('ip:2001:0db8:abcd:0012::/64')}:`,
+        },
+      })
+      .toArray();
+    expect(writeBucketDocs).toHaveLength(1);
+    expect(writeBucketDocs[0]?.count).toBe(2);
   });
 });

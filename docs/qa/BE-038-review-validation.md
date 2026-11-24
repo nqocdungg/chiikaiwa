@@ -6,6 +6,7 @@
 - Integration tests cố định `Date` trong từng ca để seed bucket và HTTP request dùng cùng cửa sổ; timer mạng và MongoDB vẫn chạy thật, đồng hồ được khôi phục sau mỗi ca.
 - Xóa alias `INVITATION_CODE_LOOKUP_*` không còn consumer trong invitation service.
 - `getClientIp` hỗ trợ đọc hop hợp lệ đầu tiên của `x-vercel-forwarded-for` khi `VERCEL` được bật (rơi về socket IP khi thiếu hoặc không hợp lệ), không nuốt âm thầm lỗi parse `TRUSTED_PROXY_IPS` (ghi `console.warn` và fallback an toàn về socket IP), kèm unit test cho Vercel IP extraction và hướng dẫn cấu hình trong `.env.example` / `README.md`.
+- `normalizeRateLimitIp` gom các địa chỉ IPv6 theo tiền tố `/64` chuẩn hóa trước khi hash bucket (giữ nguyên IPv4 và các dạng IPv4-mapped IPv6), áp dụng thống nhất cho `login-ip`, `password-reset-ip`, `invitation-code-ip` và `write-actor` dạng `ip:...`, kèm unit test và integration test chống xoay host IPv6 trong cùng `/64`.
 
 ## Heartbeat — Not Run
 

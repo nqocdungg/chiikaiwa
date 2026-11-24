@@ -24,6 +24,99 @@ export function hashRateLimitSubject(value) {
 }
 
 /**
+ * Parses an IPv6 address (with optional `::` compression and trailing IPv4 notation)
+ * into eight 16-bit integer groups.
+ * @param {string} ipv6
+ * @returns {number[] | null}
+ */
+function parseIpv6Groups(ipv6) {
+  const parseSegment = (/** @type {string} */ segment) => {
+    if (!segment) return [];
+    const parts = segment.split(':');
+    /** @type {number[]} */
+    const groups = [];
+    for (let i = 0; i < parts.length; i += 1) {
+      const part = parts[i];
+      if (part.includes('.')) {
+        if (i !== parts.length - 1 || isIP(part) !== 4) {
+          return null;
+        }
+        const octets = part.split('.').map(Number);
+        groups.push((octets[0] << 8) | octets[1], (octets[2] << 8) | octets[3]);
+      } else {
+        if (!/^[0-9a-f]{1,4}$/iu.test(part)) {
+          return null;
+        }
+        groups.push(Number.parseInt(part, 16));
+      }
+    }
+    return groups;
+  };
+
+  const doubleColonIndex = ipv6.indexOf('::');
+  if (doubleColonIndex === -1) {
+    const groups = parseSegment(ipv6);
+    return groups && groups.length === 8 ? groups : null;
+  }
+
+  const leftRaw = ipv6.slice(0, doubleColonIndex);
+  const rightRaw = ipv6.slice(doubleColonIndex + 2);
+  if (rightRaw.includes('::')) {
+    return null;
+  }
+  const left = parseSegment(leftRaw);
+  const right = parseSegment(rightRaw);
+  if (!left || !right) {
+    return null;
+  }
+  const missing = 8 - (left.length + right.length);
+  if (missing < 1) {
+    return null;
+  }
+  return [...left, ...Array(missing).fill(0), ...right];
+}
+
+/**
+ * Normalizes an IP address for rate-limit bucketing:
+ * preserves IPv4 addresses (including IPv4-mapped IPv6 forms) and collapses IPv6
+ * addresses to their canonical `/64` prefix so rotating host bits cannot bypass IP limits.
+ *
+ * @param {string} rawIp
+ * @returns {string}
+ */
+export function normalizeRateLimitIp(rawIp) {
+  const normalized = normalizeIpAddress(String(rawIp));
+  const version = isIP(normalized);
+  if (version !== 6) {
+    return normalized;
+  }
+
+  const groups = parseIpv6Groups(normalized);
+  if (!groups) {
+    return normalized;
+  }
+
+  if (
+    groups[0] === 0 &&
+    groups[1] === 0 &&
+    groups[2] === 0 &&
+    groups[3] === 0 &&
+    groups[4] === 0 &&
+    groups[5] === 0xffff
+  ) {
+    const hi = groups[6];
+    const lo = groups[7];
+    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+  }
+
+  const prefix = groups
+    .slice(0, 4)
+    .map((group) => group.toString(16).padStart(4, '0'))
+    .join(':');
+  return `${prefix}::/64`;
+}
+
+/**
  * Returns true when running in a Vercel deployment environment.
  * @param {NodeJS.ProcessEnv} envSource
  * @returns {boolean}
@@ -210,7 +303,7 @@ export async function enforceLoginRateLimit({
   await consumeRateLimit({
     db: database,
     scope: 'login-ip',
-    subjectKey: ip,
+    subjectKey: normalizeRateLimitIp(ip),
     limit: LOGIN_RATE_LIMIT_MAX,
     windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
     now,
@@ -248,7 +341,7 @@ export async function enforcePasswordResetRequestRateLimit({
   await consumeRateLimit({
     db: database,
     scope: 'password-reset-ip',
-    subjectKey: ip,
+    subjectKey: normalizeRateLimitIp(ip),
     limit: PASSWORD_RESET_IP_RATE_LIMIT_MAX,
     windowMs: PASSWORD_RESET_RATE_LIMIT_WINDOW_MS,
     now,
@@ -283,7 +376,7 @@ export async function enforceInvitationCodeRateLimit({
   await consumeRateLimit({
     db: database,
     scope: 'invitation-code-ip',
-    subjectKey: ip,
+    subjectKey: normalizeRateLimitIp(ip),
     limit: INVITATION_CODE_RATE_LIMIT_MAX,
     windowMs: INVITATION_CODE_RATE_LIMIT_WINDOW_MS,
     now,
@@ -304,10 +397,13 @@ export async function enforceWriteRateLimit({
   now = new Date(),
 }) {
   const database = db ?? (await connectDatabase());
+  const normalizedSubjectKey = actorOrIpKey.startsWith('ip:')
+    ? `ip:${normalizeRateLimitIp(actorOrIpKey.slice(3))}`
+    : actorOrIpKey;
   await consumeRateLimit({
     db: database,
     scope: 'write-actor',
-    subjectKey: actorOrIpKey,
+    subjectKey: normalizedSubjectKey,
     limit: WRITE_RATE_LIMIT_MAX,
     windowMs: WRITE_RATE_LIMIT_WINDOW_MS,
     now,
