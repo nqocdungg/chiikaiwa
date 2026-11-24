@@ -191,6 +191,9 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       expect(
         screen.getByRole('link', { name: /Danh sách đã chặn/u }),
       ).toHaveAttribute('href', '/blocks');
+      expect(
+        screen.queryByRole('link', { name: /Khu vực quản trị/u }),
+      ).not.toBeInTheDocument();
 
       // Overview shows saved profile details resolved from catalogs
       await waitFor(() => {
@@ -943,6 +946,60 @@ describe('FE-003 Profile, Change Password, Forgot Password & Reset Password UI',
       expect(
         screen.getByLabelText('Xác nhận mật khẩu mới *'),
       ).toBeInTheDocument();
+    });
+
+    it('shows a link back to /admin in the profile sidebar for active admins and navigates to /admin on click', async () => {
+      const adminUser = createMockUser({
+        role: 'admin',
+        displayName: 'Quản trị viên',
+        email: 'admin@chiikaiwa.dev',
+      });
+
+      vi.spyOn(api, 'get').mockImplementation(async (path) => {
+        if (path === '/auth/me') {
+          return {
+            data: { kind: 'user', user: adminUser },
+            meta: { requestId: 'req-me-admin' },
+            epoch: getIdentityEpoch(),
+          };
+        }
+        if (path === '/catalogs') {
+          return {
+            data: MOCK_CATALOGS,
+            meta: { requestId: 'req-catalogs-admin' },
+            epoch: getIdentityEpoch(),
+          };
+        }
+        throw new Error(`Unexpected GET ${path}`);
+      });
+
+      const { container } = render(
+        <MemoryRouter initialEntries={['/profile']}>
+          <App />
+        </MemoryRouter>,
+      );
+
+      expect(
+        await screen.findByRole('heading', { name: 'Hồ sơ của tôi' }),
+      ).toBeVisible();
+      expect(container.querySelector('.ck-learning-header')).toBeNull();
+      expect(
+        screen.queryByRole('link', { name: /Danh sách đã chặn/u }),
+      ).not.toBeInTheDocument();
+
+      const adminLink = screen.getByRole('link', {
+        name: /Khu vực quản trị/u,
+      });
+      expect(adminLink).toBeVisible();
+      expect(adminLink).toHaveAttribute('href', '/admin');
+
+      fireEvent.click(adminLink);
+
+      const adminHeading = await screen.findByRole('heading', {
+        name: 'Khu vực quản trị',
+      });
+      expect(adminHeading).toBeVisible();
+      expect(adminHeading.closest('[data-screen-id="SC-19"]')).not.toBeNull();
     });
   });
 

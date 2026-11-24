@@ -771,12 +771,17 @@ function ProfileWorkspace({
               <strong>Đổi mật khẩu</strong>
               <small>Bảo mật tài khoản</small>
             </Link>
-            {!isAdmin ? (
+            {isAdmin ? (
+              <Link to="/admin" className="ck-account-sidebar__item">
+                <strong>Khu vực quản trị</strong>
+                <small>Quay lại trang quản trị</small>
+              </Link>
+            ) : (
               <Link to="/blocks" className="ck-account-sidebar__item">
                 <strong>Danh sách đã chặn</strong>
                 <small>Quản lý người đã chặn</small>
               </Link>
-            ) : null}
+            )}
           </nav>
         </aside>
 
