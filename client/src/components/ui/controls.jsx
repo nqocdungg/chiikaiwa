@@ -61,6 +61,7 @@ export function Icon({ name, size = 20, className }) {
  * trailingIcon?: import('react').ReactNode,
  * fullWidth?: boolean,
  * type?: 'button'|'submit'|'reset',
+ * form?: string,
  * className?: string,
  * 'aria-label'?: string,
  * 'aria-pressed'?: boolean,
@@ -80,6 +81,7 @@ export function Button({
   trailingIcon,
   fullWidth = false,
   type = 'button',
+  form,
   className = '',
   'aria-label': ariaLabel,
   'aria-pressed': ariaPressed,
@@ -101,6 +103,7 @@ export function Button({
     <button
       ref={buttonRef}
       type={type}
+      form={form}
       className={classes}
       onClick={onClick}
       disabled={disabled || loading}
