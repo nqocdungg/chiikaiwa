@@ -4,7 +4,10 @@ import { ParticipantInfo, Room, WebhookEvent } from 'livekit-server-sdk';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createApp } from '../../server/app.js';
-import { notifyMediaSession } from '../../server/integrations/livekit/room-service.js';
+import {
+  listMediaParticipants,
+  notifyMediaSession,
+} from '../../server/integrations/livekit/room-service.js';
 import { resolveIdentityFromCookies } from '../../server/modules/identity/identity-service.js';
 import { processLivekitWebhook } from '../../server/modules/sessions/livekit-webhook-service.js';
 import { changeSessionCards } from '../../server/modules/sessions/session-card-service.js';
@@ -39,7 +42,17 @@ import { seedContractFixtures } from '../helpers/db-test-helpers.js';
 
 vi.mock('../../server/integrations/livekit/room-service.js', () => ({
   listMediaParticipants: vi.fn(async () => {
-    throw new Error('Room Service unavailable in fixture');
+    const doc = await sessionDoc();
+    return (doc?.presence ?? [])
+      .filter((/** @type {any} */ item) => item.connected)
+      .map(
+        (/** @type {any} */ item) =>
+          new ParticipantInfo({
+            identity: item.actorKey,
+            sid: item.connectionSid,
+            state: 2,
+          }),
+      );
   }),
   readMediaParticipant: vi.fn(async () => null),
   removeMediaParticipant: vi.fn(async () => {}),
@@ -352,6 +365,25 @@ it('returns the same published deck counts and scopes the cursor and writes to m
     scenarios.map(String).sort(),
   );
   await select(selected.version).expect(409);
+});
+
+it('pauses selection and refuses a stale card write when Room Service fails', async () => {
+  const initial = await sessionDoc();
+  vi.mocked(listMediaParticipants).mockRejectedValueOnce(new Error('timeout'));
+  assertErrorEnvelope(await select(initial?.version), {
+    expectedStatus: 409,
+    expectedCode: 'VERSION_CONFLICT',
+  });
+  const paused = await sessionDoc();
+  expect(paused).toMatchObject({
+    status: 'active',
+    presenceUnverified: true,
+    selectionRemainingMs: initial?.selectionRemainingMs,
+    version: initial?.version + 1,
+  });
+  expect(paused).not.toHaveProperty('selectionRunningSince');
+  expect(paused).not.toHaveProperty('presenceCheck');
+  expect(await db.collection('session_cards').countDocuments()).toBe(0);
 });
 
 it('keeps the selection deadline on claim, rejects a stale controller and never reclaims on replay', async () => {
