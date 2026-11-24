@@ -164,7 +164,9 @@ describe('FE-015 auto-matching UI (SC-05)', () => {
       await screen.findByRole('heading', { name: 'Tìm bạn luyện nói' }),
     ).toBeVisible();
     // Level not in profile -> start button disabled until user selects a level
-    const submitBtn = screen.getByRole('button', { name: 'Bắt đầu tìm' });
+    const submitBtn = screen.getByRole('button', {
+      name: 'Bắt đầu tìm bạn',
+    });
     expect(submitBtn).toBeDisabled();
 
     fireEvent.click(screen.getByRole('radio', { name: 'N3' }));
@@ -172,7 +174,7 @@ describe('FE-015 auto-matching UI (SC-05)', () => {
     fireEvent.click(
       screen.getByRole('checkbox', { name: /Cho phép chênh 1 cấp/i }),
     );
-    fireEvent.click(screen.getByRole('button', { name: /Bộ lọc tùy chọn/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Bộ lọc bổ sung/i }));
     fireEvent.change(screen.getByLabelText('Quốc gia đang sinh sống'), {
       target: { value: 'VN' },
     });
@@ -289,9 +291,11 @@ describe('FE-015 auto-matching UI (SC-05)', () => {
     });
 
     expect(
-      screen.getByRole('heading', { name: 'Đã dừng tại đây' }),
+      screen.getByRole('heading', { name: 'Lượt tìm đã hết hạn' }),
     ).toBeVisible();
-    expect(screen.getByText('Lượt tìm đã hết hạn giữ chỗ')).toBeVisible();
+    expect(
+      screen.getByText('Thời gian giữ chỗ đã kết thúc. Bạn có thể tìm lại.'),
+    ).toBeVisible();
     expect(
       postSpy.mock.calls.filter(([path]) => path === '/matching/searches'),
     ).toHaveLength(0);
@@ -405,7 +409,7 @@ describe('FE-015 auto-matching UI (SC-05)', () => {
         name: 'Đang chờ Minh Xuân xác nhận',
       }),
     ).toBeVisible();
-    expect(screen.getByText('Bạn đã đồng ý. Đang chờ bạn luyện')).toBeVisible();
+    expect(screen.getByText('Bạn đã đồng ý với đề nghị này.')).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Phòng Kaiwa' })).toBeNull();
     expect(postSpy).toHaveBeenCalledWith(
       `/matching/proposals/${PROPOSAL_ID}/responses`,
@@ -491,9 +495,13 @@ describe('FE-015 auto-matching UI (SC-05)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Luyện cùng' }));
 
     expect(
-      await screen.findByRole('heading', { name: 'Đã dừng tại đây' }),
+      await screen.findByRole('heading', {
+        name: 'Đề nghị ghép đã hết hạn',
+      }),
     ).toBeVisible();
-    expect(screen.getByText('Đề nghị ghép đã hết hạn')).toBeVisible();
+    expect(
+      screen.getByText('Chưa đủ hai người xác nhận trong thời gian chờ.'),
+    ).toBeVisible();
     expect(postSpy).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
   });
@@ -528,10 +536,12 @@ describe('FE-015 auto-matching UI (SC-05)', () => {
 
     expect(
       await screen.findByRole('heading', {
-        name: 'Đã dừng tại đây',
+        name: 'Lần ghép này chưa thành công',
       }),
     ).toBeVisible();
-    expect(screen.getByText('Đề nghị ghép chưa được chấp nhận')).toBeVisible();
+    expect(
+      screen.getByText('Một bên đã bỏ qua đề nghị. Hãy thử tìm bạn khác nhé.'),
+    ).toBeVisible();
     await waitFor(() => expect(postSpy).toHaveBeenCalledTimes(1));
   });
 
