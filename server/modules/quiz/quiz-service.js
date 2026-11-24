@@ -649,7 +649,7 @@ export async function submitQuiz({
     }
 
     // 3. Với lượt chưa nộp: Kiểm tra quyền khách và CAS tăng guest_sessions.version trong transaction (06 §11.2)
-    await guestAccess(db, identity, session, true);
+    const guestGuard = await guestAccess(db, identity, session, true);
 
     // 4. Kiểm tra Optimistic Concurrency Control với details.currentVersion
     if (attempt.version !== expectedVersion) {
@@ -745,6 +745,7 @@ export async function submitQuiz({
       submittedAt: now,
       submitOperationId: idempotencyKey,
       submitPayloadHash: payloadHash,
+      ...(guestGuard?.purgeAt && { purgeAt: guestGuard.purgeAt }),
     };
 
     // 7. Thực thi submit CAS trong transaction

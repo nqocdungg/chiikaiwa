@@ -9,6 +9,10 @@ import {
   assertKnowledgeSourceAccess,
 } from '../content/content-service.js';
 import { AppError } from '../../middleware/http-error.js';
+import {
+  guestExpired,
+  resolveGuestTrialDeadline,
+} from './guest-write-guard.js';
 import { listSavedItems } from './saved-item-repository.js';
 import { studyCardKeyPattern } from './study-card-service.js';
 
@@ -64,22 +68,15 @@ async function readGuestTrial(db, identity, now, transaction) {
       { _id: guest.practiceSessionId, 'members.actorKey': identity.actorKey },
       { session: transaction },
     );
-  if (!session?.deckVersionId) throw studyNotFound();
-  const deadline =
-    session.endedAt instanceof Date
-      ? new Date(session.endedAt.getTime() + 15 * 60 * 1000)
-      : undefined;
-  const expiresAt =
-    guest.expiresAt instanceof Date && (!deadline || guest.expiresAt < deadline)
-      ? guest.expiresAt
-      : deadline;
-  if (expiresAt && expiresAt <= now) {
-    throw new AppError({
-      status: 410,
-      code: 'GUEST_EXPIRED',
-      message: 'Quyền truy cập tạm của khách đã hết hạn.',
-    });
+  if (!session) throw guestExpired();
+  const expiresAt = resolveGuestTrialDeadline(guest, session);
+  if (
+    (guest.status === 'summary' && !expiresAt) ||
+    (expiresAt && expiresAt <= now)
+  ) {
+    throw guestExpired();
   }
+  if (!session.deckVersionId) throw studyNotFound();
   return { deckVersionId: String(session.deckVersionId), expiresAt };
 }
 

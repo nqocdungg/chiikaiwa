@@ -381,6 +381,7 @@ export async function removeSavedItem(write, id, expectedVersion) {
   const db = await connectDatabase();
   const ownerKey = write.identity.actorKey;
   const itemId = new ObjectId(id);
+  /** @type {Awaited<ReturnType<typeof guestAccess>>} */ let guest;
   await runIdempotentOperation({
     actorKey: ownerKey,
     method: 'DELETE',
@@ -389,7 +390,7 @@ export async function removeSavedItem(write, id, expectedVersion) {
     payload: { expectedVersion },
     authorize: async ({ session, replay }) => {
       const current = await recheckIdentity(write);
-      const guest = await guestAccess(db, current, session, !replay);
+      guest = await guestAccess(db, current, session, !replay);
       if (!(await findSavedItem(ownerKey, itemId).session(session)))
         throw notFound();
       if (
@@ -408,6 +409,7 @@ export async function removeSavedItem(write, id, expectedVersion) {
         itemId,
         expectedVersion,
         session,
+        guest?.purgeAt,
       );
       if (!item) {
         const current = await findSavedItem(ownerKey, itemId).session(session);

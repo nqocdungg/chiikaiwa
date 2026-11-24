@@ -5,6 +5,10 @@ import {
   withTransaction,
 } from '../../persistence/database.js';
 import { runIdempotentOperation } from '../coordination/coordination-service.js';
+import {
+  guestExpired,
+  resolveGuestTrialDeadline,
+} from '../learning/guest-write-guard.js';
 import { SavedSource } from '../learning/saved-item-models.js';
 import {
   deleteSessionNote,
@@ -24,7 +28,6 @@ import {
 /** @typedef {{identity: Identity, getIdentity: () => Promise<Identity>, operationId: string}} WriteInput */
 
 const { ObjectId } = mongoose.Types;
-const GUEST_SUMMARY_TTL_MS = 15 * 60 * 1000;
 
 function notReadyForSummary() {
   return new AppError({
@@ -41,14 +44,6 @@ function versionConflict(currentVersion) {
     code: 'VERSION_CONFLICT',
     message: 'Dữ liệu cá nhân đã thay đổi. Vui lòng tải lại trước khi lưu.',
     details: { currentVersion },
-  });
-}
-
-function guestExpired() {
-  return new AppError({
-    status: 410,
-    code: 'GUEST_EXPIRED',
-    message: 'Quyền truy cập tạm của khách đã hết hạn.',
   });
 }
 
@@ -97,32 +92,35 @@ async function authorizePersonalAccess(db, id, identity, at, session, write) {
     {
       _id: identity.guestId,
       practiceSessionId: id,
-      revokedAt: { $exists: false },
-      status: { $in: ['active', 'summary'] },
     },
     { session },
   );
-  if (!guest) throw guestExpired();
-  const deadline = Math.min(
-    practice.endedAt instanceof Date
-      ? practice.endedAt.getTime() + GUEST_SUMMARY_TTL_MS
-      : Infinity,
-    guest.expiresAt instanceof Date ? guest.expiresAt.getTime() : Infinity,
-  );
-  if (deadline <= at.getTime()) throw guestExpired();
+  const deadline = resolveGuestTrialDeadline(guest, practice);
+  if (
+    !guest ||
+    guest.revokedAt ||
+    !['active', 'summary'].includes(guest.status) ||
+    (guest.status === 'summary' && !deadline) ||
+    (deadline && deadline.getTime() <= at.getTime())
+  ) {
+    throw guestExpired();
+  }
   if (write) {
-    const result = await db
-      .collection('guest_sessions')
-      .updateOne(
-        { _id: guest._id, version: guest.version },
-        { $inc: { version: 1 } },
-        { session },
-      );
+    const result = await db.collection('guest_sessions').updateOne(
+      {
+        _id: guest._id,
+        version: guest.version,
+        status: { $in: ['active', 'summary'] },
+        revokedAt: { $exists: false },
+      },
+      { $inc: { version: 1 } },
+      { session },
+    );
     if (!result.matchedCount) throw guestExpired();
   }
   return {
     practice,
-    purgeAt: Number.isFinite(deadline) ? new Date(deadline) : undefined,
+    purgeAt: deadline,
   };
 }
 
@@ -200,7 +198,7 @@ export async function removeSessionNote(write, input) {
       context.id,
       input.expectedVersion,
       context.session,
-      { now: context.at },
+      { purgeAt: context.purgeAt, now: context.at },
     );
     if (!updated)
       await throwPersonalConflict(

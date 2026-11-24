@@ -7,6 +7,10 @@ import {
 } from '../../persistence/database.js';
 import { runIdempotentOperation } from '../coordination/coordination-service.js';
 import { toPartnerDto, toSelfDto } from '../identity/dto.js';
+import {
+  guestExpired,
+  resolveGuestTrialDeadline,
+} from '../learning/guest-write-guard.js';
 import { endSession } from '../sessions/session-lifecycle-service.js';
 import { finishSessionEffects } from '../sessions/media-cleanup-service.js';
 
@@ -71,9 +75,8 @@ async function assertGuestSessionScope(
     {
       _id: identity.guestId,
       practiceSessionId: sessionObjectId,
-      revokedAt: { $exists: false },
     },
-    { session, projection: { status: 1, expiresAt: 1 } },
+    { session, projection: { status: 1, expiresAt: 1, revokedAt: 1 } },
   );
   if (!guest) {
     throw new AppError({
@@ -82,15 +85,17 @@ async function assertGuestSessionScope(
       message: 'Không tìm thấy phiên hợp lệ trong phạm vi lượt thử.',
     });
   }
+  const practiceDoc = await db
+    .collection('practice_sessions')
+    .findOne({ _id: sessionObjectId }, { session, projection: { endedAt: 1 } });
+  const deadline = resolveGuestTrialDeadline(guest, practiceDoc);
   if (
+    guest.revokedAt ||
     !['active', 'summary'].includes(guest.status) ||
-    (guest.expiresAt instanceof Date && guest.expiresAt <= now)
+    (guest.status === 'summary' && !deadline) ||
+    (deadline && deadline.getTime() <= now.getTime())
   ) {
-    throw new AppError({
-      status: 410,
-      code: 'GUEST_EXPIRED',
-      message: 'Quyền truy cập tạm đã hết hạn.',
-    });
+    throw guestExpired();
   }
 }
 

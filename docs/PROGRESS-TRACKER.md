@@ -595,6 +595,33 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 - Kiểm chứng: `npm run check` đạt format, lint, typecheck, 570 ca server/client, 345 ca integration và build trên Node 24.22.3, npm 11.21.1, MongoDB 8.2.7 local. `npm run openapi:check` và suite flashcard đều đạt 15/15. Các ca bao phủ tiến độ dùng chung topic/saved, revision đã xem, replay sau khi vé hết hạn, stale version, rollback DB-T10, preview không ghi DB-T11, hết hạn khách và thẻ thủ công đang xóa.
 - Tiếp theo: Chạy CI trên PR và nghiệm thu AT-09 qua FE-017. Kiểm thử đầy đủ luồng bộ cá nhân sau khi tích hợp BE-035 trong Sprint 3.
 
+### BE-032 — Hết quyền truy cập dữ liệu khách đúng thời hạn
+
+- Ngày cập nhật: 2026-11-24
+- Trạng thái: In Progress — đã triển khai, đồng bộ `origin/develop` và kiểm chứng cục bộ hoàn tất; chờ commit/push, PR và review độc lập của Yến Nhi trước khi chuyển Done.
+- PR: Chưa có; nhánh `feature/BE-032-guest-access-expiration` (đồng bộ từ `origin/develop@20af839`).
+- Đã làm:
+  - Chuẩn hóa tính hạn dùng thử khách qua `resolveGuestTrialDeadline` (`min(endedAt + 15 phút, guest.expiresAt)`) trong `guest-write-guard.js`; từ chối `410 GUEST_EXPIRED` khi ở trạng thái `summary` thiếu deadline hoặc tại/sau deadline, kể cả khi document trong MongoDB còn tồn tại và không gia hạn khi reload `/auth/me`.
+  - Siết guard `guest_sessions` và CAS `version` trên toàn bộ luồng đọc/ghi cá nhân & phiên: `identity-service.js`, `session-service.js`, `session-learning-service.js` (`personal`, `note`, `self-assessment`, `summary`), `content-service.js`, `saved-item-service.js`, `study-scope.js`, `study-review-service.js`, `quiz-service.js`, `safety-service.js`.
+  - Gắn kế thừa `purgeAt` theo deadline cho dữ liệu khách tạo/cập nhật/xóa trong giai đoạn `summary` (`unsaveKnowledge`, `submitQuiz`, `deleteSessionNote`, `saveSessionNote`, `saveSelfAssessment`, `submitStudyReview`), từ chối replay idempotency sau deadline (`410 GUEST_EXPIRED`), bảo toàn dữ liệu riêng và lịch sử phiên của tài khoản đối tác (ưu tiên `ck_session` khi đi kèm `ck_guest` hết hạn), và không chuyển owner dữ liệu khách khi đăng ký tài khoản mới.
+- File liên quan:
+  - `server/modules/learning/guest-write-guard.js`
+  - `server/modules/content/content-service.js`
+  - `server/modules/identity/identity-service.js`
+  - `server/modules/learning/saved-item-repository.js`
+  - `server/modules/learning/saved-item-service.js`
+  - `server/modules/learning/session-personal-repository.js`
+  - `server/modules/learning/study-scope.js`
+  - `server/modules/quiz/quiz-service.js`
+  - `server/modules/safety/safety-service.js`
+  - `server/modules/sessions/session-learning-service.js`
+  - `server/modules/sessions/session-service.js`
+  - `tests/integration/guest-access-expiration.integration.test.js`
+  - `docs/PROGRESS-TRACKER.md`
+- Kiểm chứng: `npm run check` (Node `v24.22.2`, npm `11.21.1`, MongoDB 8.2.7 replica set tạm) pass toàn bộ: `format:check`, `lint`, `typecheck`, `npm test` (44 file / 599 ca server & client), `npm run test:integration` (26 file / 364 ca, gồm 5/5 ca BE-032 tại `tests/integration/guest-access-expiration.integration.test.js`), `npm run build`, `npm run openapi:check` (17/17 ca) và `git diff --check`.
+- Tiếp theo: Trình người dùng xác nhận commit/push nhánh `feature/BE-032-guest-access-expiration`, mở PR về `develop`, chạy CI và chờ reviewer Yến Nhi duyệt trước khi cập nhật Done.
+- Lưu ý/blocker: Chưa tự ý commit/push khi chưa có lệnh từ người dùng; `BE-033` phụ thuộc `BE-032` cho phần cleanup/reconcile vật lý theo lô.
+
 ## Sprint 3
 
 ### BE-039 — Sửa rò thông tin nháp trong danh mục học liệu learner

@@ -102,14 +102,14 @@ export async function saveSessionNote(
  * @param {ObjectId} sessionId
  * @param {number} expectedVersion
  * @param {ClientSession} session
- * @param {{now?: Date}} [options]
+ * @param {{purgeAt?: Date, now?: Date}} [options]
  */
 export function deleteSessionNote(
   ownerKey,
   sessionId,
   expectedVersion,
   session,
-  { now = new Date() } = {},
+  { purgeAt, now = new Date() } = {},
 ) {
   checkOwner(ownerKey);
   checkVersion(expectedVersion);
@@ -123,7 +123,7 @@ export function deleteSessionNote(
     },
     {
       $unset: { note: '' },
-      $set: { updatedAt: now },
+      $set: { updatedAt: now, ...(purgeAt ? { purgeAt } : {}) },
       $inc: { noteVersion: 1 },
     },
     { session, returnDocument: 'after', runValidators: true },

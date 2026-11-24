@@ -24,6 +24,7 @@ import {
   verifyPassword,
 } from './crypto.js';
 import { DEFAULT_AVATAR_KEY, toSelfDto } from './dto.js';
+import { resolveGuestTrialDeadline } from '../learning/guest-write-guard.js';
 import {
   validateEmptyObjectInput,
   validateIdempotencyKey,
@@ -339,20 +340,21 @@ async function assertGuestScope(db, guestDoc, actorKey, now) {
 
   if (guestDoc.status === 'active' || guestDoc.status === 'summary') {
     if (!guestDoc.practiceSessionId) throw guestExpired();
-    if (
-      guestDoc.status === 'summary' &&
-      (!(guestDoc.expiresAt instanceof Date) || guestDoc.expiresAt <= now)
-    ) {
-      throw guestExpired();
-    }
     const member = await db.collection('practice_sessions').findOne(
       {
         _id: guestDoc.practiceSessionId,
         'members.actorKey': actorKey,
       },
-      { projection: { _id: 1 } },
+      { projection: { _id: 1, endedAt: 1 } },
     );
     if (!member) throw guestExpired();
+    const deadline = resolveGuestTrialDeadline(guestDoc, member);
+    if (
+      (guestDoc.status === 'summary' && !deadline) ||
+      (deadline && deadline.getTime() <= now.getTime())
+    ) {
+      throw guestExpired();
+    }
     return;
   }
 
