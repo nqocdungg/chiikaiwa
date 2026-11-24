@@ -54,6 +54,9 @@ const expectedPaths = [
   '/quizzes/{id}',
   '/quizzes/{id}/submission',
   '/me/quizzes',
+  '/me/blocks',
+  '/me/blocks/{id}',
+  '/reports',
   '/admin/users',
   '/admin/users/{id}/status',
   '/admin/reports',
@@ -82,6 +85,9 @@ const writeOperations = [
   ['/sessions/{id}/self-assessment', 'put'],
   ['/quizzes', 'post'],
   ['/quizzes/{id}/submission', 'post'],
+  ['/me/blocks', 'post'],
+  ['/me/blocks/{id}', 'delete'],
+  ['/reports', 'post'],
   ['/admin/users/{id}/status', 'patch'],
   ['/admin/reports/{id}', 'patch'],
 ];
@@ -202,6 +208,45 @@ describe('OpenAPI contract', () => {
         $ref: '#/components/responses/RateLimited',
       });
     }
+  });
+
+  it('documents safety block and report endpoints per 07 §10', () => {
+    expect(
+      document.tags.some((/** @type {any} */ tag) => tag.name === 'Safety'),
+    ).toBe(true);
+
+    expect(document.paths['/me/blocks'].get.security).toEqual([
+      { sessionCookie: [] },
+      { guestCookie: [] },
+    ]);
+
+    for (const [path, method] of [
+      ['/me/blocks', 'post'],
+      ['/me/blocks/{id}', 'delete'],
+      ['/reports', 'post'],
+    ]) {
+      const op = document.paths[path][method];
+      expect(op.security).toEqual([
+        { sessionCookie: [], csrfToken: [] },
+        { guestCookie: [], csrfToken: [] },
+      ]);
+      expect(op.parameters).toContainEqual({
+        $ref: '#/components/parameters/IdempotencyKey',
+      });
+    }
+
+    const schemas = document.components.schemas;
+    expect(schemas.Partner.properties).not.toHaveProperty('email');
+    expect(schemas.CreateReportRequest.properties.description.maxLength).toBe(
+      2000,
+    );
+    expect(schemas.CreateReportRequest.additionalProperties).toBe(false);
+    expect(schemas.CreateBlockRequest.additionalProperties).toBe(false);
+    expect(document.paths['/reports'].post.responses).toHaveProperty('201');
+    expect(document.paths['/me/blocks'].post.responses).toHaveProperty('200');
+    expect(document.paths['/me/blocks/{id}'].delete.responses).toHaveProperty(
+      '204',
+    );
   });
 
   it('documents LiveKit signature auth, raw content type and response statuses without browser auth', () => {
