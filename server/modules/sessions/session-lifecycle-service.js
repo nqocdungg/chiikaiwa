@@ -182,6 +182,7 @@ export function createSessionPresenceConsumer({
     const set = { updatedAt: transitionAt, presence: after.presence };
     /** @type {Record<string, string>} */
     const unset = {};
+    let countStartedSession = false;
     if (
       bothConnected &&
       (!before.startedAt || before.status === 'reconnecting')
@@ -260,10 +261,7 @@ export function createSessionPresenceConsumer({
           startedAt: checkedAt,
           controllerKey: after.members[index].actorKey,
         });
-        await incrementLifetimeCounter(db, 'startedSessions', {
-          session,
-          now: observedAt,
-        });
+        countStartedSession = true;
       }
     } else if (!bothConnected) {
       Object.assign(set, sessionClocks(before, observedAt));
@@ -284,6 +282,12 @@ export function createSessionPresenceConsumer({
       { session, returnDocument: 'after' },
     );
     if (!result) throw sessionVersionConflict();
+    if (countStartedSession) {
+      await incrementLifetimeCounter(db, 'startedSessions', {
+        session,
+        now: observedAt,
+      });
+    }
     await reconcileSessionDeadline(result, checkedAt, session);
   };
   return consume;

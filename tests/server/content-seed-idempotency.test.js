@@ -1523,6 +1523,9 @@ describe('DATA-002: Seed idempotency & security logic (Unit)', () => {
       // Kiểm tra statistics baseline: startedSessions phải là 0
       const lifetimeStats = fakeStats.get('lifetime');
       expect(lifetimeStats?.$setOnInsert?.startedSessions).toBe(0);
+      expect(lifetimeStats?.$inc?.registeredAccounts).toBe(
+        SEED_USER_FIXTURES.length,
+      );
 
       // Lần 2: chạy lại
       // @ts-expect-error mockDb satisfies partial interface

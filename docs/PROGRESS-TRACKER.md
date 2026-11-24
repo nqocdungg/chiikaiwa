@@ -599,27 +599,38 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ### BE-034 — Thống kê hoạt động tích lũy
 
-- Ngày cập nhật: 2026-11-23
-- Trạng thái: Còn dở — endpoint và các bộ đếm TX-01/TX-06/TX-10 đã triển khai; chưa đủ điều kiện Done.
+- Ngày cập nhật: 2026-11-24
+- Trạng thái: Còn dở — endpoint và các bộ đếm TX-01/TX-06/TX-09/TX-10 đã triển khai; chưa đủ điều kiện Done.
 - PR: Chưa có; nhánh `feature/BE-034-lifetime-statistics` từ `develop@9b2a674`.
-- Đã làm: Thêm `GET /api/v1/admin/statistics`, chỉ cho Admin và trả đúng bốn bộ đếm; thiếu document hoặc trường bộ đếm không hợp lệ trả `503 SERVICE_UNAVAILABLE`, không tạo số 0 giả. Chuẩn hóa ghi lifetime bằng một update nguyên tử trong cùng transaction nghiệp vụ và khởi tạo đủ bốn bộ đếm. Thêm helper `incrementReviewCount` cho điểm tích hợp TX-09; chưa có service review BE-025 để gọi helper trong production.
+- Đã làm: Thêm `GET /api/v1/admin/statistics`, chỉ cho Admin và trả đúng bốn bộ đếm; thiếu document hoặc trường bộ đếm không hợp lệ trả `503 SERVICE_UNAVAILABLE`, không tạo số 0 giả. Tăng bộ đếm bằng `$inc` và `$max updatedAt` nguyên tử trong cùng transaction nghiệp vụ, chỉ khi bộ đếm hiện tại hợp lệ; không tạo document và không điền hay tính toán bộ đếm khác. Bộ đếm hiện tại thiếu, âm, thập phân hoặc sai kiểu, hoặc document `lifetime` chưa tồn tại: rollback toàn bộ giao dịch nghiệp vụ (06 §11.2 fail-closed) và log tên bộ đếm cùng lý do (không ghi giá trị). Các bộ đếm khác không bị đọc hay sửa. Baseline do migration `20261124000100-ensure-lifetime-statistics` tạo cho DB rỗng; dừng với lỗi khi DB đã có dữ liệu mà thiếu baseline; tài liệu runbook trong `server/persistence/migrations/README.md` hướng dẫn chi tiết quy trình chèn baseline thủ công trước migration từ snapshot/nguồn tin cậy (không đếm lại từ collection đã bị xóa log khách/thẻ). TX-09 (`study-review-service.js`) dùng `incrementReviewCount`. TX-06 (`session-lifecycle-service.js`) tăng `startedSessions` sau CAS thành công. Bổ sung các bài test mức đăng ký (bộ đếm khác thiếu/sai kiểu thì thành công; `registeredAccounts` không hợp lệ hoặc document thiếu thì rollback user và actor_states), test log chi tiết, test migration fail-fast và retry sau khi chèn baseline.
 - File liên quan:
   - `server/modules/statistics/admin-statistics-router.js`
   - `server/modules/statistics/statistics-repository.js`
   - `server/modules/statistics/statistics-service.js`
+  - `server/modules/learning/study-review-service.js`
   - `server/modules/identity/identity-service.js`
   - `server/modules/sessions/session-lifecycle-service.js`
   - `server/modules/quiz/quiz-repository.js`
   - `server/modules/quiz/quiz-service.js`
+  - `server/persistence/migrations/20261124000100-ensure-lifetime-statistics.js`
+  - `server/persistence/migrations/README.md`
+  - `server/persistence/seed/seed-content.js`
   - `server/app.js`
   - `docs/api/openapi.yaml`
   - `tests/server/admin-http.test.js`
   - `tests/server/openapi-contract.test.js`
   - `tests/integration/admin-statistics.integration.test.js`
+  - `tests/integration/auth.integration.test.js`
+  - `tests/integration/guest-trials.integration.test.js`
+  - `tests/integration/password-reset.integration.test.js`
+  - `tests/integration/profile-catalogs.integration.test.js`
+  - `tests/integration/quiz-api.integration.test.js`
+  - `tests/integration/session-lifecycle.integration.test.js`
+  - `tests/server/content-seed-idempotency.test.js`
   - `docs/PROGRESS-TRACKER.md`
-- Kiểm chứng: `npm run check` PASS trên Node 24.21.0/npm 11.19.0: format, lint, typecheck, 40 file unit/HTTP/component (573 tests), 24 file integration (344 tests) và build. `npm run openapi:check` PASS (15/15). `git diff --check` PASS. Build có cảnh báo chunk Vite lớn hơn 500 kB.
-- Tiếp theo: Khi BE-025 có service review, gọi `incrementReviewCount` trong cùng transaction với review log và tiến độ; kiểm chứng OPS-005 restore lifetime từ cùng snapshot và bảo toàn bộ đếm sau cleanup; nhận review của Ngọc Dung rồi mở PR về `develop`.
-- Lưu ý/blocker: Chưa tìm thấy branch/PR BE-025 hoặc triển khai OPS-005 trong source hiện có. Không sửa thiết kế 01–07; chưa commit/push hoặc đánh dấu Done.
+- Kiểm chứng: `npm run check` PASS: format, lint, typecheck, 43 file unit/HTTP/component (593 tests), 26 file integration (388 tests) và production build. `npm run openapi:check` PASS (17/17). `git diff --check` PASS. Build có cảnh báo chunk Vite lớn hơn 500 kB.
+- Tiếp theo: Kiểm chứng OPS-005 restore lifetime từ cùng snapshot và bảo toàn bộ đếm sau cleanup; nhận review của Ngọc Dung rồi mở PR về `develop`.
+- Lưu ý/blocker: DB production hiện có dữ liệu cần tạo baseline thủ công trước khi chạy migration sau khi đối chiếu số liệu (migration chỉ tạo cho DB rỗng và fail-fast nếu DB đã có dữ liệu mà thiếu baseline); OPS-005 chưa có. Không sửa thiết kế 01–07; chưa commit/push hoặc đánh dấu Done.
 
 ### BE-039 — Sửa rò thông tin nháp trong danh mục học liệu learner
 

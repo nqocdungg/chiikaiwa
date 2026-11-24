@@ -37,6 +37,7 @@ import {
 import { cleanupSessionMedia } from '../../server/modules/sessions/media-cleanup-service.js';
 import { issueMediaToken } from '../../server/modules/sessions/media-token-service.js';
 import { createInvitation } from '../../server/modules/invitations/invitation-service.js';
+import { ensureLifetimeBaseline } from '../../server/modules/statistics/statistics-repository.js';
 import {
   removeMediaParticipant,
   readMediaParticipant,
@@ -169,6 +170,7 @@ beforeEach(async () => {
     'rate_limits',
   ])
     await db.collection(name).deleteMany({});
+  await ensureLifetimeBaseline(db);
   const users = [...SESSION_USERS, USER_FIXTURES.admin];
   await db.collection('users').insertMany(users.map((u) => ({ ...u })));
   cookies = [];
@@ -246,7 +248,11 @@ describe('BE-012 lifecycle on a real replica set', () => {
     await process(event(0, 'room_started'));
     await process(event(0));
     expect(await persisted()).not.toHaveProperty('startedAt');
-    expect(await db.collection('statistics').countDocuments()).toBe(0);
+    expect(
+      await db
+        .collection('statistics')
+        .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+    ).toMatchObject({ startedSessions: 0 });
   });
   it('GET projects time without persisting duration, version, controller or statistics', async () => {
     await start();
@@ -317,7 +323,11 @@ describe('BE-012 lifecycle on a real replica set', () => {
         activeDurationMs: 0,
       });
       expect(await persisted()).not.toHaveProperty('startedAt');
-      expect(await db.collection('statistics').countDocuments()).toBe(0);
+      expect(
+        await db
+          .collection('statistics')
+          .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+      ).toMatchObject({ startedSessions: 0 });
     },
   );
   it('selection timeout settles at 60 seconds even when GET is late', async () => {
@@ -1066,7 +1076,11 @@ describe('BE-012 lifecycle on a real replica set', () => {
       }),
     ).rejects.toThrow('after start');
     expect(await persisted()).toEqual(before);
-    expect(await db.collection('statistics').countDocuments()).toBe(0);
+    expect(
+      await db
+        .collection('statistics')
+        .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+    ).toMatchObject({ startedSessions: 0 });
     expect(
       await db
         .collection('webhook_receipts')
