@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
+import { chiikawa } from '../../assets/mascots/mascots.js';
 import { Button, Icon } from '../../components/ui/controls.jsx';
 import { Dialog } from '../../components/ui/Dialog.jsx';
 import { Select } from '../../components/ui/forms.jsx';
@@ -11,42 +12,6 @@ import './matching.css';
 const COUNTDOWN_SEGMENTS = 30;
 const RING_RADIUS = 38;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-
-/**
- * Cute line-art Chiikawa head mark matching Figma `Enter Kaiwa / 02 · Đang tìm` (4-914).
- */
-function SearchingMascotGlyph() {
-  return (
-    <svg
-      className="ck-match-mascot-glyph"
-      width="64"
-      height="56"
-      viewBox="0 0 64 56"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M17 17C14 9 20 5 25 10C29 8.5 35 8.5 39 10C44 5 50 9 47 17C52 21 54 29 51 37C48 45 40 48 32 48C24 48 16 45 13 37C10 29 12 21 17 17Z"
-        fill="#FFFFFF"
-        stroke="#3B2A30"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <ellipse cx="19.5" cy="31.5" rx="4" ry="2.6" fill="#F4B6C9" />
-      <ellipse cx="44.5" cy="31.5" rx="4" ry="2.6" fill="#F4B6C9" />
-      <circle cx="24" cy="26" r="2.2" fill="#3B2A30" />
-      <circle cx="40" cy="26" r="2.2" fill="#3B2A30" />
-      <path
-        d="M27.5 31.5C28.7 33.4 30.8 33.4 32 31.2C33.2 33.4 35.3 33.4 36.5 31.5"
-        stroke="#3B2A30"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 /**
  * 88x88 countdown per Figma `SegmentedCountdown` (31-8195) and waiting ring (11-5422).
@@ -291,16 +256,8 @@ function OptionalDeviceCheck() {
     <div className="ck-match-device-box">
       <div className="ck-match-device-box__row">
         <div className="ck-match-device-box__lead">
-          <span className="ck-match-device-box__icons" aria-hidden="true">
-            <Icon name="mic" size={16} />
-            <Icon name="camera" size={16} />
-          </span>
-          <div>
-            <strong>Kiểm tra mic/cam sau</strong>
-            <p className="ck-match-device-box__status">
-              Không thiết bị nào tự bật. Bạn có thể bỏ qua trước khi kết nối.
-            </p>
-          </div>
+          <Icon name="mic" size={16} />
+          <span>Micro không tự bật khi tìm bạn.</span>
         </div>
         <Button
           variant="secondary"
@@ -322,9 +279,7 @@ function OptionalDeviceCheck() {
 
 /** @param {{ flow: ReturnType<typeof useMatchingFlow> }} props */
 function CriteriaView({ flow }) {
-  const [filtersOpen, setFiltersOpen] = useState(() =>
-    Boolean(flow.form.countryCode || flow.form.ageGroup || flow.form.gender),
-  );
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const profile = flow.user?.profile;
   const goalLabel = getCatalogLabel(flow.catalogs.goals, profile?.goal);
   const langLabel = getCatalogLabel(
@@ -351,7 +306,7 @@ function CriteriaView({ flow }) {
   const filterSummary =
     activeFilterParts.length > 0
       ? activeFilterParts.join(' · ')
-      : 'Bất kỳ · Thoải mái';
+      : 'Không giới hạn';
 
   const isSubmitting = flow.pendingAction === 'create-search';
   const canSubmit = Boolean(flow.form.level && flow.form.desiredMinutes);
@@ -363,14 +318,32 @@ function CriteriaView({ flow }) {
       size="form"
       eyebrow="GHÉP CẶP TỰ ĐỘNG"
       title="Tìm bạn luyện nói"
-      description="Chọn tiêu chí vừa đủ để Chiikaiwa tìm một người phù hợp."
+      description="Chọn trình độ và thời lượng cho lượt tìm."
       className="ck-match-dialog ck-match-dialog--criteria"
       closeLabel="Đóng tìm bạn luyện nói"
       closeDisabled={isSubmitting}
       closeOnBackdrop={false}
       onClose={flow.goHome}
+      footer={
+        <>
+          <Button
+            type="submit"
+            form="match-criteria-form"
+            variant="primary"
+            disabled={!canSubmit}
+            loading={isSubmitting}
+            leadingIcon={<Icon name="search" size={18} />}
+          >
+            Bắt đầu tìm bạn
+          </Button>
+          <Button variant="ghost" onClick={flow.goHome}>
+            Để sau
+          </Button>
+        </>
+      }
     >
       <form
+        id="match-criteria-form"
         className="ck-match-criteria-form"
         noValidate
         onSubmit={(event) => {
@@ -418,6 +391,20 @@ function CriteriaView({ flow }) {
           ) : null}
         </fieldset>
 
+        <label className="ck-match-checkbox">
+          <input
+            type="checkbox"
+            checked={flow.form.allowAdjacent}
+            onChange={(event) =>
+              flow.updateForm({ allowAdjacent: event.target.checked })
+            }
+          />
+          <span className="ck-match-checkbox__text">
+            <strong>Cho phép chênh 1 cấp</strong>
+            <small>Chỉ ghép cấp liền kề khi cả hai bên cùng bật.</small>
+          </span>
+        </label>
+
         <fieldset className="ck-match-fieldset">
           <legend>
             Thời lượng mong muốn <span aria-hidden="true">*</span>
@@ -455,23 +442,6 @@ function CriteriaView({ flow }) {
           ) : null}
         </fieldset>
 
-        <label className="ck-match-checkbox">
-          <input
-            type="checkbox"
-            checked={flow.form.allowAdjacent}
-            onChange={(event) =>
-              flow.updateForm({ allowAdjacent: event.target.checked })
-            }
-          />
-          <span className="ck-match-checkbox__text">
-            <strong>Cho phép chênh 1 cấp</strong>
-            <small>
-              Chỉ ghép lệch 1 cấp liền kề (ví dụ N4–N3) khi cả hai bên cùng bật
-              tùy chọn này.
-            </small>
-          </span>
-        </label>
-
         <div className="ck-match-filters-box">
           <button
             type="button"
@@ -480,7 +450,7 @@ function CriteriaView({ flow }) {
             onClick={() => setFiltersOpen((open) => !open)}
           >
             <span className="ck-match-filters-toggle__label">
-              Bộ lọc tùy chọn
+              Bộ lọc bổ sung
             </span>
             <span className="ck-match-filters-toggle__right">
               <span className="ck-match-filters-toggle__summary">
@@ -508,9 +478,8 @@ function CriteriaView({ flow }) {
           {filtersOpen ? (
             <div className="ck-match-filters-panel">
               <p className="ck-match-section__note">
-                Bộ lọc áp dụng hai chiều. Để trống nghĩa là không giới hạn; nếu
-                chọn giá trị cụ thể, đối tác thiếu thông tin tương ứng sẽ không
-                khớp.
+                Áp dụng cho cả hai bên. Để trống là không giới hạn; người thiếu
+                thông tin đã lọc sẽ không khớp.
               </p>
               <div className="ck-match-filters-grid">
                 <Select
@@ -566,9 +535,14 @@ function CriteriaView({ flow }) {
         </div>
 
         <div className="ck-match-soft-summary">
-          <span className="ck-match-soft-summary__label">
-            Ưu tiên mềm từ hồ sơ:
-          </span>
+          <div className="ck-match-soft-summary__heading">
+            <span className="ck-match-soft-summary__label">
+              Ưu tiên từ hồ sơ của bạn
+            </span>
+            <Link to="/profile" className="ck-match-soft-summary__link">
+              Chỉnh sửa
+            </Link>
+          </div>
           <div className="ck-match-soft-summary__items">
             {goalLabel ? <Badge tone="accent">{goalLabel}</Badge> : null}
             {interestLabels.map((label) => (
@@ -579,13 +553,10 @@ function CriteriaView({ flow }) {
             {langLabel ? <Badge tone="neutral">{langLabel}</Badge> : null}
             {!goalLabel && interestLabels.length === 0 && !langLabel ? (
               <span className="ck-match-section__note">
-                Chưa khai báo (để trống vẫn tìm bình thường)
+                Chưa khai báo · vẫn có thể tìm bạn
               </span>
             ) : null}
           </div>
-          <Link to="/profile" className="ck-match-soft-summary__link">
-            Cập nhật hồ sơ
-          </Link>
         </div>
 
         <OptionalDeviceCheck />
@@ -597,21 +568,6 @@ function CriteriaView({ flow }) {
         ) : null}
 
         {flow.notice ? <MatchNoticeBanner notice={flow.notice} /> : null}
-
-        <div className="ck-match-actions ck-match-actions--start">
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={!canSubmit}
-            loading={isSubmitting}
-            leadingIcon={<Icon name="search" size={18} />}
-          >
-            Bắt đầu tìm
-          </Button>
-          <Button variant="ghost" onClick={flow.goHome}>
-            Để sau
-          </Button>
-        </div>
       </form>
     </Dialog>
   );
@@ -642,14 +598,13 @@ function SearchingView({ flow }) {
       friendly
       size="compact"
       align="center"
-      title="Đang tìm bạn luyện..."
+      title="Đang tìm bạn luyện nói"
       className="ck-match-dialog ck-match-dialog--compact ck-match-searching-dialog"
       footerClassName="ck-match-dialog__footer-center"
       closeLabel="Hủy tìm bạn luyện"
       closeDisabled={isCancelling}
       closeOnBackdrop={false}
       onClose={() => void flow.cancelSearch()}
-      headingAdornment={<SearchingMascotGlyph />}
       footer={
         <Button
           variant="secondary"
@@ -661,27 +616,35 @@ function SearchingView({ flow }) {
       }
     >
       <div className="ck-match-searching-body">
-        <p className="ck-match-searching-criteria">
-          {criteria.level} · {criteria.desiredMinutes} phút
-        </p>
-
-        <p className="ck-match-searching-helper">
-          Chiikaiwa đang tìm người phù hợp.
-          <br />
-          Bạn có thể hủy tìm bất cứ lúc nào.
-        </p>
-
-        <p
-          className="ck-match-searching-status"
-          role="status"
-          aria-live="polite"
+        <picture className="ck-match-searching-mascot">
+          <source
+            media="(prefers-reduced-motion: reduce)"
+            srcSet={chiikawa.stillSrc}
+          />
+          <img src={chiikawa.src} alt="" width="148" height="145" />
+        </picture>
+        <div
+          className="ck-match-searching-elapsed"
+          role="timer"
+          aria-label={`Đã chờ ${formatElapsed(flow.elapsedSearchMs)}`}
         >
-          Đã chờ: <strong>{formatElapsed(flow.elapsedSearchMs)}</strong> ·{' '}
-          {criteria.allowAdjacent ? 'Cho phép chênh 1 cấp' : 'Chỉ cùng cấp'}
-          {activeFilters.length > 0
-            ? ` · ${activeFilters.join(' · ')}`
-            : ' · Không giới hạn bộ lọc'}
-        </p>
+          <span>Thời gian đã chờ</span>
+          <strong aria-hidden="true">
+            {formatElapsed(flow.elapsedSearchMs)}
+          </strong>
+        </div>
+        <div className="ck-match-searching-tags" aria-label="Tiêu chí đang tìm">
+          <Badge tone="accent">{criteria.level}</Badge>
+          <Badge tone="neutral">{criteria.desiredMinutes} phút</Badge>
+          <Badge tone="neutral">
+            {criteria.allowAdjacent ? 'Chênh 1 cấp' : 'Cùng cấp'}
+          </Badge>
+          {activeFilters.map((filter) => (
+            <Badge key={filter} tone="neutral">
+              {filter}
+            </Badge>
+          ))}
+        </div>
 
         {flow.longWaitVisible ? (
           <section
@@ -826,7 +789,7 @@ function ProposalView({ flow, formatCommonCriteria }) {
             role="status"
             aria-live="polite"
           >
-            Bạn đã đồng ý. Đang chờ bạn luyện
+            Bạn đã đồng ý với đề nghị này.
           </p>
 
           <div className="ck-match-proposal-countdown-wrap">
@@ -940,12 +903,27 @@ function ProposalView({ flow, formatCommonCriteria }) {
 
 /** @param {{ flow: ReturnType<typeof useMatchingFlow> }} props */
 function EndedView({ flow }) {
-  const reasonLabel = {
-    cancelled: 'Đã hủy lượt tìm bạn',
-    rejected: 'Đề nghị ghép chưa được chấp nhận',
-    expired: 'Đề nghị ghép đã hết hạn',
-    leaseExpired: 'Lượt tìm đã hết hạn giữ chỗ',
-  }[flow.endedReason];
+  const ending = {
+    cancelled: {
+      title: 'Đã hủy lượt tìm bạn',
+      description: 'Bạn có thể thiết lập lượt mới bất cứ lúc nào.',
+    },
+    rejected: {
+      title: 'Lần ghép này chưa thành công',
+      description: 'Một bên đã bỏ qua đề nghị. Hãy thử tìm bạn khác nhé.',
+    },
+    expired: {
+      title: 'Đề nghị ghép đã hết hạn',
+      description: 'Chưa đủ hai người xác nhận trong thời gian chờ.',
+    },
+    leaseExpired: {
+      title: 'Lượt tìm đã hết hạn',
+      description: 'Thời gian giữ chỗ đã kết thúc. Bạn có thể tìm lại.',
+    },
+  }[flow.endedReason] ?? {
+    title: 'Lượt tìm đã kết thúc',
+    description: 'Bạn có thể thiết lập lượt mới bất cứ lúc nào.',
+  };
 
   return (
     <Dialog
@@ -953,18 +931,16 @@ function EndedView({ flow }) {
       friendly
       size="compact"
       align="center"
-      title="Đã dừng tại đây"
+      title={ending.title}
+      description={ending.description}
       className="ck-match-dialog ck-match-dialog--compact ck-match-ended-dialog"
       footerClassName="ck-match-dialog__footer-center"
       closeLabel="Về trang chủ"
       onClose={flow.goHome}
       headingAdornment={
-        <div className="ck-match-ended-head">
-          <span className="ck-match-ended__icon" aria-hidden="true">
-            <Icon name="close" size={22} />
-          </span>
-          <span className="ck-match-ended__pill">Lượt chờ đã kết thúc</span>
-        </div>
+        <span className="ck-match-ended__icon" aria-hidden="true">
+          <Icon name="close" size={22} />
+        </span>
       }
       footer={
         <>
@@ -978,11 +954,6 @@ function EndedView({ flow }) {
       }
     >
       <div className="ck-match-ended">
-        <p className="ck-match-ended__subtitle">
-          Chiikaiwa sẽ không tự tìm lại hoặc giữ chỗ cũ.
-        </p>
-        <p className="ck-match-ended__reason">{reasonLabel}</p>
-
         {flow.notice ? (
           <div className="w-full text-left">
             <MatchNoticeBanner notice={flow.notice} />
