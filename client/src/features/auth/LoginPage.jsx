@@ -9,7 +9,7 @@ import {
   validateLoginForm,
 } from './auth-validation.js';
 import { useAuth } from './use-auth.js';
-import loginScene from './login-scene.webp';
+import loginScene from '../../assets/auth/login-scene.webp';
 
 export function LoginPage() {
   const { login, isLoginPending, authNotice, clearAuthNotice } = useAuth();

@@ -55,9 +55,8 @@ body:has(.ck-auth-screen--study) {
   z-index: 1;
   inset: 9% 1% 5%;
   background:
-    url('../../components/ui/sticker-flowers.svg') right top / 4.6rem auto
-      no-repeat,
-    url('../../components/ui/sticker-flowers.svg') left bottom / 3.6rem auto
+    url('../../assets/ui/sticker-flowers.svg') right top / 4.6rem auto no-repeat,
+    url('../../assets/ui/sticker-flowers.svg') left bottom / 3.6rem auto
       no-repeat;
   pointer-events: none;
   animation: ck-auth-petal-drift 5s ease-in-out 1;

@@ -1,6 +1,6 @@
 import { Button } from '../../components/ui/controls.jsx';
 import { Badge, Card } from '../../components/ui/surfaces.jsx';
-import searchIcon from './assets/search.svg';
+import searchIcon from '../../assets/library/search.svg';
 import { libraryError } from './library-hooks.js';
 
 /** @param {{saved?: boolean}} props */

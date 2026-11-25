@@ -1,4 +1,4 @@
-const assets = import.meta.glob('./assets/island/*.webp', {
+const assets = import.meta.glob('../../assets/library/island/*.webp', {
   eager: true,
   query: '?url',
   import: 'default',
@@ -6,7 +6,9 @@ const assets = import.meta.glob('./assets/island/*.webp', {
 
 /** @param {string} name */
 export function islandAsset(name) {
-  return /** @type {string} */ (assets['./assets/island/' + name + '.webp']);
+  return /** @type {string} */ (
+    assets['../../assets/library/island/' + name + '.webp']
+  );
 }
 
 const artThemes = [

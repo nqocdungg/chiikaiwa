@@ -5,7 +5,7 @@ import { Input, PasswordInput } from '../../components/ui/forms.jsx';
 import { AuthSplitLayout } from './AuthSplitLayout.jsx';
 import { mapAuthApiError, validateRegisterForm } from './auth-validation.js';
 import { useAuth } from './use-auth.js';
-import registerScene from './register-scene.webp';
+import registerScene from '../../assets/auth/register-scene.webp';
 
 export function RegisterPage() {
   const { register } = useAuth();

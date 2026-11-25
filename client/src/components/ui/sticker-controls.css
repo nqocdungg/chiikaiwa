@@ -147,11 +147,11 @@
   padding-block: var(--space-4);
   border-bottom: 1px solid #e9b7c9;
   background:
-    url('./sticker-flowers.svg') left 0.55rem top 0.45rem /
+    url('../../assets/ui/sticker-flowers.svg') left 0.55rem top 0.45rem /
       clamp(2.35rem, 9vw, 4.3rem) auto no-repeat,
-    url('./sticker-flowers.svg') left 1.25rem bottom 0.12rem / 1.4rem auto
-      no-repeat,
-    url('./sticker-flowers.svg') right 0.6rem bottom 0.16rem /
+    url('../../assets/ui/sticker-flowers.svg') left 1.25rem bottom 0.12rem /
+      1.4rem auto no-repeat,
+    url('../../assets/ui/sticker-flowers.svg') right 0.6rem bottom 0.16rem /
       clamp(2.25rem, 8vw, 3.15rem) auto no-repeat,
     linear-gradient(#fce4ee, #f4c9da);
   color: #64354d;
@@ -194,10 +194,10 @@
   justify-content: center;
   border-top-color: #efccdb;
   background:
-    url('./sticker-flowers.svg') left 0.35rem bottom 0.15rem / 2.3rem auto
-      no-repeat,
-    url('./sticker-flowers.svg') right 0.35rem top 0.15rem / 2.3rem auto
-      no-repeat,
+    url('../../assets/ui/sticker-flowers.svg') left 0.35rem bottom 0.15rem /
+      2.3rem auto no-repeat,
+    url('../../assets/ui/sticker-flowers.svg') right 0.35rem top 0.15rem /
+      2.3rem auto no-repeat,
     #fdf0f6;
 }
 
