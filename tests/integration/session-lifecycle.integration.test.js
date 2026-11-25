@@ -35,9 +35,13 @@ import {
   lockUserAccount,
 } from '../../server/modules/safety/safety-service.js';
 import { cleanupSessionMedia } from '../../server/modules/sessions/media-cleanup-service.js';
+import { changeScreenShare } from '../../server/modules/sessions/screen-share-service.js';
 import { issueMediaToken } from '../../server/modules/sessions/media-token-service.js';
 import { createInvitation } from '../../server/modules/invitations/invitation-service.js';
+import { ensureLifetimeBaseline } from '../../server/modules/statistics/statistics-repository.js';
 import {
+  listMediaParticipants,
+  setScreenPermission,
   removeMediaParticipant,
   readMediaParticipant,
 } from '../../server/integrations/livekit/room-service.js';
@@ -63,6 +67,21 @@ import {
 } from '../fixtures/livekit-fixtures.js';
 
 vi.mock('../../server/integrations/livekit/room-service.js', () => ({
+  hasScreenMedia: (
+    /** @type {import("livekit-server-sdk").ParticipantInfo} */ participant,
+  ) => participant.permission?.canPublishSources.includes(3),
+  setScreenPermission: vi.fn(),
+  listMediaParticipants: vi.fn(async () => {
+    const doc = await persisted();
+    return (doc?.presence ?? [])
+      .filter((/** @type {any} */ item) => item.connected)
+      .map((/** @type {any} */ item) => ({
+        identity: item.actorKey,
+        sid: item.connectionSid,
+        state: 2,
+        tracks: [],
+      }));
+  }),
   readMediaParticipant: vi.fn(async () => null),
   removeMediaParticipant: vi.fn(async () => {}),
   closeMediaRoom: vi.fn(async () => {}),
@@ -169,6 +188,7 @@ beforeEach(async () => {
     'rate_limits',
   ])
     await db.collection(name).deleteMany({});
+  await ensureLifetimeBaseline(db);
   const users = [...SESSION_USERS, USER_FIXTURES.admin];
   await db.collection('users').insertMany(users.map((u) => ({ ...u })));
   cookies = [];
@@ -246,11 +266,104 @@ describe('BE-012 lifecycle on a real replica set', () => {
     await process(event(0, 'room_started'));
     await process(event(0));
     expect(await persisted()).not.toHaveProperty('startedAt');
-    expect(await db.collection('statistics').countDocuments()).toBe(0);
+    expect(
+      await db
+        .collection('statistics')
+        .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+    ).toMatchObject({ startedSessions: 0 });
+  });
+  it('pauses selection and duration when Room Service detects a missing webhook', async () => {
+    await start();
+    const before = await persisted();
+    if (!before) throw new Error('Missing fixture session');
+    at = new Date(at.getTime() + 12_000);
+    vi.mocked(listMediaParticipants).mockResolvedValueOnce([
+      /** @type {import("livekit-server-sdk").ParticipantInfo} */ ({
+        identity: before.presence[0].actorKey,
+        sid: before.presence[0].connectionSid,
+        state: 2,
+      }),
+    ]);
+    await readSession({
+      sessionId: String(SESSION_ID),
+      getIdentity: identity,
+      now,
+    });
+    const after = await persisted();
+    if (!after) throw new Error('Missing fixture session');
+    expect(after).toMatchObject({
+      status: 'reconnecting',
+      activeDurationMs: 0,
+      selectionRemainingMs: 60_000,
+    });
+    expect(after.presence[1].reconnectUntil).toEqual(
+      new Date(at.getTime() + 300_000),
+    );
+  });
+  it('reserves a single screen publisher and waits for confirmed revocation before releasing', async () => {
+    await start();
+    const doc = await persisted();
+    if (!doc) throw new Error('Missing fixture session');
+    const participants = doc.presence.map(
+      (/** @type {{actorKey:string, connectionSid:string}} */ presence) => ({
+        identity: presence.actorKey,
+        sid: presence.connectionSid,
+        permission: { canPublishSources: [1, 2] },
+      }),
+    );
+    vi.mocked(listMediaParticipants).mockResolvedValueOnce(participants);
+    vi.mocked(setScreenPermission).mockResolvedValueOnce({
+      ...participants[0],
+      permission: { canPublishSources: [1, 2, 3] },
+    });
+    const input = { sessionId: String(SESSION_ID), getIdentity: identity };
+    const claim = await changeScreenShare({
+      ...input,
+      operationId: 'claim',
+      expectedVersion: doc.version,
+    });
+    expect(claim).toMatchObject({
+      status: 200,
+      data: {
+        session: {
+          screenShare: { state: 'active', ownerKey: SESSION_ACTORS[0] },
+        },
+      },
+    });
+    await expect(
+      changeScreenShare({
+        ...input,
+        getIdentity: () => identity(1),
+        operationId: 'other',
+        expectedVersion: claim.data.session.version,
+      }),
+    ).rejects.toMatchObject({ code: 'SCREEN_SHARE_BUSY' });
+    vi.mocked(listMediaParticipants)
+      .mockResolvedValueOnce([
+        { ...participants[0], permission: { canPublishSources: [1, 2, 3] } },
+        participants[1],
+      ])
+      .mockResolvedValueOnce(participants);
+    vi.mocked(setScreenPermission).mockResolvedValueOnce(participants[0]);
+    const release = await changeScreenShare({
+      ...input,
+      operationId: 'release',
+    });
+    expect(release).toMatchObject({
+      status: 200,
+      data: { session: { screenShare: { state: 'idle' } } },
+    });
+    expect(
+      vi.mocked(setScreenPermission).mock.calls.map((args) => args.slice(1)),
+    ).toEqual([
+      [SESSION_ACTORS[0], true],
+      [SESSION_ACTORS[0], false],
+    ]);
   });
   it('GET projects time without persisting duration, version, controller or statistics', async () => {
     await start();
     const before = await persisted();
+    if (!before) throw new Error('Missing fixture session');
     at = new Date(at.getTime() + 12_000);
     const result = await readSession({
       sessionId: String(SESSION_ID),
@@ -261,10 +374,104 @@ describe('BE-012 lifecycle on a real replica set', () => {
       activeDurationMs: 12_000,
       selectionRemainingMs: 48_000,
     });
-    expect(await persisted()).toEqual(before);
+    const persistedSession = await persisted();
+    if (!persistedSession) throw new Error('Missing fixture session');
+    const { presenceCheckedAt, lastBothPresentAt, ...session } =
+      persistedSession;
+    expect(presenceCheckedAt).toEqual(at);
+    expect(lastBothPresentAt).toEqual(at);
+    expect(session).toEqual(before);
     expect(JSON.stringify(result.data)).not.toMatch(
       /roomName|connectionSid|email|passwordHash|mediaCleanup|activeSince/,
     );
+  });
+  it('pauses both clocks on an unavailable presence snapshot and resumes on recovery', async () => {
+    await start();
+    const input = { sessionId: String(SESSION_ID), getIdentity: identity, now };
+    at = new Date(at.getTime() + 12_000);
+    vi.mocked(listMediaParticipants).mockRejectedValueOnce(
+      new Error('timeout'),
+    );
+    expect((await readSession(input)).data).toMatchObject({
+      activeDurationMs: 0,
+      selectionRemainingMs: 60_000,
+    });
+    at = new Date(at.getTime() + 6_000);
+    expect((await readSession(input)).data).toMatchObject({
+      activeDurationMs: 0,
+      selectionRemainingMs: 60_000,
+    });
+    at = new Date(at.getTime() + 2_000);
+    expect((await readSession(input)).data).toMatchObject({
+      activeDurationMs: 2_000,
+      selectionRemainingMs: 58_000,
+    });
+  });
+  it('waits for an in-flight presence check before a concurrent GET can expire selection', async () => {
+    await start();
+    await db
+      .collection('practice_sessions')
+      .updateOne(
+        { _id: SESSION_ID },
+        { $set: { selectionRemainingMs: 1_000 } },
+      );
+    /** @type {(reason: Error) => void} */
+    let rejectRead = () => {};
+    vi.mocked(listMediaParticipants).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectRead = reject;
+        }),
+    );
+    const input = { sessionId: String(SESSION_ID), getIdentity: identity, now };
+    const first = readSession(input);
+    await vi.waitFor(async () => {
+      expect((await persisted())?.presenceCheck).toBeDefined();
+    });
+    await db
+      .collection('practice_sessions')
+      .updateOne({ _id: SESSION_ID }, { $inc: { version: 1 } });
+    at = new Date(at.getTime() + 2_000);
+    let secondFinished = false;
+    const second = readSession(input).then((result) => {
+      secondFinished = true;
+      return result;
+    });
+    await expect(
+      reconcileSession(SESSION_ID, await identity(), now),
+    ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(listMediaParticipants).toHaveBeenCalledTimes(1);
+    expect(secondFinished).toBe(false);
+    rejectRead(new Error('timeout'));
+    const results = await Promise.all([first, second]);
+    for (const result of results) {
+      expect(result.data).toMatchObject({
+        status: 'active',
+        activeDurationMs: 0,
+        selectionRemainingMs: 1_000,
+      });
+    }
+    expect((await persisted())?.presenceCheck).toBeUndefined();
+  });
+  it('recovers an abandoned presence check after its lease expires', async () => {
+    await start();
+    await db.collection('practice_sessions').updateOne(
+      { _id: SESSION_ID },
+      {
+        $set: {
+          presenceCheckedAt: at,
+          presenceCheck: { id: 'abandoned', until: new Date(Date.now() - 1) },
+        },
+      },
+    );
+    await readSession({
+      sessionId: String(SESSION_ID),
+      getIdentity: identity,
+      now,
+    });
+    expect(listMediaParticipants).toHaveBeenCalledTimes(1);
+    expect((await persisted())?.presenceCheck).toBeUndefined();
   });
   it('leave races/replays end once, settle time and free both actors; ended refuses token', async () => {
     await start();
@@ -317,7 +524,11 @@ describe('BE-012 lifecycle on a real replica set', () => {
         activeDurationMs: 0,
       });
       expect(await persisted()).not.toHaveProperty('startedAt');
-      expect(await db.collection('statistics').countDocuments()).toBe(0);
+      expect(
+        await db
+          .collection('statistics')
+          .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+      ).toMatchObject({ startedSessions: 0 });
     },
   );
   it('selection timeout settles at 60 seconds even when GET is late', async () => {
@@ -1066,7 +1277,11 @@ describe('BE-012 lifecycle on a real replica set', () => {
       }),
     ).rejects.toThrow('after start');
     expect(await persisted()).toEqual(before);
-    expect(await db.collection('statistics').countDocuments()).toBe(0);
+    expect(
+      await db
+        .collection('statistics')
+        .findOne(/** @type {any} */ ({ _id: 'lifetime' })),
+    ).toMatchObject({ startedSessions: 0 });
     expect(
       await db
         .collection('webhook_receipts')

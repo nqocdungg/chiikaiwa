@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { AppError } from '../../middleware/http-error.js';
+import { incrementLifetimeCounter } from '../statistics/statistics-repository.js';
 import { QuizAttempt } from './quiz-model.js';
 
 const { ObjectId } = mongoose.Types;
@@ -89,20 +90,10 @@ export async function submitQuizAttemptCas({
  * Tăng submittedQuizCount trong thống kê trọn đời (06 §11.1).
  *
  * @param {any} db
- * @param {{ session?: import('mongoose').ClientSession }} [options]
+ * @param {{ session?: import('mongoose').ClientSession, now?: Date }} [options]
  */
-export async function incrementSubmittedQuizCount(db, { session } = {}) {
-  const collection = /** @type {import('mongoose').mongo.Collection<any>} */ (
-    db.collection('statistics')
-  );
-  await collection.updateOne(
-    { _id: 'lifetime' },
-    {
-      $inc: { submittedQuizCount: 1 },
-      $currentDate: { updatedAt: true },
-    },
-    { session, upsert: true },
-  );
+export async function incrementSubmittedQuizCount(db, options = {}) {
+  return incrementLifetimeCounter(db, 'submittedQuizCount', options);
 }
 
 export const MAX_QUIZ_LIST_LIMIT = 50;

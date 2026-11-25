@@ -32,6 +32,8 @@ export function Icon({ name, size = 20, className }) {
     flag: 'M5 22V3c5-4 10 4 14 0v11c-4 4-9-4-14 0',
     sprout:
       'M12 21v-9 M12 13C5 13 3 10 3 5c6 0 9 2 9 8Zm0 2c7 0 9-3 9-8-6 0-9 2-9 8Z',
+    shield:
+      'M12 3 5 6v6c0 5 3.5 8 7 9 3.5-1 7-4 7-9V6l-7-3Z M12 8v4 M12 16h.01',
     translate:
       'M3 5h12 M9 2v3 M5 8c1 4 4 7 8 9 M12 5c0 5-3 9-8 12 M14 21l4-11 4 11 M16 17h4',
   };
@@ -68,6 +70,7 @@ export function Icon({ name, size = 20, className }) {
  * trailingIcon?: import('react').ReactNode,
  * fullWidth?: boolean,
  * type?: 'button'|'submit'|'reset',
+ * form?: string,
  * className?: string,
  * 'aria-label'?: string,
  * 'aria-pressed'?: boolean,
@@ -87,6 +90,7 @@ export function Button({
   trailingIcon,
   fullWidth = false,
   type = 'button',
+  form,
   className = '',
   'aria-label': ariaLabel,
   'aria-pressed': ariaPressed,
@@ -108,6 +112,7 @@ export function Button({
     <button
       ref={buttonRef}
       type={type}
+      form={form}
       className={classes}
       onClick={onClick}
       disabled={disabled || loading}

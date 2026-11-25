@@ -11,6 +11,7 @@ import { PrivateTools } from './components/PrivateTools.jsx';
 import { RoleCard } from './components/RoleCard.jsx';
 import { SessionChat } from './components/SessionChat.jsx';
 import { ConnectionRoom } from './components/ConnectionRoom.jsx';
+import { SafetyActionDialog } from '../safety/SafetyActionDialog.jsx';
 import { SessionSummary } from '../session-summary/SessionSummary.jsx';
 import roomLogo from '../../assets/brand/chii-logo.svg';
 
@@ -19,7 +20,7 @@ import roomLogo from '../../assets/brand/chii-logo.svg';
 /** @typedef {import('../../demo/kaiwa-fixtures.js').Panel} Panel */
 /** @typedef {{action: 'swap'|'skip'|'complete', incoming: boolean}|null} Consent */
 
-/** @param {{initialStage: Stage, initialPanel: Panel|null, longContent: boolean, initialNoteError: boolean, showDemoTools: boolean, onHome: () => void, live?: ReturnType<typeof import('./use-session-room.js').useSessionRoom>, demoData?: typeof import('../../demo/kaiwa-fixtures.js')}} props */
+/** @param {{initialStage: Stage, initialPanel: Panel|null, longContent: boolean, initialNoteError: boolean, showDemoTools: boolean, onHome: () => void, live?: ReturnType<typeof import('./use-session-room.js').useSessionRoom>, tools?: ReturnType<typeof import('./use-session-tools.js').useSessionTools>, demoData?: typeof import('../../demo/kaiwa-fixtures.js')}} props */
 export function KaiwaRoom({
   initialStage,
   initialPanel,
@@ -28,6 +29,7 @@ export function KaiwaRoom({
   showDemoTools,
   onHome,
   live,
+  tools,
   demoData,
 }) {
   const {
@@ -71,6 +73,7 @@ export function KaiwaRoom({
     /** @type {{title: string, result: string}[]} */ ([]),
   );
   const [leave, setLeave] = useState(false);
+  const [safetyOpen, setSafetyOpen] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [chatDraft, setChatDraft] = useState('');
   const [lastRead, setLastRead] = useState('');
@@ -354,6 +357,16 @@ export function KaiwaRoom({
               Chia sẻ
             </Button>
             {toolButtons}
+            {live?.session && partner ? (
+              <Button
+                variant="ghost"
+                size="compact"
+                leadingIcon={<Icon name="shield" size={18} />}
+                onClick={() => setSafetyOpen(true)}
+              >
+                Báo cáo / Chặn
+              </Button>
+            ) : null}
             <Button
               variant="danger"
               size="compact"
@@ -581,51 +594,75 @@ export function KaiwaRoom({
               <PrivateTools
                 panel={panel}
                 contentPhase={contentPhase}
-                knowledge={knowledge}
+                hints={tools?.hints}
+                knowledge={tools?.knowledge ?? knowledge}
                 saved={saved}
-                note={note}
-                noteStatus={noteStatus}
+                note={tools?.note ?? note}
+                noteStatus={tools?.noteStatus ?? noteStatus}
+                noteError={tools?.noteError}
+                noteDemo={!tools}
+                hintsPending={tools?.hintsPending}
+                hintsError={tools?.hintsError}
+                personalPending={tools?.personalPending}
+                personalError={tools?.personalError}
+                knowledgePending={tools?.knowledgePending}
+                knowledgeErrors={tools?.knowledgeErrors}
                 onClose={closePanel}
-                onToggleSaved={toggleSaved}
+                onToggleSaved={(id) => {
+                  if (tools) {
+                    void tools.toggleKnowledge(id);
+                    return;
+                  }
+                  toggleSaved(id);
+                }}
                 onNoteChange={(value) => {
+                  if (tools) {
+                    tools.setNote(value);
+                    return;
+                  }
                   setNote(value);
                   setNoteStatus('draft');
                 }}
-                onNoteSave={() => setNoteStatus('saved')}
+                onNoteSave={() => {
+                  if (tools) {
+                    void tools.saveNote();
+                    return;
+                  }
+                  setNoteStatus('saved');
+                }}
+                onRetryHints={tools?.reloadHints}
+                onRetryPersonal={() => {
+                  void tools?.reloadPersonal();
+                }}
+                onResolveNoteConflict={() => {
+                  void tools?.resolveNoteConflict();
+                }}
                 liveContent={
-                  live ? (
-                    panel === 'chat' ? (
-                      <SessionChat
-                        messages={live.messages}
-                        members={live.session?.members ?? []}
-                        identity={identity}
-                        connected={connected}
-                        draft={chatDraft}
-                        onDraft={setChatDraft}
-                        sending={sendingChat}
-                        onSend={async (text) => {
-                          if (sendingRef.current) return;
-                          if (!media) throw new Error('Chưa kết nối chat.');
-                          sendingRef.current = true;
-                          setSendingChat(true);
-                          try {
-                            await media.send(text);
-                            setChatDraft((current) =>
-                              current === text ? '' : current,
-                            );
-                          } finally {
-                            sendingRef.current = false;
-                            setSendingChat(false);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <p className="ck-muted">
-                        {panel === 'hints'
-                          ? 'Kiến thức chưa khả dụng cho tình huống này.'
-                          : 'Ghi chú riêng chưa khả dụng.'}
-                      </p>
-                    )
+                  live && panel === 'chat' ? (
+                    <SessionChat
+                      messages={live.messages}
+                      members={live.session?.members ?? []}
+                      identity={identity}
+                      connected={connected}
+                      draft={chatDraft}
+                      onDraft={setChatDraft}
+                      sending={sendingChat}
+                      onSend={async (text) => {
+                        if (sendingRef.current) return;
+                        if (!media) throw new Error('Chưa kết nối chat.');
+                        sendingRef.current = true;
+                        setSendingChat(true);
+                        try {
+                          await media.send(text);
+                          setChatDraft((current) =>
+                            current === text ? '' : current,
+                          );
+                        } finally {
+                          sendingRef.current = false;
+                          setSendingChat(false);
+                        }
+                      }}
+                    />
                   ) : undefined
                 }
               />
@@ -681,6 +718,31 @@ export function KaiwaRoom({
           />
         </div>
       )}
+      {safetyOpen && live?.session && partner ? (
+        <SafetyActionDialog
+          open={safetyOpen}
+          onClose={() => setSafetyOpen(false)}
+          sessionId={live.session.id}
+          partner={partner}
+          inActiveSession
+          leaving={live.leaving}
+          isGuest={identity.toLowerCase().startsWith('guest:')}
+          onLeaveRoom={() => {
+            setSafetyOpen(false);
+            setLeave(true);
+          }}
+          onReported={() => {
+            setFeedback(
+              'Báo cáo đã được tiếp nhận. Thao tác này không tự chặn đối tác.',
+            );
+          }}
+          onBlocked={() => {
+            setSafetyOpen(false);
+            setFeedback('Đã chặn đối tác. Đang đồng bộ trạng thái phiên…');
+            live.refresh();
+          }}
+        />
+      ) : null}
       {leave && (
         <LeaveDialog
           onCancel={() => setLeave(false)}
@@ -692,6 +754,7 @@ export function KaiwaRoom({
               : endSession
           }
           pending={live?.leaving}
+          hasPendingNote={Boolean(tools?.getPendingNote())}
           partnerName={live ? (partner?.displayName ?? 'bạn luyện') : undefined}
         />
       )}

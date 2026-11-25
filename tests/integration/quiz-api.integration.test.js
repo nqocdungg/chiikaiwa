@@ -1046,6 +1046,49 @@ describe('Quiz API Integration Tests (BE-018, AT-10, DB-T13, B1-B11)', () => {
       expect(stats?.submittedQuizCount).toBe(1);
     });
 
+    it('rolls back the submission and keeps the attempt in progress when submittedQuizCount is invalid (TX-10)', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const createRes = await api('post', '/api/v1/quizzes').send({
+        deckVersionId: deckVersionId.toHexString(),
+      });
+      const quizId = createRes.body.data.id;
+      await db
+        .collection('statistics')
+        .updateOne(
+          { _id: /** @type {any} */ ('lifetime') },
+          { $set: { submittedQuizCount: '0' } },
+        );
+      const receiptsBefore = await db
+        .collection('operation_receipts')
+        .countDocuments();
+
+      const submitRes = await api(
+        'post',
+        `/api/v1/quizzes/${quizId}/submission`,
+      )
+        .send({
+          expectedVersion: 0,
+          answers: [
+            { questionVersionId: q1VersionId.toHexString(), optionId: 'opt_a' },
+          ],
+        })
+        .expect(500);
+
+      expect(submitRes.body.error.code).toBe('INTERNAL_ERROR');
+      const attempt = await db
+        .collection('quiz_attempts')
+        .findOne({ _id: new ObjectId(quizId) });
+      expect(attempt?.status).toBe('inProgress');
+      expect(attempt?.version).toBe(0);
+      expect(await db.collection('operation_receipts').countDocuments()).toBe(
+        receiptsBefore,
+      );
+      const stats = await db
+        .collection('statistics')
+        .findOne({ _id: /** @type {any} */ ('lifetime') });
+      expect(stats?.submittedQuizCount).toBe('0');
+    });
+
     it('từ chối 422 VALIDATION_FAILED khi thiếu Idempotency-Key trên submission (Must fix 1)', async () => {
       const createRes = await api('post', '/api/v1/quizzes').send({
         deckVersionId: deckVersionId.toHexString(),

@@ -20,6 +20,7 @@ import {
   hashGuestCredential,
   signJwt,
 } from '../../server/modules/identity/crypto.js';
+import { ensureLifetimeBaseline } from '../../server/modules/statistics/statistics-repository.js';
 
 const { ObjectId } = mongoose.Types;
 const DEFAULT_ORIGIN = 'http://127.0.0.1:5173';
@@ -85,6 +86,7 @@ beforeEach(async () => {
     db.collection('saved_items').deleteMany({}),
     db.collection('practice_sessions').deleteMany({}),
   ]);
+  await ensureLifetimeBaseline(db);
 });
 
 afterAll(async () => {

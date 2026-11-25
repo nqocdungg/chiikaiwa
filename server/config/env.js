@@ -24,7 +24,7 @@ export function normalizeIpAddress(rawIp) {
  * @param {string | undefined} raw
  * @returns {string[]}
  */
-function parseTrustedProxyIps(raw) {
+export function parseTrustedProxyIps(raw) {
   if (!raw || !raw.trim()) {
     return [];
   }

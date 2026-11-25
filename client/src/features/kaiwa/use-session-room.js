@@ -115,6 +115,10 @@ export function useSessionRoom(sessionId) {
       void refresh();
     };
     void refresh();
+    const refreshVisible = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    document.addEventListener('visibilitychange', refreshVisible);
     const unsubscribe = onClearPrivateCache(() => {
       current.alive = false;
       connectionGeneration.current++;
@@ -131,6 +135,7 @@ export function useSessionRoom(sessionId) {
       );
     });
     return () => {
+      document.removeEventListener('visibilitychange', refreshVisible);
       unsubscribe();
       current.alive = false;
       generation.current++;
@@ -185,6 +190,9 @@ export function useSessionRoom(sessionId) {
         },
         onSessionUpdate: (version) => {
           if (version > sessionVersion.current) refreshRef.current();
+        },
+        onReconnect: () => {
+          if (isCurrent()) refreshRef.current();
         },
       });
       mediaRef.current = media;
