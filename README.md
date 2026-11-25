@@ -159,4 +159,9 @@ Xem [migration guide](server/persistence/migrations/README.md) để thêm migra
 
 Vercel sử dụng root repository và cấu hình trong `vercel.json`. Chọn Node.js 24.x, cấu hình environment server và `APP_ORIGIN` HTTPS. Preview dùng database riêng. CI chạy `npm ci` và `npm run check`; không tự deploy.
 
+Để rate limiting phân biệt đúng IP client khi đứng sau proxy:
+
+- Trên Vercel (biến `VERCEL` được nền tảng bật sẵn), server tự đọc header `x-vercel-forwarded-for` do Vercel gắn.
+- Nếu tự host sau reverse proxy ngoài Vercel, cấu hình `TRUSTED_PROXY_IPS` (danh sách IP proxy phân tách bởi dấu phẩy) để tin ranh giới `x-forwarded-for`; nếu không cấu hình, server chỉ dùng IP socket trực tiếp.
+
 Đối chiếu [tài liệu thiết kế](docs/README.md) khi triển khai nghiệp vụ. Quy trình làm việc, Git conventions và yêu cầu kiểm chứng được quản lý trong [CONTRIBUTING.md](CONTRIBUTING.md).
