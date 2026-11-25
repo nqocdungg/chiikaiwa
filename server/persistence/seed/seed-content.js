@@ -709,20 +709,21 @@ export async function seedTestAccountFixtures(db, options = {}) {
     );
   }
 
-  // Khởi tạo lifetime statistics baseline (06 §11.1) nếu chưa có
-  await statsColl.updateOne(
-    /** @type {any} */ ({ _id: 'lifetime' }),
-    {
-      $setOnInsert: {
-        registeredAccounts: SEED_USER_FIXTURES.length,
-        startedSessions: 0,
-        reviewCount: 0,
-        submittedQuizCount: 0,
-        updatedAt: now,
+  if (inserted > 0) {
+    await statsColl.updateOne(
+      /** @type {any} */ ({ _id: 'lifetime' }),
+      {
+        $inc: { registeredAccounts: inserted },
+        $setOnInsert: {
+          startedSessions: 0,
+          reviewCount: 0,
+          submittedQuizCount: 0,
+          updatedAt: now,
+        },
       },
-    },
-    { upsert: true },
-  );
+      { upsert: true },
+    );
+  }
 
   return {
     total: SEED_USER_FIXTURES.length,

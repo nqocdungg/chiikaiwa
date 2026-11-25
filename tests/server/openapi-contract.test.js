@@ -57,6 +57,7 @@ const expectedPaths = [
   '/me/blocks',
   '/me/blocks/{id}',
   '/reports',
+  '/admin/statistics',
   '/admin/users',
   '/admin/users/{id}/status',
   '/admin/reports',
