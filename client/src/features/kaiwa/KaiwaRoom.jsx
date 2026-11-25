@@ -11,6 +11,7 @@ import { PrivateTools } from './components/PrivateTools.jsx';
 import { RoleCard } from './components/RoleCard.jsx';
 import { SessionChat } from './components/SessionChat.jsx';
 import { ConnectionRoom } from './components/ConnectionRoom.jsx';
+import { SafetyActionDialog } from '../safety/SafetyActionDialog.jsx';
 import { SessionSummary } from '../session-summary/SessionSummary.jsx';
 import roomLogo from '../../assets/brand/chii-logo.svg';
 
@@ -72,6 +73,7 @@ export function KaiwaRoom({
     /** @type {{title: string, result: string}[]} */ ([]),
   );
   const [leave, setLeave] = useState(false);
+  const [safetyOpen, setSafetyOpen] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [chatDraft, setChatDraft] = useState('');
   const [lastRead, setLastRead] = useState('');
@@ -355,6 +357,16 @@ export function KaiwaRoom({
               Chia sẻ
             </Button>
             {toolButtons}
+            {live?.session && partner ? (
+              <Button
+                variant="ghost"
+                size="compact"
+                leadingIcon={<Icon name="shield" size={18} />}
+                onClick={() => setSafetyOpen(true)}
+              >
+                Báo cáo / Chặn
+              </Button>
+            ) : null}
             <Button
               variant="danger"
               size="compact"
@@ -706,6 +718,31 @@ export function KaiwaRoom({
           />
         </div>
       )}
+      {safetyOpen && live?.session && partner ? (
+        <SafetyActionDialog
+          open={safetyOpen}
+          onClose={() => setSafetyOpen(false)}
+          sessionId={live.session.id}
+          partner={partner}
+          inActiveSession
+          leaving={live.leaving}
+          isGuest={identity.toLowerCase().startsWith('guest:')}
+          onLeaveRoom={() => {
+            setSafetyOpen(false);
+            setLeave(true);
+          }}
+          onReported={() => {
+            setFeedback(
+              'Báo cáo đã được tiếp nhận. Thao tác này không tự chặn đối tác.',
+            );
+          }}
+          onBlocked={() => {
+            setSafetyOpen(false);
+            setFeedback('Đã chặn đối tác. Đang đồng bộ trạng thái phiên…');
+            live.refresh();
+          }}
+        />
+      ) : null}
       {leave && (
         <LeaveDialog
           onCancel={() => setLeave(false)}

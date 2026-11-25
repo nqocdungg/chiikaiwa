@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
-import { normalizeIpAddress, readAuthEnv } from '../config/env.js';
+import { normalizeIpAddress, parseTrustedProxyIps } from '../config/env.js';
 import { connectDatabase } from '../persistence/database.js';
 import { AppError } from './http-error.js';
 
@@ -9,6 +9,8 @@ export const LOGIN_RATE_LIMIT_MAX = 10;
 export const PASSWORD_RESET_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 export const PASSWORD_RESET_EMAIL_RATE_LIMIT_MAX = 3;
 export const PASSWORD_RESET_IP_RATE_LIMIT_MAX = 20;
+export const INVITATION_CODE_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+export const INVITATION_CODE_RATE_LIMIT_MAX = 20;
 export const WRITE_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 export const WRITE_RATE_LIMIT_MAX = 120;
 
@@ -22,9 +24,114 @@ export function hashRateLimitSubject(value) {
 }
 
 /**
+ * Parses an IPv6 address (with optional `::` compression and trailing IPv4 notation)
+ * into eight 16-bit integer groups.
+ * @param {string} ipv6
+ * @returns {number[] | null}
+ */
+function parseIpv6Groups(ipv6) {
+  const parseSegment = (/** @type {string} */ segment) => {
+    if (!segment) return [];
+    const parts = segment.split(':');
+    /** @type {number[]} */
+    const groups = [];
+    for (let i = 0; i < parts.length; i += 1) {
+      const part = parts[i];
+      if (part.includes('.')) {
+        if (i !== parts.length - 1 || isIP(part) !== 4) {
+          return null;
+        }
+        const octets = part.split('.').map(Number);
+        groups.push((octets[0] << 8) | octets[1], (octets[2] << 8) | octets[3]);
+      } else {
+        if (!/^[0-9a-f]{1,4}$/iu.test(part)) {
+          return null;
+        }
+        groups.push(Number.parseInt(part, 16));
+      }
+    }
+    return groups;
+  };
+
+  const doubleColonIndex = ipv6.indexOf('::');
+  if (doubleColonIndex === -1) {
+    const groups = parseSegment(ipv6);
+    return groups && groups.length === 8 ? groups : null;
+  }
+
+  const leftRaw = ipv6.slice(0, doubleColonIndex);
+  const rightRaw = ipv6.slice(doubleColonIndex + 2);
+  if (rightRaw.includes('::')) {
+    return null;
+  }
+  const left = parseSegment(leftRaw);
+  const right = parseSegment(rightRaw);
+  if (!left || !right) {
+    return null;
+  }
+  const missing = 8 - (left.length + right.length);
+  if (missing < 1) {
+    return null;
+  }
+  return [...left, ...Array(missing).fill(0), ...right];
+}
+
+/**
+ * Normalizes an IP address for rate-limit bucketing:
+ * preserves IPv4 addresses (including IPv4-mapped IPv6 forms) and collapses IPv6
+ * addresses to their canonical `/64` prefix so rotating host bits cannot bypass IP limits.
+ *
+ * @param {string} rawIp
+ * @returns {string}
+ */
+export function normalizeRateLimitIp(rawIp) {
+  const normalized = normalizeIpAddress(String(rawIp));
+  const version = isIP(normalized);
+  if (version !== 6) {
+    return normalized;
+  }
+
+  const groups = parseIpv6Groups(normalized);
+  if (!groups) {
+    return normalized;
+  }
+
+  if (
+    groups[0] === 0 &&
+    groups[1] === 0 &&
+    groups[2] === 0 &&
+    groups[3] === 0 &&
+    groups[4] === 0 &&
+    groups[5] === 0xffff
+  ) {
+    const hi = groups[6];
+    const lo = groups[7];
+    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+  }
+
+  const prefix = groups
+    .slice(0, 4)
+    .map((group) => group.toString(16).padStart(4, '0'))
+    .join(':');
+  return `${prefix}::/64`;
+}
+
+/**
+ * Returns true when running in a Vercel deployment environment.
+ * @param {NodeJS.ProcessEnv} envSource
+ * @returns {boolean}
+ */
+function isVercelRuntime(envSource) {
+  const raw = envSource.VERCEL?.trim().toLowerCase();
+  return Boolean(raw && raw !== '0' && raw !== 'false');
+}
+
+/**
  * Extracts client IP address safely according to trusted proxy boundaries.
- * Direct connections ignore client-supplied X-Forwarded-For headers.
- * When the immediate socket peer is in TRUSTED_PROXY_IPS, resolves the rightmost
+ * On Vercel (`VERCEL` env set), uses the first validated hop from the platform-injected
+ * `x-vercel-forwarded-for` header, falling back to the socket IP when missing or invalid.
+ * Outside Vercel, direct connections ignore client-supplied `x-forwarded-for` headers;
+ * when the immediate socket peer is in `TRUSTED_PROXY_IPS`, resolves the rightmost
  * untrusted hop appended by the trusted proxy chain.
  *
  * @param {import('express').Request} request
@@ -36,11 +143,35 @@ export function getClientIp(request, { envSource = process.env } = {}) {
     request.socket?.remoteAddress || request.ip || '127.0.0.1';
   const socketIp = normalizeIpAddress(String(rawSocketIp));
 
+  if (isVercelRuntime(envSource)) {
+    const vercelForwarded = request.headers['x-vercel-forwarded-for'];
+    const rawHeader = Array.isArray(vercelForwarded)
+      ? vercelForwarded[0]
+      : vercelForwarded;
+    if (typeof rawHeader === 'string') {
+      const firstHop = rawHeader.split(',')[0] ?? '';
+      const candidate = normalizeIpAddress(firstHop);
+      if (candidate && isIP(candidate) !== 0) {
+        return candidate;
+      }
+    }
+    return socketIp;
+  }
+
   /** @type {string[]} */
   let trustedProxyIps;
   try {
-    trustedProxyIps = readAuthEnv(envSource).trustedProxyIps;
-  } catch {
+    trustedProxyIps = parseTrustedProxyIps(envSource.TRUSTED_PROXY_IPS);
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: 'rate_limit_invalid_trusted_proxy_ips',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'TRUSTED_PROXY_IPS must contain valid IP addresses',
+      }),
+    );
     trustedProxyIps = [];
   }
 
@@ -172,7 +303,7 @@ export async function enforceLoginRateLimit({
   await consumeRateLimit({
     db: database,
     scope: 'login-ip',
-    subjectKey: ip,
+    subjectKey: normalizeRateLimitIp(ip),
     limit: LOGIN_RATE_LIMIT_MAX,
     windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
     now,
@@ -210,7 +341,7 @@ export async function enforcePasswordResetRequestRateLimit({
   await consumeRateLimit({
     db: database,
     scope: 'password-reset-ip',
-    subjectKey: ip,
+    subjectKey: normalizeRateLimitIp(ip),
     limit: PASSWORD_RESET_IP_RATE_LIMIT_MAX,
     windowMs: PASSWORD_RESET_RATE_LIMIT_WINDOW_MS,
     now,
@@ -229,6 +360,30 @@ export async function enforcePasswordResetRequestRateLimit({
 }
 
 /**
+ * Enforces invitation-code / guest-trial lookup rate limits: 20 requests / 5 minutes per IP (07 §11).
+ *
+ * @param {Object} params
+ * @param {import('mongoose').mongo.Db} [params.db]
+ * @param {string} params.ip
+ * @param {Date} [params.now]
+ */
+export async function enforceInvitationCodeRateLimit({
+  db,
+  ip,
+  now = new Date(),
+}) {
+  const database = db ?? (await connectDatabase());
+  await consumeRateLimit({
+    db: database,
+    scope: 'invitation-code-ip',
+    subjectKey: normalizeRateLimitIp(ip),
+    limit: INVITATION_CODE_RATE_LIMIT_MAX,
+    windowMs: INVITATION_CODE_RATE_LIMIT_WINDOW_MS,
+    now,
+  });
+}
+
+/**
  * Enforces business write rate limits: 120 writes / minute per actor (or IP for unauthenticated writes).
  *
  * @param {Object} params
@@ -242,10 +397,13 @@ export async function enforceWriteRateLimit({
   now = new Date(),
 }) {
   const database = db ?? (await connectDatabase());
+  const normalizedSubjectKey = actorOrIpKey.startsWith('ip:')
+    ? `ip:${normalizeRateLimitIp(actorOrIpKey.slice(3))}`
+    : actorOrIpKey;
   await consumeRateLimit({
     db: database,
     scope: 'write-actor',
-    subjectKey: actorOrIpKey,
+    subjectKey: normalizedSubjectKey,
     limit: WRITE_RATE_LIMIT_MAX,
     windowMs: WRITE_RATE_LIMIT_WINDOW_MS,
     now,

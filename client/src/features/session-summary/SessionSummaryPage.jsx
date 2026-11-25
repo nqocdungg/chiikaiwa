@@ -13,6 +13,11 @@ import {
 import { createIdempotencyKey } from '../../services/api-client.js';
 import { ApiError } from '../../services/errors.js';
 import { libraryPath, readLibrary } from '../library/library-api.js';
+import { SafetyActionDialog } from '../safety/SafetyActionDialog.jsx';
+import {
+  resolvePartnerDisplayName,
+  resolveSessionPartner,
+} from '../safety/safety-api.js';
 import { SessionSummary } from './SessionSummary.jsx';
 
 /** @param {unknown} error @param {string} fallback */
@@ -64,7 +69,7 @@ export function SessionSummaryPage() {
       ? carriedNote
       : null,
   );
-  const { kind } = useAuth();
+  const { kind, user, invalidateSession } = useAuth();
   const [summary, setSummary] = useState(
     /** @type {import('../kaiwa/session-learning-api.js').SessionSummaryData|null} */ (
       null
@@ -88,6 +93,8 @@ export function SessionSummaryPage() {
   const [assessmentError, setAssessmentError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const [safetyNotice, setSafetyNotice] = useState('');
   const noteRef = useRef('');
   const assessmentRef = useRef(assessment);
   const noteRetry = useRef(
@@ -128,13 +135,28 @@ export function SessionSummaryPage() {
       setAssessment(assessmentRef.current);
       setAssessmentStatus(data.personal.selfAssessment ? 'saved' : 'idle');
     } catch (failure) {
-      if (!controller.signal.aborted)
+      if (failure instanceof DOMException && failure.name === 'AbortError') {
+        return;
+      }
+      if (!controller.signal.aborted) {
+        if (failure instanceof ApiError && failure.isGuestExpired()) {
+          navigate('/expired', { replace: true });
+          return;
+        }
+        if (failure instanceof ApiError && failure.isAuthRequired()) {
+          invalidateSession?.(
+            'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+          );
+          navigate('/login', { replace: true });
+          return;
+        }
         setError(message(failure, 'Không tải được tổng kết phiên.'));
+      }
     } finally {
       if (!controller.signal.aborted) setPending(false);
     }
     return () => controller.abort();
-  }, [sessionId]);
+  }, [invalidateSession, navigate, sessionId]);
 
   useEffect(() => {
     let stopped = false;
@@ -306,6 +328,12 @@ export function SessionSummaryPage() {
       </section>
     );
 
+  const partner = resolveSessionPartner(summary.session?.members, {
+    kind,
+    userId: user?.id ?? null,
+  });
+  const partnerName = resolvePartnerDisplayName(partner);
+
   return (
     <>
       <SessionSummary
@@ -334,6 +362,8 @@ export function SessionSummaryPage() {
         }}
         onAssessmentSave={() => void saveAssessment()}
         onHome={() => navigate(kind === 'guest' ? '/' : '/home')}
+        safetyNotice={safetyNotice}
+        onOpenSafety={partner ? () => setSafetyOpen(true) : undefined}
       />
       <Dialog
         open={confirmDelete}
@@ -362,6 +392,26 @@ export function SessionSummaryPage() {
       >
         <p>Thao tác này chỉ xóa ghi chú của bạn trong phiên này.</p>
       </Dialog>
+      {partner ? (
+        <SafetyActionDialog
+          open={safetyOpen}
+          onClose={() => setSafetyOpen(false)}
+          sessionId={sessionId}
+          partner={partner}
+          inActiveSession={false}
+          isGuest={kind === 'guest'}
+          onReported={() => {
+            setSafetyNotice(
+              'Báo cáo của bạn đã được tiếp nhận. Thao tác này không tự chặn đối tác.',
+            );
+          }}
+          onBlocked={() => {
+            setSafetyNotice(
+              `Đã chặn ${partnerName}. Hai người sẽ không thể ghép cặp hoặc vào phòng qua mã mời.`,
+            );
+          }}
+        />
+      ) : null}
     </>
   );
 }

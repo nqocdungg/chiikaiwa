@@ -35,7 +35,7 @@ function duration(milliseconds) {
   return `${minutes} phút ${String(seconds % 60).padStart(2, '0')} giây`;
 }
 
-/** @param {{summary?: import('../kaiwa/session-learning-api.js').SessionSummaryData, savedKnowledge?: import('../library/library-api.js').Knowledge[], assessment?: {confidence: number|null, comment: string}, assessmentStatus?: string, assessmentError?: string, noteError?: string, onNoteChange?: (value: string) => void, onNoteSave?: () => void, onNoteDelete?: () => void, onRefreshPersonal?: () => void, onAssessmentChange?: (value: {confidence: number|null, comment: string}) => void, onAssessmentSave?: () => void, phase?: import('../../demo/kaiwa-fixtures.js').Phase, scenarioTitle?: string, outcomes?: {title: string, result: string}[], note: string, noteStatus: string, saved?: string[], knowledge?: typeof import('../../demo/kaiwa-fixtures.js').knowledge, onHome: () => void}} props */
+/** @param {{summary?: import('../kaiwa/session-learning-api.js').SessionSummaryData, savedKnowledge?: import('../library/library-api.js').Knowledge[], assessment?: {confidence: number|null, comment: string}, assessmentStatus?: string, assessmentError?: string, noteError?: string, onNoteChange?: (value: string) => void, onNoteSave?: () => void, onNoteDelete?: () => void, onRefreshPersonal?: () => void, onAssessmentChange?: (value: {confidence: number|null, comment: string}) => void, onAssessmentSave?: () => void, safetyNotice?: string, onOpenSafety?: () => void, phase?: import('../../demo/kaiwa-fixtures.js').Phase, scenarioTitle?: string, outcomes?: {title: string, result: string}[], note: string, noteStatus: string, saved?: string[], knowledge?: typeof import('../../demo/kaiwa-fixtures.js').knowledge, onHome: () => void}} props */
 export function SessionSummary({
   summary,
   savedKnowledge = [],
@@ -49,6 +49,8 @@ export function SessionSummary({
   onRefreshPersonal,
   onAssessmentChange,
   onAssessmentSave,
+  safetyNotice = '',
+  onOpenSafety,
   phase,
   scenarioTitle = '',
   outcomes = [],
@@ -79,7 +81,7 @@ export function SessionSummary({
   const members = session.members ?? [];
   const deckVersionId = session.deckVersionId;
   return (
-    <main className="ck-summary">
+    <main className="ck-summary" data-screen-id="SC-10">
       <header className="ck-summary-hero">
         <div className="ck-summary-art" aria-hidden="true">
           <Friends />
@@ -92,6 +94,12 @@ export function SessionSummary({
           <p>Bạn vừa hoàn thành thêm một buổi luyện nói.</p>
         </div>
       </header>
+
+      {safetyNotice ? (
+        <div className="ck-safety-notice" role="status" aria-live="polite">
+          <p>{safetyNotice}</p>
+        </div>
+      ) : null}
 
       <Card className="ck-summary-overview">
         <div className="ck-summary-members">
@@ -364,6 +372,15 @@ export function SessionSummary({
         <Link className="ck-button ck-button--secondary" to="/saved">
           Kiến thức đã lưu
         </Link>
+        {onOpenSafety ? (
+          <Button
+            variant="secondary"
+            leadingIcon={<Icon name="shield" size={18} />}
+            onClick={onOpenSafety}
+          >
+            Báo cáo / Chặn đối tác
+          </Button>
+        ) : null}
         <Button variant="ghost" onClick={onHome}>
           Về trang chính
         </Button>

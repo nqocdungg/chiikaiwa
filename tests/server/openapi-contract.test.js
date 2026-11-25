@@ -57,6 +57,7 @@ const expectedPaths = [
   '/me/blocks',
   '/me/blocks/{id}',
   '/reports',
+  '/admin/statistics',
   '/admin/users',
   '/admin/users/{id}/status',
   '/admin/reports',
@@ -194,6 +195,20 @@ describe('OpenAPI contract', () => {
     expect(schemas.SubmitQuizRequest.properties.answers.maxItems).toBe(5);
     expect(schemas.SubmitQuizAnswerItem.properties.optionId.maxLength).toBe(64);
     expect(schemas.SubmitQuizAnswerItem.properties.text.maxLength).toBe(500);
+  });
+
+  it('documents RateLimited (429) on admin content and invitation mutations', () => {
+    for (const [path, method] of [
+      ['/admin/content/{id}/publish', 'post'],
+      ['/admin/content/{id}/hide', 'post'],
+      ['/invitations/{invitationId}', 'delete'],
+      ['/invitation-requests/{requestId}', 'delete'],
+      ['/invitation-requests/{requestId}/responses', 'post'],
+    ]) {
+      expect(document.paths[path][method].responses['429']).toEqual({
+        $ref: '#/components/responses/RateLimited',
+      });
+    }
   });
 
   it('documents safety block and report endpoints per 07 §10', () => {

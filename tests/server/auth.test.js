@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../server/app.js';
-import { getClientIp } from '../../server/middleware/rate-limit.js';
+import {
+  getClientIp,
+  hashRateLimitSubject,
+  normalizeRateLimitIp,
+} from '../../server/middleware/rate-limit.js';
 import {
   hashPassword,
   signJwt,
@@ -396,6 +400,155 @@ describe('BE-001 Authentication unit & HTTP contract checks', () => {
         },
       });
       expect(ip).toBe('203.0.113.42');
+    });
+
+    it('uses validated x-vercel-forwarded-for when VERCEL is enabled, ignoring spoofed X-Forwarded-For', () => {
+      const fakeReq = /** @type {any} */ ({
+        socket: { remoteAddress: '10.20.0.5' },
+        headers: {
+          'x-vercel-forwarded-for': '::ffff:203.0.113.42',
+          'x-forwarded-for': '198.51.100.250, 198.51.100.251',
+        },
+      });
+
+      const ip = getClientIp(fakeReq, {
+        envSource: {
+          NODE_ENV: 'production',
+          APP_ORIGIN: 'https://chiikaiwa.example.com',
+          VERCEL: '1',
+        },
+      });
+      expect(ip).toBe('203.0.113.42');
+    });
+
+    it('ignores x-vercel-forwarded-for when VERCEL is unset or disabled', () => {
+      const fakeReq = /** @type {any} */ ({
+        socket: { remoteAddress: '192.168.1.50' },
+        headers: { 'x-vercel-forwarded-for': '203.0.113.42' },
+      });
+
+      expect(
+        getClientIp(fakeReq, {
+          envSource: { NODE_ENV: 'test', APP_ORIGIN: DEFAULT_ORIGIN },
+        }),
+      ).toBe('192.168.1.50');
+
+      expect(
+        getClientIp(fakeReq, {
+          envSource: {
+            NODE_ENV: 'test',
+            APP_ORIGIN: DEFAULT_ORIGIN,
+            VERCEL: '0',
+          },
+        }),
+      ).toBe('192.168.1.50');
+    });
+
+    it('extracts the first validated hop when x-vercel-forwarded-for is comma-separated', () => {
+      const commaListReq = /** @type {any} */ ({
+        socket: { remoteAddress: '10.20.0.5' },
+        headers: { 'x-vercel-forwarded-for': '198.51.100.1, 203.0.113.9' },
+      });
+      expect(
+        getClientIp(commaListReq, {
+          envSource: { NODE_ENV: 'production', VERCEL: '1' },
+        }),
+      ).toBe('198.51.100.1');
+
+      const mappedCommaReq = /** @type {any} */ ({
+        socket: { remoteAddress: '10.20.0.5' },
+        headers: {
+          'x-vercel-forwarded-for': '  ::ffff:198.51.100.1 , 203.0.113.9 ',
+        },
+      });
+      expect(
+        getClientIp(mappedCommaReq, {
+          envSource: { NODE_ENV: 'production', VERCEL: '1' },
+        }),
+      ).toBe('198.51.100.1');
+    });
+
+    it('falls back to socket IP when x-vercel-forwarded-for is missing or invalid', () => {
+      const missingReq = /** @type {any} */ ({
+        socket: { remoteAddress: '::ffff:10.20.0.5' },
+        headers: {},
+      });
+      expect(
+        getClientIp(missingReq, {
+          envSource: { NODE_ENV: 'production', VERCEL: '1' },
+        }),
+      ).toBe('10.20.0.5');
+
+      const invalidReq = /** @type {any} */ ({
+        socket: { remoteAddress: '::ffff:10.20.0.5' },
+        headers: { 'x-vercel-forwarded-for': 'not-an-ip' },
+      });
+      expect(
+        getClientIp(invalidReq, {
+          envSource: { NODE_ENV: 'production', VERCEL: '1' },
+        }),
+      ).toBe('10.20.0.5');
+
+      const invalidFirstHopReq = /** @type {any} */ ({
+        socket: { remoteAddress: '10.20.0.5' },
+        headers: { 'x-vercel-forwarded-for': 'not-an-ip, 203.0.113.9' },
+      });
+      expect(
+        getClientIp(invalidFirstHopReq, {
+          envSource: { NODE_ENV: 'production', VERCEL: '1' },
+        }),
+      ).toBe('10.20.0.5');
+    });
+
+    it('logs a warning without echoing raw values and falls back to socket IP when TRUSTED_PROXY_IPS is invalid', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const fakeReq = /** @type {any} */ ({
+          socket: { remoteAddress: '192.168.1.50' },
+          headers: { 'x-forwarded-for': '203.0.113.99' },
+        });
+
+        const ip = getClientIp(fakeReq, {
+          envSource: {
+            NODE_ENV: 'test',
+            TRUSTED_PROXY_IPS: 'invalid-proxy-token-secret',
+          },
+        });
+        expect(ip).toBe('192.168.1.50');
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        const logged = String(warnSpy.mock.calls[0]?.[0] ?? '');
+        expect(logged).toContain('rate_limit_invalid_trusted_proxy_ips');
+        expect(logged).toContain(
+          'TRUSTED_PROXY_IPS must contain valid IP addresses',
+        );
+        expect(logged).not.toContain('invalid-proxy-token-secret');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('groups IPv6 addresses in the same /64 prefix into the same rate-limit bucket while keeping IPv4 and distinct /64s separate', () => {
+      const addrA = normalizeRateLimitIp('2001:db8:abcd:12::1');
+      const addrB = normalizeRateLimitIp(
+        '2001:0DB8:ABCD:0012:ffff:1234:5678:9abc',
+      );
+      expect(addrA).toBe('2001:0db8:abcd:0012::/64');
+      expect(addrB).toBe('2001:0db8:abcd:0012::/64');
+      expect(hashRateLimitSubject(addrA)).toBe(hashRateLimitSubject(addrB));
+
+      const otherSubnet = normalizeRateLimitIp('2001:db8:abcd:13::1');
+      expect(otherSubnet).toBe('2001:0db8:abcd:0013::/64');
+      expect(hashRateLimitSubject(otherSubnet)).not.toBe(
+        hashRateLimitSubject(addrA),
+      );
+
+      expect(normalizeRateLimitIp('203.0.113.1')).toBe('203.0.113.1');
+      expect(normalizeRateLimitIp('203.0.113.2')).toBe('203.0.113.2');
+      expect(normalizeRateLimitIp('::ffff:203.0.113.5')).toBe('203.0.113.5');
+      expect(normalizeRateLimitIp('0:0:0:0:0:ffff:203.0.113.5')).toBe(
+        '203.0.113.5',
+      );
+      expect(normalizeRateLimitIp('::ffff:cb00:7105')).toBe('203.0.113.5');
     });
   });
 });

@@ -7,6 +7,7 @@ import {
   sessionDeadline,
   CONNECTION_TIMEOUT_MS,
 } from './session-clock.js';
+import { incrementLifetimeCounter } from '../statistics/statistics-repository.js';
 
 const { ObjectId } = mongoose.Types;
 
@@ -218,13 +219,18 @@ export function createSessionPresenceConsumer({
     }
     /** @type {Record<string, string>} */
     const unset = {};
-    if (replacedConnection && bothConnected) {
-      Object.assign(set, sessionClocks(before, transitionAt), {
-        activeSince: checkedAt,
-      });
-      if (!before.deckVersionId) set.selectionRunningSince = checkedAt;
-      unset.pendingAction = '';
-    } else if (
+    const unset = {};
+let countStartedSession = false;
+if (replacedConnection && bothConnected) {
+  Object.assign(set, sessionClocks(before, transitionAt), {
+    activeSince: checkedAt,
+  });
+  if (!before.deckVersionId) set.selectionRunningSince = checkedAt;
+  unset.pendingAction = '';
+} else if (
+  bothConnected &&
+  (!before.startedAt || before.status === 'reconnecting')
+) {
       bothConnected &&
       (!before.startedAt || before.status === 'reconnecting')
     ) {
@@ -302,19 +308,7 @@ export function createSessionPresenceConsumer({
           startedAt: checkedAt,
           controllerKey: after.members[index].actorKey,
         });
-        await db.collection('statistics').updateOne(
-          /** @type {any} */ ({ _id: 'lifetime' }),
-          {
-            $inc: { startedSessions: 1 },
-            $set: { updatedAt: observedAt },
-            $setOnInsert: {
-              registeredAccounts: 0,
-              reviewCount: 0,
-              submittedQuizCount: 0,
-            },
-          },
-          { upsert: true, session },
-        );
+        countStartedSession = true;
       }
     } else if (!bothConnected) {
       Object.assign(set, sessionClocks(before, transitionAt));
@@ -335,6 +329,12 @@ export function createSessionPresenceConsumer({
       { session, returnDocument: 'after' },
     );
     if (!result) throw sessionVersionConflict();
+    if (countStartedSession) {
+      await incrementLifetimeCounter(db, 'startedSessions', {
+        session,
+        now: observedAt,
+      });
+    }
     await reconcileSessionDeadline(result, checkedAt, session);
   };
   return consume;
