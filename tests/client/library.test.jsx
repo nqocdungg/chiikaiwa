@@ -131,7 +131,17 @@ it('shows up to six topics per island and resets pagination when the level chang
   expect(screen.getByText('Trang đảo 1 / 2')).toBeVisible();
   expect(screen.getByTestId('island-catch')).not.toBe(catchOnNext);
 
+  const filter = screen.getByRole('button', { name: 'Lọc trình độ: Tất cả' });
+  expect(filter).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByRole('button', { name: 'N4' })).toBeNull();
+  fireEvent.click(filter);
+  expect(filter).toHaveAttribute('aria-expanded', 'true');
   fireEvent.click(screen.getByRole('button', { name: 'N4' }));
+  const selectedFilter = screen.getByRole('button', {
+    name: 'Lọc trình độ: N4',
+  });
+  expect(selectedFilter).toHaveAttribute('aria-expanded', 'false');
+  expect(selectedFilter).toHaveFocus();
   expect(
     await screen.findByRole('heading', { name: filteredTopic.title }),
   ).toBeVisible();
@@ -142,6 +152,52 @@ it('shows up to six topics per island and resets pagination when the level chang
     'href',
     '/topics/deck-version',
   );
+});
+
+it('opens search inline and restores focus when it closes', async () => {
+  const secondTopic = { ...topic, id: 'travel', title: 'Đi du lịch' };
+  vi.spyOn(api, 'get').mockImplementation(async (path) => {
+    if (path === '/auth/me') return response(user);
+    if (path === '/topics') return response({ items: [topic, secondTopic] });
+    throw new Error('Unexpected GET ' + path);
+  });
+  open('/topics');
+  expect(
+    await screen.findByRole('heading', { name: topic.title }),
+  ).toBeVisible();
+
+  const search = screen.getByRole('button', { name: 'Tìm bộ chủ đề' });
+  fireEvent.click(search);
+  const field = screen.getByRole('searchbox', { name: 'Từ khóa' });
+  expect(field).toHaveFocus();
+  fireEvent.change(field, { target: { value: 'du lịch' } });
+  fireEvent.keyDown(field, { key: 'Escape' });
+  expect(search).toHaveAttribute('aria-expanded', 'false');
+  expect(search).toHaveFocus();
+
+  fireEvent.click(search);
+  const reopened = screen.getByRole('searchbox', { name: 'Từ khóa' });
+  expect(reopened).toHaveValue('');
+  fireEvent.change(reopened, { target: { value: 'du lịch' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Tìm' }));
+  expect(
+    await screen.findByRole('heading', { name: secondTopic.title }),
+  ).toBeVisible();
+  expect(search).toHaveAttribute('aria-expanded', 'false');
+  expect(search).toHaveFocus();
+
+  fireEvent.click(search);
+  expect(screen.getByRole('searchbox', { name: 'Từ khóa' })).toHaveValue(
+    'du lịch',
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Lọc trình độ: Tất cả' }));
+  expect(search).toHaveAttribute('aria-expanded', 'false');
+  const levelOption = screen.getByRole('button', { name: 'N4' });
+  expect(levelOption).toBeVisible();
+  fireEvent.pointerDown(
+    screen.getByRole('heading', { name: secondTopic.title }),
+  );
+  expect(screen.queryByRole('button', { name: 'N4' })).toBeNull();
 });
 
 it('keeps one learner header mounted when navigating from home to library and history', async () => {

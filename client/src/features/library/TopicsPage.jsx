@@ -1,7 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import chiikawaPeek from '../../assets/mascots/chiikawa-peek.webp';
-import { Icon } from '../../components/ui/controls.jsx';
 import { StudyIcon } from '../../components/ui/StudyIcon.jsx';
 import { Badge } from '../../components/ui/surfaces.jsx';
 import { useAuth } from '../auth/use-auth.js';
@@ -14,6 +13,7 @@ import {
 import { useLibraryPage } from './library-hooks.js';
 import { IslandWaterfront } from './IslandWaterfront.jsx';
 import { LibraryStatus } from './LibraryParts.jsx';
+import { TopicCatalogControls } from './TopicCatalogControls.jsx';
 import { TopicActions, TopicPresentation } from './TopicPresentation.jsx';
 import { islandAsset, topicArt } from './topic-art.js';
 import '../../components/ui/study-studio.css';
@@ -104,51 +104,12 @@ export function TopicsPage() {
           </p>
         </div>
         {!isTrial && (
-          <div className="ck-topic-island__controls">
-            <div
-              className="ck-topic-filters"
-              role="group"
-              aria-label="Trình độ"
-            >
-              {['', ...levels].map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  aria-pressed={level === item}
-                  onClick={() => changeFilters(item, query)}
-                >
-                  {item || 'Tất cả'}
-                </button>
-              ))}
-            </div>
-            <details className="ck-topic-search" key={query}>
-              <summary
-                aria-label="Tìm bộ chủ đề"
-                title="Tìm bộ chủ đề"
-                data-active={Boolean(query)}
-              >
-                <Icon name="search" size={19} />
-              </summary>
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const form = event.currentTarget;
-                  const value = String(new FormData(form).get('q')).trim();
-                  form.closest('details')?.removeAttribute('open');
-                  changeFilters(level, value);
-                }}
-              >
-                <label htmlFor="topic-search">Tìm bộ chủ đề</label>
-                <input
-                  id="topic-search"
-                  name="q"
-                  type="search"
-                  defaultValue={query}
-                />
-                <button type="submit">Tìm</button>
-              </form>
-            </details>
-          </div>
+          <TopicCatalogControls
+            level={level}
+            levels={levels}
+            query={query}
+            onChange={changeFilters}
+          />
         )}
       </div>
       <TopicCatalog

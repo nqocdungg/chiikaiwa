@@ -25,6 +25,9 @@
 }
 
 .ck-topic-island__header {
+  position: relative;
+  z-index: 2;
+  container-type: inline-size;
   grid-column: 1;
   display: flex;
   align-items: center;
@@ -64,94 +67,212 @@
 }
 
 .ck-topic-island__controls {
+  --morph-filter: 6.15rem;
+  --morph-circle: 2.75rem;
+  --morph-gap: 0.32rem;
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
+  flex: none;
+  width: calc(var(--morph-filter) + var(--morph-circle) + var(--morph-gap));
+  height: var(--morph-circle);
+  margin-inline-start: auto;
 }
 
-.ck-topic-filters {
+.ck-topic-morph-row {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
   display: flex;
-  flex-wrap: wrap;
+  max-width: 100cqi;
   align-items: center;
-  gap: 0.24rem;
-  padding: 0.29rem;
-  border: 1px solid #f9deea;
-  border-radius: 1.9rem;
-  background: #fff8f8;
-  box-shadow: 0 0.15rem 0 #f9dee7;
+  gap: var(--morph-gap);
 }
 
-.ck-app .ck-topic-filters button,
-.ck-topic-search summary {
-  display: grid;
-  min-width: clamp(2.15rem, 3.1vw, 3.4rem);
-  min-height: clamp(2.35rem, 2.7vw, 2.8rem);
-  place-items: center;
-  padding-inline: clamp(0.38rem, 0.64vw, 0.75rem);
-  border: 1px solid #f2bace;
-  border-radius: 2rem;
-  background: #fff6f6;
-  color: inherit;
-  font-weight: 800;
-  font-size: clamp(0.85rem, 1.1vw, 1.12rem);
+.ck-topic-morph {
+  --morph-ease: cubic-bezier(0.18, 0.78, 0.22, 1);
+  --morph-blush: color-mix(
+    in srgb,
+    var(--color-selected) 63%,
+    var(--color-brand-soft)
+  );
+  --morph-edge: color-mix(
+    in srgb,
+    var(--color-brand-soft) 72%,
+    var(--color-border)
+  );
+  --button-ghost-text: var(--topic-ink);
+  display: flex;
+  overflow: clip;
+  width: var(--morph-closed);
+  height: var(--morph-circle);
+  min-width: var(--morph-closed);
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0.16rem;
+  border: 1px solid var(--morph-edge);
+  border-radius: 99rem;
+  background: var(--color-surface);
+  box-shadow: 0 2px #f9dee7;
+  transition:
+    width 330ms var(--morph-ease),
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.ck-topic-morph--level {
+  --morph-closed: var(--morph-filter);
+  --morph-open: min(
+    clamp(20.6rem, 28vw, 26.25rem),
+    calc(100cqi - var(--morph-circle) - var(--morph-gap))
+  );
+}
+
+.ck-topic-morph--search {
+  --morph-closed: var(--morph-circle);
+  --morph-open: min(
+    18.25rem,
+    calc(100cqi - var(--morph-filter) - var(--morph-gap))
+  );
+}
+
+.ck-topic-morph[data-expanded='true'] {
+  width: var(--morph-open);
+  border-color: #e9a5bd;
+  box-shadow:
+    0 3px #f4d8e3,
+    0 5px 13px #8033510e;
+}
+
+.ck-app .ck-topic-morph .ck-button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 2.15rem;
+  align-items: center;
+  justify-content: center;
+  border-width: 1px;
+  border-radius: 99rem;
+  padding: 0.18rem 0.38rem;
+  font-size: clamp(0.76rem, 1.05vw, 0.95rem) !important;
+  font-weight: 800 !important;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.ck-topic-filters button:first-child {
-  padding-inline: 0.85rem;
+.ck-topic-morph__trigger {
+  order: 1;
+  width: calc(var(--morph-closed) - 0.32rem - 2px);
+  flex: none;
+  background: transparent;
+  transition:
+    width 330ms var(--morph-ease),
+    background-color 180ms ease;
 }
 
-.ck-topic-filters button:hover,
-.ck-topic-search summary:hover {
-  background: #fde5ec;
+.ck-topic-morph__trigger .ck-button__content {
+  gap: 0.38rem;
 }
 
-.ck-topic-filters button[aria-pressed='true'],
-.ck-topic-search summary[data-active='true'] {
-  border-color: #e88cab;
-  background: #f7b4ce;
+.ck-topic-morph--level[data-expanded='false'],
+.ck-topic-morph--search[data-expanded='false'][data-active='true'] {
+  border-color: var(--morph-edge);
+  background: var(--morph-blush);
   box-shadow:
     inset 0 2px #ffdce9,
     0 2px #f4c9da;
 }
 
-.ck-topic-search summary::-webkit-details-marker {
-  display: none;
+.ck-app .ck-topic-morph__levels button {
+  border-color: var(--morph-edge);
+  background: var(--color-surface);
 }
 
-.ck-topic-search form {
-  position: absolute;
-  z-index: 3;
-  top: calc(100% + 0.5rem);
-  right: 0;
+.ck-app .ck-topic-morph__levels [aria-pressed='true'],
+.ck-app .ck-topic-morph__search button {
+  border-color: var(--morph-edge);
+  background: var(--morph-blush);
+  box-shadow: inset 0 1px var(--color-surface-raised);
+}
+
+.ck-topic-morph[data-expanded='true'] .ck-topic-morph__trigger {
+  width: calc(var(--morph-circle) - 0.32rem - 2px);
+}
+
+.ck-topic-morph__caret {
+  width: 0.37rem;
+  height: 0.37rem;
+  margin-top: -0.12rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.ck-topic-morph__body {
   display: grid;
+  width: calc(var(--morph-open) - var(--morph-circle));
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.16rem;
+  padding-inline: 0.12rem 0.24rem;
+  opacity: 0;
+  transform: translateX(0.35rem);
+  transition:
+    opacity 110ms ease,
+    transform 230ms var(--morph-ease);
+}
+
+.ck-topic-morph[data-expanded='true'] .ck-topic-morph__body {
+  opacity: 1;
+  transform: translateX(0);
+  transition-delay: 90ms;
+}
+
+.ck-topic-morph__levels {
+  grid-template-columns: 1.4fr repeat(5, minmax(0, 1fr));
+}
+
+.ck-topic-morph__search {
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.4rem;
-  width: min(19rem, 94vw);
-  padding: 0.85rem;
-  border: 1px solid var(--topic-border);
-  border-radius: 1rem;
-  background: #fffbfa;
-  box-shadow: 0 0.25rem 0.8rem #6d254017;
 }
 
-.ck-topic-search label {
-  grid-column: 1 / -1;
-  font-weight: 800;
+.ck-topic-morph__search input {
+  min-width: 0;
+  height: 2.15rem;
+  padding-inline: 0.45rem;
+  border: 1px solid var(--morph-edge);
+  border-radius: 99rem;
+  background: var(--color-surface-raised);
+  color: var(--topic-ink);
+  font-size: max(1rem, 1.03vw);
 }
 
-.ck-topic-search :is(input, button) {
-  min-height: 2.6rem;
-  padding: 0.35rem 0.6rem;
-  border: 1px solid #e9bdce;
-  border-radius: 0.65rem;
+.ck-topic-morph__search input::placeholder {
+  color: #8d5471;
 }
 
-.ck-topic-search button {
-  background: #f7b4ce;
-  font-weight: 800;
-  cursor: pointer;
+.ck-app .ck-topic-morph .ck-button:hover:not([aria-pressed='true']) {
+  background-color: var(--color-selected);
+}
+
+.ck-app .ck-topic-morph :is(button, input):focus-visible {
+  outline-color: color-mix(
+    in srgb,
+    var(--color-focus) 70%,
+    var(--color-selected)
+  );
+  outline-offset: -2px;
+}
+
+@container (max-width: 52rem) {
+  .ck-topic-island__header > div:first-child {
+    flex-basis: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ck-topic-morph,
+  .ck-topic-morph__body,
+  .ck-topic-morph__trigger {
+    transition: none;
+  }
 }
 
 .ck-topic-map {

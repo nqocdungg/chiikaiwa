@@ -67,6 +67,7 @@ export function Icon({ name, size = 20, className }) {
  * className?: string,
  * 'aria-label'?: string,
  * 'aria-pressed'?: boolean,
+ * 'aria-expanded'?: boolean,
  * 'aria-controls'?: string,
  * buttonRef?: import('react').Ref<HTMLButtonElement>,
  * }} props
@@ -87,6 +88,7 @@ export function Button({
   className = '',
   'aria-label': ariaLabel,
   'aria-pressed': ariaPressed,
+  'aria-expanded': ariaExpanded,
   'aria-controls': ariaControls,
   buttonRef,
 }) {
@@ -113,6 +115,7 @@ export function Button({
       aria-label={ariaLabel}
       title={ariaLabel}
       aria-pressed={ariaPressed}
+      aria-expanded={ariaExpanded}
       aria-controls={ariaControls}
       data-loading={loading || undefined}
     >
