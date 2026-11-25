@@ -7,6 +7,7 @@ import {
   sessionDeadline,
   CONNECTION_TIMEOUT_MS,
 } from './session-clock.js';
+import { incrementLifetimeCounter } from '../statistics/statistics-repository.js';
 
 const { ObjectId } = mongoose.Types;
 
@@ -181,6 +182,7 @@ export function createSessionPresenceConsumer({
     const set = { updatedAt: transitionAt, presence: after.presence };
     /** @type {Record<string, string>} */
     const unset = {};
+    let countStartedSession = false;
     if (
       bothConnected &&
       (!before.startedAt || before.status === 'reconnecting')
@@ -259,19 +261,7 @@ export function createSessionPresenceConsumer({
           startedAt: checkedAt,
           controllerKey: after.members[index].actorKey,
         });
-        await db.collection('statistics').updateOne(
-          /** @type {any} */ ({ _id: 'lifetime' }),
-          {
-            $inc: { startedSessions: 1 },
-            $set: { updatedAt: observedAt },
-            $setOnInsert: {
-              registeredAccounts: 0,
-              reviewCount: 0,
-              submittedQuizCount: 0,
-            },
-          },
-          { upsert: true, session },
-        );
+        countStartedSession = true;
       }
     } else if (!bothConnected) {
       Object.assign(set, sessionClocks(before, observedAt));
@@ -292,6 +282,12 @@ export function createSessionPresenceConsumer({
       { session, returnDocument: 'after' },
     );
     if (!result) throw sessionVersionConflict();
+    if (countStartedSession) {
+      await incrementLifetimeCounter(db, 'startedSessions', {
+        session,
+        now: observedAt,
+      });
+    }
     await reconcileSessionDeadline(result, checkedAt, session);
   };
   return consume;

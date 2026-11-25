@@ -25,6 +25,7 @@ import { Home } from './features/home/Home.jsx';
 import { InvitationDialog } from './features/invitation/InvitationDialog.jsx';
 import { activeLocationRef } from './features/home/navigation-tracker.js';
 import { Landing } from './features/landing/Landing.jsx';
+import { MatchPage } from './features/matching/MatchPage.jsx';
 import { ProfilePage } from './features/profile/ProfilePage.jsx';
 import { BlockListPage } from './features/safety/BlockListPage.jsx';
 import { SessionSummaryPage } from './features/session-summary/SessionSummaryPage.jsx';
@@ -41,6 +42,14 @@ const RoomPreview = import.meta.env.DEV
   ? lazy(() =>
       import('./demo/RoomPreview.jsx').then((module) => ({
         default: module.RoomPreview,
+      })),
+    )
+  : null;
+
+const MatchPreview = import.meta.env.DEV
+  ? lazy(() =>
+      import('./demo/MatchPreview.jsx').then((module) => ({
+        default: module.MatchPreview,
       })),
     )
   : null;
@@ -96,6 +105,16 @@ export function App({ skipInitialAuthCheck = false } = {}) {
       <div className="ck-app">
         <Suspense fallback={null}>
           <ComponentPreview />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (MatchPreview && pathname === '/__dev/match') {
+    return (
+      <div className="ck-app">
+        <Suspense fallback={null}>
+          <MatchPreview />
         </Suspense>
       </div>
     );
@@ -157,12 +176,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
             {/* SC-04, SC-05, SC-13, SC-16, SC-18: User-only routes (U) */}
             <Route element={<ProtectedRoute allowedRoles={['U']} />}>
               <Route path="/profile" element={<ProfilePage />} />
-              <Route
-                path="/match"
-                element={
-                  <RouteShell screenId="SC-05" title="Tìm bạn Tomodachi" />
-                }
-              />
+              <Route path="/match" element={<MatchPage />} />
               <Route
                 path="/decks"
                 element={<RouteShell screenId="SC-13" title="Bộ thẻ cá nhân" />}

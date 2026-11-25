@@ -23,6 +23,7 @@ import {
   connectDatabase,
   disconnectDatabase,
 } from '../../server/persistence/database.js';
+import { ensureLifetimeBaseline } from '../../server/modules/statistics/statistics-repository.js';
 import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 
 /** @type {MongoMemoryReplSet} */
@@ -190,8 +191,11 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await Promise.all(
-    CLEAN_COLLECTIONS.map((name) => db.collection(name).deleteMany({})),
+    [...CLEAN_COLLECTIONS, 'statistics'].map((name) =>
+      db.collection(name).deleteMany({}),
+    ),
   );
+  await ensureLifetimeBaseline(db);
 });
 
 afterAll(async () => {

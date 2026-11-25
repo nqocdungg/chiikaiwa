@@ -16,6 +16,7 @@ import {
   connectDatabase,
   disconnectDatabase,
 } from '../../server/persistence/database.js';
+import { ensureLifetimeBaseline } from '../../server/modules/statistics/statistics-repository.js';
 import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 import * as identityCrypto from '../../server/modules/identity/crypto.js';
 import {
@@ -182,6 +183,7 @@ beforeEach(async () => {
     db.collection('statistics').deleteMany({}),
     db.collection('rate_limits').deleteMany({}),
   ]);
+  await ensureLifetimeBaseline(db);
 });
 
 afterEach(async () => {

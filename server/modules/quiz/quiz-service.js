@@ -784,7 +784,7 @@ export async function submitQuiz({
     }
 
     // 8. Tăng thống kê trọn đời trong cùng transaction (TX-10)
-    await incrementSubmittedQuizCount(db, { session });
+    await incrementSubmittedQuizCount(db, { session, now });
 
     return updated;
   });
