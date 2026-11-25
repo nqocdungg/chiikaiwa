@@ -1,0 +1,435 @@
+.ck-waterfront {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ck-waterfront__boat,
+.ck-waterfront__pier {
+  position: absolute;
+  width: clamp(4.5rem, 13%, 9.75rem);
+}
+
+.ck-waterfront__boat {
+  left: 17%;
+  bottom: 6.5%;
+}
+
+.ck-waterfront__pier {
+  right: 24%;
+  bottom: 11%;
+  width: clamp(4.5rem, 12%, 9rem);
+  aspect-ratio: 1.26;
+}
+
+.ck-waterfront__stroke {
+  --row-duration: 1.55s;
+  position: relative;
+  isolation: isolate;
+}
+
+.ck-waterfront__stroke img,
+.ck-waterfront__dock {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ck-waterfront__dock {
+  position: absolute;
+  bottom: 0;
+}
+
+.ck-waterfront__float {
+  transform-origin: center 78%;
+  animation: ck-waterfront-float 5.6s ease-in-out infinite;
+}
+
+.ck-waterfront__stroke[data-rowing] {
+  animation: ck-waterfront-push var(--row-duration) both;
+}
+
+.ck-waterfront__oar {
+  position: absolute;
+  z-index: -1;
+  top: 55%;
+  width: 50%;
+  height: max(2px, 3%);
+  border: 1px solid #ac7554;
+  border-radius: 999px;
+  background: #e9b98d;
+  transform: rotate(var(--rest));
+  animation: ck-waterfront-oar 4.6s ease-in-out infinite;
+}
+
+.ck-waterfront__oar::before {
+  position: absolute;
+  top: 50%;
+  width: 46%;
+  height: 290%;
+  border: 1px solid #ac7554;
+  border-radius: 68% 42% 50% 60%;
+  background: #f5cfaa;
+  transform: translateY(-50%);
+  content: '';
+}
+
+.ck-waterfront__oar--left {
+  --rest: -33deg;
+  --dip: -57deg;
+  --pull: -12deg;
+  right: 73%;
+  transform-origin: right center;
+}
+
+.ck-waterfront__oar--left::before {
+  left: -12%;
+}
+
+.ck-waterfront__oar--right {
+  --rest: 32deg;
+  --dip: 58deg;
+  --pull: 8deg;
+  left: 73%;
+  transform-origin: left center;
+  animation-delay: -0.17s;
+}
+
+.ck-waterfront__oar--right::before {
+  right: -12%;
+}
+
+.ck-waterfront__stroke[data-rowing] .ck-waterfront__oar {
+  animation:
+    ck-waterfront-oar var(--row-duration) ease-in-out,
+    ck-waterfront-oar 4.6s var(--row-duration) ease-in-out infinite;
+}
+
+.ck-waterfront__fishing {
+  position: absolute;
+  inset: 0;
+  --reel-duration: 2.1s;
+}
+
+.ck-waterfront__angler {
+  position: absolute;
+  right: 20%;
+  bottom: 33%;
+  width: 45%;
+  height: auto;
+  transform-origin: center bottom;
+  animation: ck-waterfront-breathe 4.8s ease-in-out infinite;
+}
+
+.ck-waterfront__fishing[data-reeling] .ck-waterfront__angler {
+  animation:
+    ck-waterfront-tug var(--reel-duration) ease-in-out,
+    ck-waterfront-breathe 4.8s var(--reel-duration) ease-in-out infinite;
+}
+
+.ck-waterfront__rod {
+  position: absolute;
+  left: 70%;
+  bottom: 53%;
+  width: 43%;
+  height: 19%;
+  transform-origin: left bottom;
+  animation: ck-waterfront-rod-idle 4.8s ease-in-out infinite;
+}
+
+.ck-waterfront__rod::before {
+  position: absolute;
+  inset: 0;
+  border-top: clamp(1px, 0.18vw, 3px) solid #825533;
+  border-radius: 100% 32% 0 0;
+  transform: rotate(-8deg);
+  transform-origin: right top;
+  content: '';
+}
+
+.ck-waterfront__fishing[data-reeling] .ck-waterfront__rod {
+  animation:
+    ck-waterfront-reel var(--reel-duration) ease-in-out,
+    ck-waterfront-rod-idle 4.8s var(--reel-duration) ease-in-out infinite;
+}
+
+.ck-waterfront__line {
+  position: absolute;
+  top: 0;
+  left: calc(100% - 1px);
+  height: 374%;
+  border-left: 1px solid #986f52;
+  transform-origin: top left;
+}
+
+.ck-waterfront__fishing[data-reeling] .ck-waterfront__line {
+  animation: ck-waterfront-line var(--reel-duration) ease-in-out;
+}
+
+.ck-waterfront__catch {
+  position: absolute;
+  top: 100%;
+  left: -1px;
+  width: clamp(0.85rem, 1.6vw, 1.5rem);
+  max-width: none;
+  height: auto;
+  opacity: 0;
+  transform-origin: left top;
+  animation: ck-waterfront-catch var(--reel-duration) both;
+}
+
+.ck-waterfront__ripples {
+  position: absolute;
+  top: 99%;
+  left: 113%;
+  width: 28%;
+  aspect-ratio: 3;
+  transform: translateX(-50%);
+}
+
+.ck-waterfront__ripples::before,
+.ck-waterfront__ripples::after {
+  position: absolute;
+  inset: 0;
+  border: 1.4px solid #fffcf2;
+  border-radius: 50%;
+  animation: ck-waterfront-ripple 3.2s ease-out infinite;
+  content: '';
+}
+
+.ck-waterfront__ripples::after {
+  animation-delay: -1.6s;
+}
+
+.ck-waterfront__fishing[data-reeling] .ck-waterfront__ripples::before {
+  animation:
+    ck-waterfront-ripple 0.9s ease-out,
+    ck-waterfront-ripple 3.2s 0.9s ease-out infinite;
+}
+
+.ck-waterfront__wave {
+  position: absolute;
+  display: flex;
+  width: clamp(1rem, 5%, 3.4rem);
+  height: clamp(0.28rem, 0.65vw, 0.62rem);
+  animation: ck-waterfront-wave 5.8s ease-in-out infinite;
+}
+
+.ck-waterfront__wave::before,
+.ck-waterfront__wave::after {
+  flex: 1;
+  border-bottom: clamp(1px, 0.19vw, 3px) solid #fffdf5;
+  border-radius: 0 0 65% 60%;
+  content: '';
+}
+
+.ck-waterfront__wave--left {
+  left: 12.5%;
+  bottom: 9%;
+}
+
+.ck-waterfront__wave--middle {
+  left: 32%;
+  bottom: 11.5%;
+  width: clamp(1rem, 3.2%, 2.2rem);
+  animation-delay: -2.8s;
+}
+
+.ck-waterfront__wave--right {
+  right: 12%;
+  bottom: 9%;
+  animation-delay: -1.5s;
+}
+
+@keyframes ck-waterfront-float {
+  0%,
+  100% {
+    transform: translate(-1%, 0) rotate(-1.6deg);
+  }
+  50% {
+    transform: translate(1%, -3%) rotate(1.8deg);
+  }
+}
+
+@keyframes ck-waterfront-push {
+  0%,
+  100% {
+    transform: translate(0) rotate(0);
+  }
+  21% {
+    transform: translate(-2%, 1%) rotate(-3deg);
+  }
+  54% {
+    transform: translate(10%, -5%) rotate(3deg);
+  }
+  79% {
+    transform: translate(5%, -1%) rotate(-0.8deg);
+  }
+}
+
+@keyframes ck-waterfront-oar {
+  0%,
+  100% {
+    transform: rotate(var(--rest));
+  }
+  28% {
+    transform: rotate(var(--dip));
+  }
+  67% {
+    transform: rotate(var(--pull));
+  }
+}
+
+@keyframes ck-waterfront-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.985, 1.025) rotate(-1.2deg);
+  }
+}
+
+@keyframes ck-waterfront-tug {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  17% {
+    transform: translateY(2%) rotate(4deg) scale(1.025, 0.96);
+  }
+  38%,
+  62% {
+    transform: translateY(-3%) rotate(-7deg) scale(0.985, 1.025);
+  }
+  82% {
+    transform: translateY(1%) rotate(1deg);
+  }
+}
+
+@keyframes ck-waterfront-rod-idle {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  50% {
+    transform: rotate(-2.5deg);
+  }
+}
+
+@keyframes ck-waterfront-reel {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  17% {
+    transform: rotate(8deg);
+  }
+  35% {
+    transform: rotate(-48deg);
+  }
+  48% {
+    transform: rotate(-38deg);
+  }
+  63% {
+    transform: rotate(-42deg);
+  }
+}
+
+@keyframes ck-waterfront-line {
+  0%,
+  100% {
+    height: 374%;
+    transform: rotate(0);
+  }
+  17% {
+    height: 355%;
+    transform: rotate(-8deg);
+  }
+  35% {
+    height: 146%;
+    transform: rotate(48deg);
+  }
+  48% {
+    height: 161%;
+    transform: rotate(38deg);
+  }
+  63% {
+    height: 168%;
+    transform: rotate(42deg);
+  }
+}
+
+@keyframes ck-waterfront-catch {
+  0%,
+  20%,
+  100% {
+    opacity: 0;
+    transform: rotate(25deg);
+  }
+  35% {
+    opacity: 1;
+    transform: rotate(-15deg);
+  }
+  48% {
+    opacity: 1;
+    transform: rotate(19deg);
+  }
+  63% {
+    opacity: 1;
+    transform: rotate(-8deg);
+  }
+  77% {
+    opacity: 0;
+    transform: rotate(5deg);
+  }
+}
+
+@keyframes ck-waterfront-ripple {
+  0% {
+    transform: scale(0.35);
+    opacity: 0;
+  }
+  22% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.13);
+    opacity: 0;
+  }
+}
+
+@keyframes ck-waterfront-wave {
+  0%,
+  100% {
+    transform: translateX(-9%) scaleX(0.85);
+    opacity: 0.42;
+  }
+  50% {
+    transform: translateX(12%) scaleX(1.02);
+    opacity: 0.92;
+  }
+}
+
+@media (max-width: 470px) {
+  .ck-waterfront__boat {
+    left: 9%;
+  }
+  .ck-waterfront__pier {
+    right: 13%;
+  }
+  .ck-waterfront__wave--middle {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ck-waterfront,
+  .ck-waterfront *,
+  .ck-waterfront *::before,
+  .ck-waterfront *::after {
+    animation: none !important;
+  }
+}

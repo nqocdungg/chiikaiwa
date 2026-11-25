@@ -118,15 +118,25 @@ it('shows up to six topics per island and resets pagination when the level chang
     'href',
     '/topics/version-2',
   );
+  expect(screen.queryByTestId('island-catch')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Trang đảo tiếp theo' }));
   expect(within(map).getAllByRole('button')).toHaveLength(1);
   expect(screen.getByText('Trang đảo 2 / 2')).toBeVisible();
+  const catchOnNext = screen.getByTestId('island-catch');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Trang đảo 2' }));
+  expect(screen.getByTestId('island-catch')).toBe(catchOnNext);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Trang đảo 1' }));
+  expect(screen.getByText('Trang đảo 1 / 2')).toBeVisible();
+  expect(screen.getByTestId('island-catch')).not.toBe(catchOnNext);
 
   fireEvent.click(screen.getByRole('button', { name: 'N4' }));
   expect(
     await screen.findByRole('heading', { name: filteredTopic.title }),
   ).toBeVisible();
   expect(screen.getByText('Trang đảo 1 / 1')).toBeVisible();
+  expect(screen.queryByTestId('island-catch')).toBeNull();
   expect(get.mock.calls.map(([path]) => path)).toContain('/topics?level=N4');
   expect(screen.getByRole('link', { name: 'Bắt đầu học' })).toHaveAttribute(
     'href',

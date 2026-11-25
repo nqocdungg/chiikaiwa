@@ -12,6 +12,7 @@ import {
   readLibrary,
 } from './library-api.js';
 import { useLibraryPage } from './library-hooks.js';
+import { IslandWaterfront } from './IslandWaterfront.jsx';
 import { LibraryStatus } from './LibraryParts.jsx';
 import { TopicActions, TopicPresentation } from './TopicPresentation.jsx';
 import { islandAsset, topicArt } from './topic-art.js';
@@ -198,16 +199,7 @@ function TopicCatalog({ load, query, isTrial }) {
           src={islandAsset('terrain')}
           alt=""
         />
-        <img
-          className="ck-topic-map__boat"
-          src={islandAsset('mascot-boat')}
-          alt=""
-        />
-        <img
-          className="ck-topic-map__pier"
-          src={islandAsset('mascot-pier')}
-          alt=""
-        />
+        <IslandWaterfront page={selected ? page : null} />
         <LibraryStatus
           {...catalog}
           empty={!selected}
