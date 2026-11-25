@@ -19,6 +19,7 @@ import { createInvitationRouter } from './modules/invitations/invitation-router.
 import { createSavedItemRouter } from './modules/learning/saved-item-router.js';
 import { createStudyCardRouter } from './modules/learning/study-card-router.js';
 import { createQuizRouter } from './modules/quiz/quiz-router.js';
+import { createAdminStatisticsRouter } from './modules/statistics/admin-statistics-router.js';
 import { createSafetyRouter } from './modules/safety/safety-router.js';
 import { createSessionsRouter } from './modules/sessions/sessions-router.js';
 import { createSessionLearningRouter } from './modules/sessions/session-learning-router.js';
@@ -159,6 +160,7 @@ export function createApp({
   app.use('/api/v1/sessions', createSessionsRouter());
   app.use('/api/v1', createSessionLearningRouter());
   app.use('/api/v1/admin/content', createAdminContentRouter());
+  app.use('/api/v1/admin/statistics', createAdminStatisticsRouter());
   app.use('/api/v1/admin/users', createAdminUsersRouter());
   app.use('/api/v1/admin/reports', createAdminReportsRouter());
   app.use('/api/v1', createLearnerContentRouter());

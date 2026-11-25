@@ -11,6 +11,7 @@ import {
   idempotencyConflictError,
   isDuplicateKeyError,
 } from '../coordination/coordination-service.js';
+import { incrementReviewCount } from '../statistics/statistics-repository.js';
 import { guestAccess } from './guest-write-guard.js';
 import { verifyReviewTicket } from './review-ticket.js';
 import {
@@ -167,23 +168,7 @@ export async function submitStudyReview({
       ...lifecycle,
     };
     await logs.insertOne(review, { session });
-    const statistics =
-      /** @type {import('mongoose').mongo.Collection<{_id: string, reviewCount: number, updatedAt: Date, registeredAccounts: number, startedSessions: number, submittedQuizCount: number}>} */ (
-        db.collection('statistics')
-      );
-    await statistics.updateOne(
-      { _id: 'lifetime' },
-      {
-        $inc: { reviewCount: 1 },
-        $currentDate: { updatedAt: true },
-        $setOnInsert: {
-          registeredAccounts: 0,
-          startedSessions: 0,
-          submittedQuizCount: 0,
-        },
-      },
-      { session, upsert: true },
-    );
+    await incrementReviewCount(db, { session, now: reviewedAt });
     return reviewResult(review);
   };
 

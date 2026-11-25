@@ -25,6 +25,7 @@ describe('Admin HTTP Guard and Foundation Unit Tests (BE-026, H-01 - H-08)', () 
   const app = createApp({ checkHealth: async () => {} });
 
   const adminEndpoints = [
+    { method: 'get', path: '/api/v1/admin/statistics' },
     { method: 'get', path: '/api/v1/admin/users' },
     {
       method: 'patch',
@@ -35,7 +36,7 @@ describe('Admin HTTP Guard and Foundation Unit Tests (BE-026, H-01 - H-08)', () 
     { method: 'patch', path: '/api/v1/admin/reports/507f1f77bcf86cd799439011' },
   ];
 
-  describe('H-01: Không cookie gọi 5 endpoint -> 401 AUTH_REQUIRED', () => {
+  describe('H-01: Không cookie gọi Admin endpoint -> 401 AUTH_REQUIRED', () => {
     it.each(adminEndpoints)(
       '$method $path trả về 401 khi không có cookie xác thực',
       async ({ method, path }) => {
@@ -59,7 +60,7 @@ describe('Admin HTTP Guard and Foundation Unit Tests (BE-026, H-01 - H-08)', () 
     );
   });
 
-  describe('H-02: Người học (learner) gọi 5 endpoint -> 403 FORBIDDEN', () => {
+  describe('H-02: Người học (learner) gọi Admin endpoint -> 403 FORBIDDEN', () => {
     it.each(adminEndpoints)(
       '$method $path trả về 403 FORBIDDEN khi người dùng chỉ là learner',
       async ({ method, path }) => {
@@ -97,7 +98,7 @@ describe('Admin HTTP Guard and Foundation Unit Tests (BE-026, H-01 - H-08)', () 
     );
   });
 
-  describe('H-03: Khách (guest) gọi 5 endpoint -> 403 FORBIDDEN', () => {
+  describe('H-03: Khách (guest) gọi Admin endpoint -> 403 FORBIDDEN', () => {
     it.each(adminEndpoints)(
       '$method $path trả về 403 FORBIDDEN khi người dùng là guest',
       async ({ method, path }) => {
@@ -170,13 +171,18 @@ describe('Admin HTTP Guard and Foundation Unit Tests (BE-026, H-01 - H-08)', () 
       expect(res.body.error.code).toBe('CSRF_INVALID');
     });
 
-    it('GET /admin/users và GET /admin/reports không bắt buộc CSRF token', async () => {
+    it('GET /admin/statistics, /admin/users và /admin/reports không bắt buộc CSRF token', async () => {
       // Khi không có CSRF token, GET endpoint vẫn vào được guard requireAuth (trả 401 do thiếu session, chứ không phải 403 CSRF_INVALID)
       const res1 = await request(app).get('/api/v1/admin/users').expect(401);
       expect(res1.body.error.code).toBe('AUTH_REQUIRED');
 
       const res2 = await request(app).get('/api/v1/admin/reports').expect(401);
       expect(res2.body.error.code).toBe('AUTH_REQUIRED');
+
+      const res3 = await request(app)
+        .get('/api/v1/admin/statistics')
+        .expect(401);
+      expect(res3.body.error.code).toBe('AUTH_REQUIRED');
     });
   });
 
