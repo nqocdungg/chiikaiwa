@@ -3,6 +3,7 @@ import { AppError } from '../../middleware/http-error.js';
 import { processLivekitWebhook } from './livekit-webhook-service.js';
 import { connectDatabase } from '../../persistence/database.js';
 import { finishSessionEffects } from './media-cleanup-service.js';
+import { reconcileScreenShare } from './screen-share-service.js';
 
 /**
  * @param {{verify?: typeof verifyLivekitWebhook, process?: typeof processLivekitWebhook, onVerifiedPresence?: import('./livekit-webhook-service.js').PresenceConsumer, afterCommit?: (roomName: string) => Promise<void>}} [options]
@@ -46,5 +47,8 @@ export function createLivekitWebhookHandler({
 export async function finishWebhookEffects(roomName) {
   const db = await connectDatabase();
   const doc = await db.collection('practice_sessions').findOne({ roomName });
-  if (doc) await finishSessionEffects(doc);
+  if (doc) {
+    await finishSessionEffects(doc);
+    await reconcileScreenShare(doc);
+  }
 }

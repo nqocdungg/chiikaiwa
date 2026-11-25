@@ -9,11 +9,10 @@ import {
   setGuestSessionCookie,
 } from '../../middleware/cookies.js';
 import {
-  consumeRateLimit,
+  enforceInvitationCodeRateLimit,
   enforceWriteRateLimit,
   getClientIp,
 } from '../../middleware/rate-limit.js';
-import { connectDatabase } from '../../persistence/database.js';
 import {
   cancelInvitation,
   cancelInviteRequest,
@@ -22,8 +21,6 @@ import {
   createInviteRequest,
   getInvitation,
   getInviteRequest,
-  INVITATION_CODE_LOOKUP_MAX,
-  INVITATION_CODE_LOOKUP_WINDOW_MS,
   listInviteRequests,
   respondToInviteRequest,
 } from './invitation-service.js';
@@ -79,15 +76,7 @@ export function createInvitationRouter({ assertPairCanEnterSession } = {}) {
       }
       const { code } = validateCreateGuestTrialInput(request.body);
       const operation = operationId(request);
-      await applyWriteLimit(request, response);
-      const db = await connectDatabase();
-      await consumeRateLimit({
-        db,
-        scope: 'invitation-code-ip',
-        subjectKey: getClientIp(request),
-        limit: INVITATION_CODE_LOOKUP_MAX,
-        windowMs: INVITATION_CODE_LOOKUP_WINDOW_MS,
-      });
+      await enforceInvitationCodeRateLimit({ ip: getClientIp(request) });
       const result = await createGuestTrial({
         code,
         operationId: operation,
@@ -166,14 +155,7 @@ export function createInvitationRouter({ assertPairCanEnterSession } = {}) {
       try {
         const { code } = validateCreateInviteRequestInput(request.body);
         await applyWriteLimit(request, response);
-        const db = await connectDatabase();
-        await consumeRateLimit({
-          db,
-          scope: 'invitation-code-ip',
-          subjectKey: getClientIp(request),
-          limit: INVITATION_CODE_LOOKUP_MAX,
-          windowMs: INVITATION_CODE_LOOKUP_WINDOW_MS,
-        });
+        await enforceInvitationCodeRateLimit({ ip: getClientIp(request) });
         const data = await createInviteRequest({
           identity: response.locals.identity,
           code,

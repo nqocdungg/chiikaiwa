@@ -4,13 +4,14 @@ const CHAT_TOPIC = 'chiikaiwa.chat.v1';
 const MAX_PACKET_BYTES = 15000;
 
 /** Owns one SDK room; business state remains in the Session API.
- * @param {{sessionId: string, memberKeys: string[], onChange: () => void, onMessage: (message: {id: string, sender: string, text: string}) => void, onSessionUpdate: (version: number) => void, room?: Room}} options */
+ * @param {{sessionId: string, memberKeys: string[], onChange: () => void, onMessage: (message: {id: string, sender: string, text: string}) => void, onSessionUpdate: (version: number) => void, onReconnect?: () => void, room?: Room}} options */
 export function createMediaRoom({
   sessionId,
   memberKeys,
   onChange,
   onMessage,
   onSessionUpdate,
+  onReconnect,
   room = new Room(),
 }) {
   let disposed = false;
@@ -31,6 +32,7 @@ export function createMediaRoom({
   function changed() {
     if (!disposed) onChange();
   }
+  if (onReconnect) listen(RoomEvent.Reconnected, onReconnect);
   for (const event of [
     RoomEvent.ConnectionStateChanged,
     RoomEvent.ParticipantConnected,
