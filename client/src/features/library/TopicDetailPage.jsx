@@ -1,7 +1,6 @@
-import { useCallback } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { useCallback, useEffect, useRef } from 'react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import { Button } from '../../components/ui/controls.jsx';
-import { Badge } from '../../components/ui/surfaces.jsx';
 import {
   collectLibraryItems,
   libraryPath,
@@ -16,6 +15,12 @@ import {
   LibraryMore,
   LibraryStatus,
 } from './LibraryParts.jsx';
+import {
+  TopicActions,
+  TopicBack,
+  TopicPresentation,
+} from './TopicPresentation.jsx';
+import './topic-island.css';
 
 /** @typedef {import('./library-api.js').Knowledge} Knowledge */
 /** @typedef {import('./library-api.js').SavedItem} SavedItem */
@@ -39,6 +44,10 @@ export function TopicDetailPage() {
 
 /** @param {{versionId: string, knowledgeId: string|null, revision: string|null}} props */
 function TopicDetail({ versionId, knowledgeId, revision }) {
+  const { state } = useLocation();
+  const topicSearch =
+    typeof state?.topicSearch === 'string' ? state.topicSearch : '';
+  const detailPath = '/topics/' + encodeURIComponent(versionId);
   const path = `/topic-versions/${encodeURIComponent(versionId)}`;
   const load = useCallback(
     /** @param {string|null} _cursor @param {AbortSignal} signal */
@@ -55,10 +64,15 @@ function TopicDetail({ versionId, knowledgeId, revision }) {
   const topic = topicPage.data?.[0];
 
   return (
-    <section data-screen-id="SC-11">
-      <Link className="ck-library-text-link ck-library-back" to="/topics">
-        <span aria-hidden="true">‹</span> Kho chủ đề
-      </Link>
+    <section className="ck-topic-detail" data-screen-id="SC-11">
+      <TopicBack
+        to={{
+          pathname: '/topics',
+          search: topicSearch ? '?' + topicSearch : '',
+        }}
+      >
+        Quay lại Kho chủ đề
+      </TopicBack>
       <LibraryStatus
         {...topicPage}
         empty={!topic}
@@ -67,38 +81,12 @@ function TopicDetail({ versionId, knowledgeId, revision }) {
       >
         {topic && (
           <>
-            <div className="ck-library-detail-heading">
-              <div>
-                <Badge tone="accent">{topic.level}</Badge>
-                <h1>{topic.title}</h1>
-                {topic.description && <p>{topic.description}</p>}
-                <p className="ck-library-count">
-                  {topic.knowledgeCount} mục kiến thức
-                </p>
-              </div>
-              <div className="ck-library-actions">
-                {topic.knowledgeCount > 0 && (
-                  <Link
-                    className="ck-button ck-button--primary"
-                    to={libraryPath('/study', {
-                      scope: 'topic',
-                      topicVersionId: versionId,
-                      mode: 'all',
-                    })}
-                  >
-                    Ôn flashcard
-                  </Link>
-                )}
-                {topic.questionCount > 0 && (
-                  <Link
-                    className="ck-button ck-button--secondary"
-                    to={libraryPath('/quiz', { deckVersionId: versionId })}
-                  >
-                    Luyện quiz
-                  </Link>
-                )}
-              </div>
-            </div>
+            <TopicPresentation topic={topic} detail />
+            <TopicActions
+              detailPath={detailPath}
+              state={state}
+              detail={topic}
+            />
             <TopicKnowledge
               path={path}
               deckVersionId={versionId}
@@ -114,6 +102,15 @@ function TopicDetail({ versionId, knowledgeId, revision }) {
 
 /** @param {{path: string, deckVersionId: string, knowledgeId: string|null, revision: string|null}} props */
 function TopicKnowledge({ path, deckVersionId, knowledgeId, revision }) {
+  const { hash } = useLocation();
+  const heading = useRef(/** @type {HTMLDivElement | null} */ (null));
+
+  useEffect(() => {
+    if (hash === '#topic-knowledge' && heading.current) {
+      heading.current.focus({ preventScroll: true });
+      heading.current.scrollIntoView?.({ block: 'start' });
+    }
+  }, [hash]);
   const loadKnowledge = useCallback(
     /** @param {string|null} cursor @param {AbortSignal} signal */
     async (cursor, signal) => {
@@ -125,12 +122,14 @@ function TopicKnowledge({ path, deckVersionId, knowledgeId, revision }) {
             abortSignal,
           )
         );
-      if (knowledgeId && revision) {
+      if (revision) {
         return {
           items: await collectLibraryItems(
             readPage,
             signal,
-            (item) => item.id === knowledgeId && item.versionId === revision,
+            (item) =>
+              (!knowledgeId || item.id === knowledgeId) &&
+              item.versionId === revision,
           ),
         };
       }
@@ -163,13 +162,16 @@ function TopicKnowledge({ path, deckVersionId, knowledgeId, revision }) {
 
   return (
     <>
-      <div className="ck-library-section-heading">
+      <div
+        className="ck-library-section-heading"
+        id="topic-knowledge"
+        ref={heading}
+        tabIndex={-1}
+      >
         <h2 className="ck-library-section-title">
-          {knowledgeId && revision
-            ? 'Kiến thức ở bản nguồn'
-            : 'Kiến thức trong chủ đề'}
+          {revision ? 'Kiến thức ở bản nguồn' : 'Kiến thức trong chủ đề'}
         </h2>
-        {knowledgeId && revision && (
+        {revision && (
           <Link
             className="ck-library-text-link"
             to={`/topics/${encodeURIComponent(deckVersionId)}`}
@@ -195,7 +197,7 @@ function TopicKnowledge({ path, deckVersionId, knowledgeId, revision }) {
         empty={!knowledge.data?.length}
         retry={knowledge.reload}
         emptyText={
-          knowledgeId && revision
+          revision
             ? 'Không tìm thấy mục kiến thức trong bản nguồn này.'
             : 'Chủ đề này chưa có mục kiến thức.'
         }

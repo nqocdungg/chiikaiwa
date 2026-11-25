@@ -7,6 +7,8 @@ import { LearningLayout } from './components/layout/LearningLayout.jsx';
 import { LibraryLayout } from './features/library/LibraryLayout.jsx';
 import { SavedPage } from './features/library/SavedPage.jsx';
 import { TopicDetailPage } from './features/library/TopicDetailPage.jsx';
+import { TopicFlashcardPage } from './features/library/TopicFlashcardPage.jsx';
+import { TopicQuizPage } from './features/library/TopicQuizPage.jsx';
 import { TopicsPage } from './features/library/TopicsPage.jsx';
 import {
   InvitationRoute,
@@ -202,6 +204,14 @@ export function App({ skipInitialAuthCheck = false } = {}) {
                 <Route
                   path="/topics/:topicVersionId"
                   element={<TopicDetailPage />}
+                />
+                <Route
+                  path="/topics/:topicVersionId/flashcard"
+                  element={<TopicFlashcardPage />}
+                />
+                <Route
+                  path="/topics/:topicVersionId/quiz"
+                  element={<TopicQuizPage />}
                 />
                 <Route path="/saved" element={<SavedPage />} />
               </Route>

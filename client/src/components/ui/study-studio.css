@@ -149,7 +149,7 @@
   gap: 0.65rem;
 }
 
-.ck-home-studio .ck-home-action {
+:is(.ck-home-studio, .ck-topic-start) .ck-home-action {
   --sticker-face: #fff4e9;
   --sticker-press: #f9a1bb;
   --sticker-hover-edge: #be6984;
@@ -174,7 +174,7 @@
     background-color 135ms ease;
 }
 
-.ck-home-studio .ck-home-action--main {
+:is(.ck-home-studio, .ck-topic-start) .ck-home-action--main {
   --sticker-face: #f6bed2;
   --sticker-press: #e982a4;
   --sticker-hover-edge: #b0486e;
@@ -240,13 +240,14 @@
   color: #782645;
 }
 
-.ck-home-studio .ck-home-action:not(:disabled):is(:hover, :focus-visible) {
+:is(.ck-home-studio, .ck-topic-start)
+  .ck-home-action:not(:disabled):is(:hover, :focus-visible) {
   --sticker-edge: var(--sticker-hover-edge);
   background: var(--sticker-hover);
   transform: translateY(-1px);
 }
 
-.ck-home-studio
+:is(.ck-home-studio, .ck-topic-start)
   .ck-home-action:not(:disabled):is(:active, [data-home-touched]) {
   --sticker-edge: #9d4264;
   background: var(--sticker-press);
@@ -261,7 +262,7 @@
   transform: scale(0.92);
 }
 
-.ck-home-studio .ck-home-action:disabled {
+:is(.ck-home-studio, .ck-topic-start) .ck-home-action:disabled {
   --sticker-face: #f4e9ed;
   background: #f4e9ed;
   border-color: var(--color-border);
@@ -479,7 +480,7 @@
   .ck-home-glyph,
   .ck-home-shortcut-icon img,
   .ck-home-shortcut,
-  .ck-home-studio .ck-home-action {
+  :is(.ck-home-studio, .ck-topic-start) .ck-home-action {
     transition: none;
   }
 

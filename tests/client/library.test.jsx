@@ -80,33 +80,58 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('switches the catalog filter without reusing the previous cursor', async () => {
+it('shows up to six topics per island and resets pagination when the level changes', async () => {
+  const topics = Array.from({ length: 7 }, (_, index) => ({
+    ...topic,
+    id: 'topic-' + index,
+    versionId: 'version-' + index,
+    title: topic.title + ' ' + (index + 1),
+  }));
+  const filteredTopic = {
+    ...topic,
+    title: 'Tìm đường đến nhà ga',
+    level: 'N4',
+  };
   const get = vi.spyOn(api, 'get').mockImplementation(async (path) => {
     if (path === '/auth/me') return response(user);
     if (path === '/topics')
-      return response({ items: [topic], nextCursor: 'page-two' });
+      return response({ items: topics.slice(0, 6), nextCursor: 'page-two' });
+    if (path === '/topics?cursor=page-two')
+      return response({ items: topics.slice(6) });
     if (path === '/topics?level=N4')
-      return response({
-        items: [{ ...topic, title: 'Tìm đường đến nhà ga', level: 'N4' }],
-      });
-    throw new Error(`Unexpected GET ${path}`);
+      return response({ items: [filteredTopic] });
+    throw new Error('Unexpected GET ' + path);
   });
   open('/topics');
   expect(
-    await screen.findByRole('heading', { name: topic.title }),
+    await screen.findByRole('heading', { name: topics[0]?.title }),
   ).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Xem thêm' })).toBeEnabled();
-  fireEvent.change(screen.getByLabelText('Trình độ'), {
-    target: { value: 'N4' },
-  });
+  const map = screen.getByRole('list', { name: 'Bộ chủ đề trên đảo' });
+  expect(within(map).getAllByRole('button')).toHaveLength(6);
+  fireEvent.click(
+    within(map).getByRole('button', {
+      name: new RegExp(topics[2]?.title ?? ''),
+    }),
+  );
+  expect(screen.getByRole('heading', { name: topics[2]?.title })).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Bắt đầu học' })).toHaveAttribute(
+    'href',
+    '/topics/version-2',
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Trang đảo tiếp theo' }));
+  expect(within(map).getAllByRole('button')).toHaveLength(1);
+  expect(screen.getByText('Trang đảo 2 / 2')).toBeVisible();
+
+  fireEvent.click(screen.getByRole('button', { name: 'N4' }));
   expect(
-    await screen.findByRole('heading', { name: 'Tìm đường đến nhà ga' }),
+    await screen.findByRole('heading', { name: filteredTopic.title }),
   ).toBeVisible();
-  expect(screen.queryByRole('heading', { name: topic.title })).toBeNull();
+  expect(screen.getByText('Trang đảo 1 / 1')).toBeVisible();
   expect(get.mock.calls.map(([path]) => path)).toContain('/topics?level=N4');
-  expect(
-    screen.getByRole('link', { name: 'Xem học liệu: Tìm đường đến nhà ga' }),
-  ).toHaveAttribute('href', '/topics/deck-version');
+  expect(screen.getByRole('link', { name: 'Bắt đầu học' })).toHaveAttribute(
+    'href',
+    '/topics/deck-version',
+  );
 });
 
 it('keeps one learner header mounted when navigating from home to library and history', async () => {

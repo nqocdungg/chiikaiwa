@@ -1,4 +1,3 @@
-import { Link } from 'react-router';
 import { Button } from '../../components/ui/controls.jsx';
 import { Badge, Card } from '../../components/ui/surfaces.jsx';
 import searchIcon from './assets/search.svg';
@@ -35,33 +34,6 @@ export function LibrarySearch({ id, name, label, placeholder, defaultValue }) {
         />
       </span>
     </label>
-  );
-}
-
-/** @param {{topic: import('./library-api.js').Topic}} props */
-export function TopicCard({ topic }) {
-  return (
-    <Card className="ck-library-topic">
-      <div className="ck-library-topic__body">
-        <span className="ck-library-topic__mark" aria-hidden="true" lang="ja">
-          話
-        </span>
-        <div>
-          <h2>{topic.title}</h2>
-          {topic.description && <p>{topic.description}</p>}
-        </div>
-      </div>
-      <div className="ck-library-topic__footer">
-        <Badge tone="accent">{topic.level}</Badge>
-        <Link
-          className="ck-library-text-link"
-          to={`/topics/${encodeURIComponent(topic.versionId)}`}
-          aria-label={`Xem học liệu: ${topic.title}`}
-        >
-          Xem học liệu <span aria-hidden="true">›</span>
-        </Link>
-      </div>
-    </Card>
   );
 }
 
