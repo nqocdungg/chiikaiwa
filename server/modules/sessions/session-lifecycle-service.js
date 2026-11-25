@@ -1,13 +1,13 @@
-import { randomInt } from 'node:crypto';
 import mongoose from 'mongoose';
+import { randomInt } from 'node:crypto';
 import { connectDatabase } from '../../persistence/database.js';
-import { mediaUnavailable, sessionVersionConflict } from './sessions-errors.js';
+import { incrementLifetimeCounter } from '../statistics/statistics-repository.js';
 import {
+  CONNECTION_TIMEOUT_MS,
   sessionClocks,
   sessionDeadline,
-  CONNECTION_TIMEOUT_MS,
 } from './session-clock.js';
-import { incrementLifetimeCounter } from '../statistics/statistics-repository.js';
+import { mediaUnavailable, sessionVersionConflict } from './sessions-errors.js';
 
 const { ObjectId } = mongoose.Types;
 
@@ -219,18 +219,15 @@ export function createSessionPresenceConsumer({
     }
     /** @type {Record<string, string>} */
     const unset = {};
-    const unset = {};
-let countStartedSession = false;
-if (replacedConnection && bothConnected) {
-  Object.assign(set, sessionClocks(before, transitionAt), {
-    activeSince: checkedAt,
-  });
-  if (!before.deckVersionId) set.selectionRunningSince = checkedAt;
-  unset.pendingAction = '';
-} else if (
-  bothConnected &&
-  (!before.startedAt || before.status === 'reconnecting')
-) {
+
+    let countStartedSession = false;
+    if (replacedConnection && bothConnected) {
+      Object.assign(set, sessionClocks(before, transitionAt), {
+        activeSince: checkedAt,
+      });
+      if (!before.deckVersionId) set.selectionRunningSince = checkedAt;
+      unset.pendingAction = '';
+    } else if (
       bothConnected &&
       (!before.startedAt || before.status === 'reconnecting')
     ) {
