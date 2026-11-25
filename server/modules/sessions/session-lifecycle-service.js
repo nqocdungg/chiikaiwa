@@ -1,13 +1,13 @@
-import { randomInt } from 'node:crypto';
 import mongoose from 'mongoose';
+import { randomInt } from 'node:crypto';
 import { connectDatabase } from '../../persistence/database.js';
-import { sessionVersionConflict } from './sessions-errors.js';
+import { incrementLifetimeCounter } from '../statistics/statistics-repository.js';
 import {
+  CONNECTION_TIMEOUT_MS,
   sessionClocks,
   sessionDeadline,
-  CONNECTION_TIMEOUT_MS,
 } from './session-clock.js';
-import { incrementLifetimeCounter } from '../statistics/statistics-repository.js';
+import { mediaUnavailable, sessionVersionConflict } from './sessions-errors.js';
 
 const { ObjectId } = mongoose.Types;
 
@@ -87,6 +87,8 @@ export async function endSession(doc, at, reason, session) {
 /** @param {any} doc @param {Date} at @param {import('mongoose').ClientSession} session */
 export async function reconcileSessionDeadline(doc, at, session) {
   if (doc.status === 'ended') return doc;
+  // An expired lease still needs a new presence snapshot before clocks are trusted.
+  if (doc.presenceCheck) throw mediaUnavailable();
   const deadline = sessionDeadline(doc);
   return deadline && deadline.at <= at
     ? endSession(doc, deadline.at, deadline.reason, session)
@@ -140,7 +142,27 @@ export function createSessionPresenceConsumer({
                 previous.actorKey === p.actorKey && previous.connected,
             ),
         ));
-    const transitionAt = losingConnection ? observedAt : checkedAt;
+    const replacedConnection =
+      event.event === 'presence_snapshot' &&
+      before.status === 'active' &&
+      before.presence.some(
+        (/** @type {any} */ p, /** @type {number} */ i) =>
+          p.connected &&
+          after.presence[i]?.connected &&
+          p.connectionSid !== after.presence[i].connectionSid,
+      );
+    const lastConfirmed = before.lastBothPresentAt ?? before.activeSince;
+    const transitionAt =
+      losingConnection || replacedConnection
+        ? event.event === 'presence_snapshot' && lastConfirmed instanceof Date
+          ? new Date(
+              Math.max(
+                before.activeSince?.getTime() ?? 0,
+                lastConfirmed.getTime(),
+              ),
+            )
+          : observedAt
+        : checkedAt;
     const reconciled = await reconcileSessionDeadline(
       { ...after, presence: before.presence },
       transitionAt,
@@ -180,10 +202,32 @@ export function createSessionPresenceConsumer({
       after.presence.every((/** @type {any} */ p) => p.connected);
     /** @type {Record<string, any>} */
     const set = { updatedAt: transitionAt, presence: after.presence };
+    if (
+      before.screenShare?.ownerKey &&
+      (!bothConnected ||
+        before.presence.some(
+          (/** @type {any} */ p, /** @type {number} */ i) =>
+            p.actorKey === before.screenShare.ownerKey &&
+            p.connectionSid !== after.presence[i]?.connectionSid,
+        ))
+    ) {
+      set.screenShare = {
+        ...before.screenShare,
+        state: 'revoking',
+        version: before.screenShare.version + 1,
+      };
+    }
     /** @type {Record<string, string>} */
     const unset = {};
+
     let countStartedSession = false;
-    if (
+    if (replacedConnection && bothConnected) {
+      Object.assign(set, sessionClocks(before, transitionAt), {
+        activeSince: checkedAt,
+      });
+      if (!before.deckVersionId) set.selectionRunningSince = checkedAt;
+      unset.pendingAction = '';
+    } else if (
       bothConnected &&
       (!before.startedAt || before.status === 'reconnecting')
     ) {
@@ -264,14 +308,14 @@ export function createSessionPresenceConsumer({
         countStartedSession = true;
       }
     } else if (!bothConnected) {
-      Object.assign(set, sessionClocks(before, observedAt));
+      Object.assign(set, sessionClocks(before, transitionAt));
       if (before.startedAt) set.status = 'reconnecting';
       Object.assign(unset, {
         activeSince: '',
         selectionRunningSince: '',
         pendingAction: '',
       });
-    } else return;
+    }
     const result = await db.collection('practice_sessions').findOneAndUpdate(
       { _id: after._id, version: after.version, status: after.status },
       {

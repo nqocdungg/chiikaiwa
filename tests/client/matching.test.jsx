@@ -1,6 +1,4 @@
 import '@testing-library/jest-dom/vitest';
-import { StrictMode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   act,
   cleanup,
@@ -9,7 +7,9 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../client/src/App.jsx';
 import { AuthContext } from '../../client/src/features/auth/auth-context.js';
 import { MatchPage } from '../../client/src/features/matching/MatchPage.jsx';
@@ -164,7 +164,7 @@ describe('FE-015 auto-matching UI (SC-05)', () => {
       await screen.findByRole('heading', { name: 'Tìm bạn luyện nói' }),
     ).toBeVisible();
     // Level not in profile -> start button disabled until user selects a level
-    const submitBtn = screen.getByRole('button', {
+    const submitBtn = await screen.findByRole('button', {
       name: 'Bắt đầu tìm bạn',
     });
     expect(submitBtn).toBeDisabled();

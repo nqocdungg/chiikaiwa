@@ -22,6 +22,7 @@ import { projectSession } from './session-projection.js';
 import {
   authorizedSession,
   reconcileSession,
+  reconcileRoomSession,
   sessionObjectId,
 } from './session-service.js';
 import {
@@ -433,6 +434,7 @@ export async function changeSessionCards(
 ) {
   const id = sessionObjectId(sessionId);
   const identity = await getIdentity();
+  await reconcileRoomSession(id, identity, now);
   const db = await connectDatabase();
   /** @type {Session} */ let doc;
   /** @type {Date} */ let at;

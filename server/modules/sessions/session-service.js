@@ -10,6 +10,8 @@ import {
   endSession,
 } from './session-lifecycle-service.js';
 import { projectSession } from './session-projection.js';
+import { reconcileMediaPresence } from './session-reconcile-service.js';
+import { reconcileScreenShare } from './screen-share-service.js';
 import {
   cleanupSessionMedia,
   finishSessionEffects,
@@ -82,6 +84,18 @@ export async function reconcileSession(id, identity, now = () => new Date()) {
   return doc;
 }
 
+/** @param {any} id @param {Identity} identity @param {() => Date} now */
+export async function reconcileRoomSession(
+  id,
+  identity,
+  now = () => new Date(),
+) {
+  const before = await authorizedSession(id, identity, now());
+  const after = await reconcileMediaPresence(before, now);
+  if (after.version !== before.version) await finishSessionEffects(after);
+  await reconcileScreenShare(await reconcileSession(id, identity, now));
+}
+
 /** @param {{sessionId: string, getIdentity: () => Promise<Identity>, now?: () => Date}} input */
 export async function readSession({
   sessionId,
@@ -89,7 +103,8 @@ export async function readSession({
   now = () => new Date(),
 }) {
   const id = sessionObjectId(sessionId);
-  await reconcileSession(id, await getIdentity(), now);
+  const identity = await getIdentity();
+  await reconcileRoomSession(id, identity, now);
   return sessionSnapshot(id, await getIdentity(), now);
 }
 
