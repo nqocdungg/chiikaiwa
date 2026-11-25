@@ -27,6 +27,7 @@ import { activeLocationRef } from './features/home/navigation-tracker.js';
 import { Landing } from './features/landing/Landing.jsx';
 import { MatchPage } from './features/matching/MatchPage.jsx';
 import { ProfilePage } from './features/profile/ProfilePage.jsx';
+import { BlockListPage } from './features/safety/BlockListPage.jsx';
 import { SessionSummaryPage } from './features/session-summary/SessionSummaryPage.jsx';
 
 const ComponentPreview = import.meta.env.DEV
@@ -186,10 +187,7 @@ export function App({ skipInitialAuthCheck = false } = {}) {
                   <RouteShell screenId="SC-16" title="Lịch sử luyện tập" />
                 }
               />
-              <Route
-                path="/blocks"
-                element={<RouteShell screenId="SC-18" title="Danh sách chặn" />}
-              />
+              <Route path="/blocks" element={<BlockListPage />} />
             </Route>
 
             {/* SC-06: Invitation room — accessible to anonymous visitors (for POST /guest-trials), learners (U), and guests (G) */}
