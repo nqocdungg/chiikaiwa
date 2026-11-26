@@ -108,8 +108,15 @@ export async function listSavedSources(ownerKey, savedItemId) {
  * @param {ObjectId} id
  * @param {number} expectedVersion
  * @param {ClientSession} session
+ * @param {Date} [purgeAt]
  */
-export function unsaveKnowledge(ownerKey, id, expectedVersion, session) {
+export function unsaveKnowledge(
+  ownerKey,
+  id,
+  expectedVersion,
+  session,
+  purgeAt,
+) {
   checkOwner(ownerKey);
   checkTransaction(session);
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) {
@@ -117,7 +124,10 @@ export function unsaveKnowledge(ownerKey, id, expectedVersion, session) {
   }
   return SavedItem.findOneAndUpdate(
     { ownerKey, _id: id, version: expectedVersion, isSaved: true },
-    { $set: { isSaved: false }, $inc: { version: 1 } },
+    {
+      $set: { isSaved: false, ...(purgeAt ? { purgeAt } : {}) },
+      $inc: { version: 1 },
+    },
     { session, returnDocument: 'after', runValidators: true },
   );
 }

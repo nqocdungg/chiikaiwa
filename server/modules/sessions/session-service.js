@@ -6,6 +6,10 @@ import {
 import { AppError } from '../../middleware/http-error.js';
 import { runIdempotentOperation } from '../coordination/coordination-service.js';
 import {
+  guestExpired,
+  resolveGuestTrialDeadline,
+} from '../learning/guest-write-guard.js';
+import {
   reconcileSessionDeadline,
   endSession,
 } from './session-lifecycle-service.js';
@@ -47,7 +51,6 @@ export async function authorizedSession(id, identity, at, session) {
       {
         _id: identity.guestId,
         practiceSessionId: id,
-        revokedAt: { $exists: false },
       },
       { session },
     );
@@ -57,15 +60,15 @@ export async function authorizedSession(id, identity, at, session) {
         code: 'RESOURCE_NOT_FOUND',
         message: 'Không tìm thấy phiên.',
       });
+    const deadline = resolveGuestTrialDeadline(guest, doc);
     if (
+      guest.revokedAt ||
       !['active', 'summary'].includes(guest.status) ||
-      (guest.expiresAt && guest.expiresAt <= at)
-    )
-      throw new AppError({
-        status: 410,
-        code: 'GUEST_EXPIRED',
-        message: 'Quyền truy cập tạm đã hết hạn.',
-      });
+      (guest.status === 'summary' && !deadline) ||
+      (deadline && deadline.getTime() <= at.getTime())
+    ) {
+      throw guestExpired();
+    }
   }
   return doc;
 }

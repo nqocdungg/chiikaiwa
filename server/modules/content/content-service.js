@@ -3,6 +3,10 @@ import { AppError } from '../../middleware/http-error.js';
 import { connectDatabase } from '../../persistence/database.js';
 import { runIdempotentOperation } from '../coordination/coordination-service.js';
 import {
+  guestExpired,
+  resolveGuestTrialDeadline,
+} from '../learning/guest-write-guard.js';
+import {
   isValidObjectId,
   VALID_CONTENT_KINDS,
   VALID_LEVELS,
@@ -849,6 +853,73 @@ export async function listPublishedTopics({ level, limit, cursor }) {
 }
 
 /**
+ * Xác thực trạng thái và thời hạn lượt thử của khách trước khi kiểm tra phạm vi học liệu (06 §4.3, §12.2; 07 §7).
+ *
+ * @param {import('mongoose').mongo.Db} db
+ * @param {any} identity
+ * @param {import('mongoose').ClientSession} [session]
+ * @param {Date} [now]
+ */
+async function resolveGuestContentTrial(
+  db,
+  identity,
+  session,
+  now = new Date(),
+) {
+  const guestDoc = await db
+    .collection('guest_sessions')
+    .findOne({ _id: identity.guestId }, { session });
+
+  if (
+    !guestDoc ||
+    guestDoc.revokedAt ||
+    guestDoc.status === 'expired' ||
+    (guestDoc.expiresAt instanceof Date &&
+      guestDoc.expiresAt.getTime() <= now.getTime())
+  ) {
+    throw guestExpired();
+  }
+
+  if (
+    !guestDoc.practiceSessionId ||
+    !['active', 'summary'].includes(guestDoc.status)
+  ) {
+    throw new AppError({
+      status: 403,
+      code: 'FORBIDDEN',
+      message: 'Khách chỉ được phép truy cập học liệu trong lượt thử được cấp.',
+    });
+  }
+
+  const practiceSessionId =
+    guestDoc.practiceSessionId instanceof ObjectId
+      ? guestDoc.practiceSessionId
+      : new ObjectId(guestDoc.practiceSessionId);
+
+  const sessionDoc = await db.collection('practice_sessions').findOne(
+    {
+      _id: practiceSessionId,
+      'members.actorKey': identity.actorKey,
+    },
+    { session },
+  );
+
+  if (!sessionDoc) {
+    throw guestExpired();
+  }
+
+  const deadline = resolveGuestTrialDeadline(guestDoc, sessionDoc);
+  if (
+    (guestDoc.status === 'summary' && !deadline) ||
+    (deadline && deadline.getTime() <= now.getTime())
+  ) {
+    throw guestExpired();
+  }
+
+  return sessionDoc;
+}
+
+/**
  * Kiểm tra quyền truy cập theo nguồn đối với phiên bản chủ đề (07 §7, 06 §4.3, §6.1, §12.1).
  *
  * @param {import('mongoose').mongo.Db} db
@@ -876,35 +947,11 @@ export async function assertDeckVersionSourceAccess(
     return;
   }
 
-  // 2. Guest (07 §7, 06 §4.3): Khách chỉ đọc học liệu trong lượt thử được cấp
+  // 2. Guest (07 §7, 06 §4.3): Khách chỉ đọc học liệu trong lượt thử được cấp và còn hạn
   if (identity.kind === 'guest') {
-    const guestDoc = await db
-      .collection('guest_sessions')
-      .findOne({ _id: identity.guestId }, { session });
-    const practiceSessionId =
-      guestDoc?.practiceSessionId || identity.guestSession?.practiceSessionId;
-
-    if (!practiceSessionId) {
-      throw new AppError({
-        status: 403,
-        code: 'FORBIDDEN',
-        message:
-          'Khách chỉ được phép truy cập học liệu trong lượt thử được cấp.',
-      });
-    }
-
-    const sessionDoc = await db.collection('practice_sessions').findOne(
-      {
-        _id:
-          practiceSessionId instanceof ObjectId
-            ? practiceSessionId
-            : new ObjectId(practiceSessionId),
-      },
-      { session },
-    );
+    const sessionDoc = await resolveGuestContentTrial(db, identity, session);
 
     if (
-      !sessionDoc ||
       !sessionDoc.deckVersionId ||
       !sessionDoc.deckVersionId.equals(deckVersionId)
     ) {
@@ -998,37 +1045,11 @@ export async function assertKnowledgeSourceAccess(
     return;
   }
 
-  // 2. Guest: chỉ đọc học liệu trong lượt thử
+  // 2. Guest: chỉ đọc học liệu trong lượt thử còn hạn
   if (identity.kind === 'guest') {
-    const guestDoc = await db.collection('guest_sessions').findOne(
-      {
-        _id: identity.guestId,
-      },
-      { session },
-    );
-    const practiceSessionId =
-      guestDoc?.practiceSessionId || identity.guestSession?.practiceSessionId;
+    const sessionDoc = await resolveGuestContentTrial(db, identity, session);
 
-    if (!practiceSessionId) {
-      throw new AppError({
-        status: 403,
-        code: 'FORBIDDEN',
-        message:
-          'Khách chỉ được phép truy cập học liệu trong lượt thử được cấp.',
-      });
-    }
-
-    const sessionDoc = await db.collection('practice_sessions').findOne(
-      {
-        _id:
-          practiceSessionId instanceof ObjectId
-            ? practiceSessionId
-            : new ObjectId(practiceSessionId),
-      },
-      { session },
-    );
-
-    if (!sessionDoc || !sessionDoc.deckVersionId) {
+    if (!sessionDoc.deckVersionId) {
       throw new AppError({
         status: 403,
         code: 'FORBIDDEN',
