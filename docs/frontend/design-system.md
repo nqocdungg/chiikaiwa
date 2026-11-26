@@ -1,61 +1,53 @@
-# Chiikaiwa — Design System & Frontend UI Rules
+# Quy chuẩn giao diện Chiikaiwa
 
-- Phiên bản: 1.0 — baseline triển khai FE, ngày 14/11/2026.
-- Trạng thái: kết hợp thiết kế đã quan sát, lựa chọn trong trao đổi và đề xuất triển khai; không phải toàn bộ hệ thống đã được duyệt.
-- Công nghệ theo tài liệu kiến trúc hiện có: React + Vite + React Router + Tailwind CSS, JavaScript.
-- Phạm vi: foundations, UI component, layout, trạng thái, tương tác, asset và kiểm tra giao diện. Logic nghiệp vụ theo SRS/API; tài liệu này không tự tạo chức năng mới.
+Phiên bản 1.1, ngày 26/11/2026.
+
+Frontend dùng React, Vite, React Router và Tailwind CSS với JavaScript. Tài liệu này hướng dẫn thiết kế màn hình, sử dụng component và kiểm tra giao diện.
 
 ## 1. Nguồn chuẩn và cách xử lý khác biệt
 
-### 1.1. Nguồn đã kiểm tra
+### 1.1. Tài liệu tham chiếu
 
-| Nguồn                                                                                        | Nội dung                                              |
-| -------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| [Design rules v1](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=12-44)        | Quy tắc desktop, component pilot, variables           |
-| [Button primary mới](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=31-8172)   | FlowButton 48px, chữ 16/24, viền và bóng cứng         |
-| [Button secondary mới](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=31-8179) | Nền kem, viền hồng nâu                                |
-| [Countdown mới](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=31-8195)        | Vòng phân đoạn, 88px, số Baloo 2                      |
-| [Tìm được bạn](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=11-5275)         | Popup gọn, không có mascot bên trong, hai CTA         |
-| [Đăng nhập](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=32-8236)            | Auth hai cột, mascot trái, form phải                  |
-| [Đăng ký](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=36-9559)              | Cùng layout Auth                                      |
-| [Kaiwa Room main](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=4-2728)       | 1440×900, sidebar, ba bộ chủ đề                       |
-| [Home](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=1-2)                     | Bản mẫu cũ 1280×720; tham khảo nhận diện              |
-| BTL/02-srs.md, BTL/05-system-architecture.md                                                 | SRS và kiến trúc v1.0 ngày 27/10/2026 trong workspace |
+| Nguồn                                                                                        | Nội dung                                                |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [Design rules v1](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=12-44)        | Quy tắc desktop, component mẫu và biến thiết kế         |
+| [Button primary mới](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=31-8172)   | FlowButton 48px, chữ 16/24, viền và bóng cứng           |
+| [Button secondary mới](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=31-8179) | Nền kem, viền hồng nâu                                  |
+| [Countdown mới](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=31-8195)        | Vòng phân đoạn, 88px, số Baloo 2                        |
+| [Tìm được bạn](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=11-5275)         | Hộp thoại ghép bạn với hai nút hành động                |
+| [Đăng nhập](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=32-8236)            | Auth hai cột, mascot trái, form phải                    |
+| [Đăng ký](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=36-9559)              | Cùng layout Auth                                        |
+| [Kaiwa Room main](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=4-2728)       | 1440×900, sidebar, ba bộ chủ đề                         |
+| [Home](https://www.figma.com/design/HgGG2y2OwUBtgdWr3tT2jK/?node-id=1-2)                     | Bản mẫu cũ 1280×720; tham khảo nhận diện                |
+| [SRS](../design/02-srs.md), [Kiến trúc](../design/05-system-architecture.md)                 | Quyền người dùng, luồng nghiệp vụ và kiến trúc ứng dụng |
 
-Toàn bộ file hiện dùng một page “Prototype”; các nhóm màn là SECTION, chưa phải các page riêng. Summary & History, Library & Review, Admin và Shared States chưa có màn bên trong ở thời điểm kiểm tra. Chưa thấy bản mobile trong các nhóm đã kiểm tra.
+### 1.2. Cách chọn mẫu
 
-### 1.2. Quy ước trạng thái quyết định
+Khi bổ sung một màn hình, bắt đầu từ component đang dùng cho cùng thao tác. Nếu có thiết kế đã duyệt mới hơn, dùng thiết kế đó. Các mục ghi “đề xuất” cần được thử trên giao diện thật trước khi áp dụng chung. Quyền người dùng và thời hạn thao tác theo SRS và hợp đồng API.
 
-- **Figma:** giá trị đã đọc trực tiếp; có thể thuộc mẫu cũ, không tự đồng nghĩa đã chốt.
-- **Chốt trao đổi:** lựa chọn người dùng đã xác nhận; ưu tiên hơn mẫu cũ về hình thức.
-- **Baseline đề xuất:** quy tắc bổ sung để FE bắt đầu; cần kiểm tra trên app thật trước khi coi là chốt.
-- **Cần đồng bộ:** thiết kế và yêu cầu đang khác nhau; không tự biến mockup thành logic nghiệp vụ.
+### 1.3. Khác biệt giữa các mẫu
 
-Về hành vi/quyền: dùng SRS/API đã được team xác nhận. Về hình thức: lựa chọn mới đã xác nhận → component mới được chỉ định ở trên → rules v1 → baseline đề xuất. Nếu team đã có SRS mới hơn bản local, cập nhật nguồn trước khi code nghiệp vụ.
-
-### 1.3. Những chênh lệch phải biết
-
-| Chủ đề         | Hiện trạng                                                             | Baseline FE                                                                                            |
-| -------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Button         | Rules cũ 44px, chữ 14/20; mẫu mới 48px, 16/24                          | Dùng mẫu mới. Size 44 chỉ cho control gọn khi cần                                                      |
-| Modal          | Rules cũ padding 32, min-height 400; trao đổi mới muốn gọn, padding 24 | Default padding 24, ôm nội dung; form lớn có variant 32; không ép min-height cho mọi popup             |
-| Modal radius   | Component pilot 24, popup match mới 30                                 | Giữ variant standard 24 và friendly 30; cùng Modal primitive                                           |
-| Countdown      | Rules cũ số 32/40; mẫu mới số 39/40                                    | Chuẩn hóa số 40/40 gần mẫu mới, cần kiểm tra 00–30                                                     |
-| Font Auth/Room | Có chữ 7–13px và số lẻ do bản nhập từ Make                             | Không sao chép máy móc; dùng type scale mục 4                                                          |
-| Frame          | Auth 1463px, Home 1280px, một số Room cũ 1201px                        | Chuẩn desktop tham chiếu 1440×900; layout fluid, kiểm tra 1366×768                                     |
-| Quyền chọn bộ  | Mockup có “Bạn điều khiển/Trao quyền”                                  | SRS DEC-07 không phân người điều khiển. Cần đồng bộ thiết kế; chưa triển khai cơ chế trao quyền từ ảnh |
-| Timer chọn bộ  | Mockup đồng thời có “0 giây” và “00:00”                                | Không giữ trạng thái hết hạn mà CTA vẫn khả dụng; thời hạn chọn bộ cần nguồn nghiệp vụ xác nhận        |
-| Flashcard/Quiz | Prompt trước từng đề xuất 2 mức nhớ và quiz từ đã lưu                  | Theo SRS: Again/Hard/Good; quiz theo ngân hàng chủ đề, tối đa 5 câu, độc lập FSRS                      |
-| “Bộ riêng”     | Prompt trước có thể bị hiểu là tự soạn bộ hội thoại                    | SRS cho người học tạo thẻ hỏi/đáp riêng; học liệu hội thoại do Admin biên soạn                         |
-| Phụ đề         | Có frame minh họa phụ đề Việt                                          | Không tự suy ra đã có STT/dịch; chỉ nối khi phạm vi và dữ liệu được xác nhận                           |
+| Chủ đề         | Hiện trạng                                                   | Quy tắc áp dụng                                                                                        |
+| -------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Button         | Rules cũ 44px, chữ 14/20; mẫu mới 48px, 16/24                | Dùng mẫu mới. Size 44 chỉ cho control gọn khi cần                                                      |
+| Modal          | Rules cũ padding 32, min-height 400; mẫu gọn dùng padding 24 | Default padding 24, ôm nội dung; form lớn có variant 32; không ép min-height cho mọi popup             |
+| Modal radius   | Component pilot 24, popup match mới 30                       | Giữ variant standard 24 và friendly 30; cùng Modal primitive                                           |
+| Countdown      | Rules cũ số 32/40; mẫu mới số 39/40                          | Chuẩn hóa số 40/40 gần mẫu mới, cần kiểm tra 00–30                                                     |
+| Font Auth/Room | Có chữ 7–13px và số lẻ do bản nhập từ Make                   | Dùng cỡ chữ ở mục 4                                                                                    |
+| Frame          | Auth 1463px, Home 1280px, một số Room cũ 1201px              | Chuẩn desktop tham chiếu 1440×900; layout fluid, kiểm tra 1366×768                                     |
+| Quyền chọn bộ  | Mockup có “Bạn điều khiển/Trao quyền”                        | SRS DEC-07 không phân người điều khiển. Cần đồng bộ thiết kế; chưa triển khai cơ chế trao quyền từ ảnh |
+| Timer chọn bộ  | Mockup đồng thời có “0 giây” và “00:00”                      | Không giữ trạng thái hết hạn mà CTA vẫn khả dụng; thời hạn chọn bộ cần nguồn nghiệp vụ xác nhận        |
+| Flashcard/Quiz | Đánh giá thẻ và chọn câu hỏi quiz                            | Theo SRS: Again/Hard/Good; quiz theo ngân hàng chủ đề, tối đa 5 câu, độc lập FSRS                      |
+| “Bộ riêng”     | Thẻ cá nhân và bộ hội thoại                                  | SRS cho người học tạo thẻ hỏi/đáp riêng; học liệu hội thoại do Admin biên soạn                         |
+| Phụ đề         | Có frame minh họa phụ đề Việt                                | Không tự suy ra đã có STT/dịch; chỉ nối khi phạm vi và dữ liệu được xác nhận                           |
 
 ## 2. Định hướng hình ảnh và nội dung
 
 - Thân thiện, dễ thương, nền kem và pastel, đường nét tròn, điểm nhấn hồng nâu.
 - Button có cảm giác bấm nhờ viền và bóng cứng. Card/panel giữ nhẹ để nội dung dễ đọc.
 - Nội dung ngắn, hướng người dùng vào hành động; mỗi vùng có một tiêu đề, một mô tả ngắn khi cần và CTA rõ.
-- Mascot ưu tiên Home/Auth. Popup thao tác không cần mascot lớn; popup match giữ phiên bản đã bỏ mascot.
-- Không trang trí mọi tiêu đề bằng stroke/texture. Baloo 2 hiện là font heading; font mới chưa chốt.
+- Mỗi trang đều nên có mascot. Chọn vị trí theo nội dung: nhân vật có thể chào người học bên cạnh form, đứng trước công trình trên đảo hoặc xuất hiện như một sticker nhỏ ở góc trang. Với trang nhiều thông tin, dành chỗ cho mascot ở phần tiêu đề để người dùng vẫn đọc và thao tác dễ dàng.
+- Không trang trí mọi tiêu đề bằng stroke/texture. Font heading và thứ tự fallback được mô tả ở §4.1.
 - Icon pixel hoặc bóng bẩy chỉ là hướng đang cân nhắc. Chưa áp dụng toàn app; không trộn nhiều hệ icon trong cùng thanh công cụ.
 - Tiếng Việt dùng cho điều hướng, thông báo; tiếng Nhật dành cho nội dung học và điểm nhấn phù hợp.
 
@@ -63,24 +55,22 @@ Về hành vi/quyền: dùng SRS/API đã được team xác nhận. Về hình 
 
 Giữ một nguồn token trong code. Tách màu primitive với vai trò semantic; component dùng semantic token. Không dùng tên màu làm trạng thái nghiệp vụ.
 
-### 3.1. Variables đang có trong Figma
+### 3.1. Màu trong thư viện Figma
 
-Các mã HEX dưới đây được chuyển từ giá trị RGB của variables, không lấy bằng mắt.
+| CSS token đề nghị      | Variable Figma | HEX     | Vai trò                             |
+| ---------------------- | -------------- | ------- | ----------------------------------- |
+| --color-surface        | color/surface  | #FFFCF8 | Card/modal, bề mặt kem              |
+| --color-surface-raised | color/white    | #FFFFFF | Input/bề mặt trắng                  |
+| --color-text           | color/text     | #433D3D | Chữ chính                           |
+| --color-text-muted     | color/muted    | #766B70 | Chữ phụ                             |
+| --color-accent         | color/accent   | #9B526E | Link/nhấn thương hiệu               |
+| --color-brand-soft     | color/primary  | #F4CBDA | Hồng nền; không nhầm với button mới |
+| --color-selected       | color/selected | #F8DFE8 | Chip/tab được chọn                  |
+| --color-border         | color/border   | #E9D6DE | Viền bề mặt                         |
+| --color-info-bg        | color/info     | #EEF7FA | Thông tin, thiết bị                 |
+| --color-info-text      | color/infoText | #487588 | Chữ thông tin                       |
 
-| CSS token đề nghị  | Variable Figma | HEX     | Vai trò                             |
-| ------------------ | -------------- | ------- | ----------------------------------- |
-| --color-surface    | color/surface  | #FFFCF8 | Card/modal, bề mặt kem              |
-| --color-white      | color/white    | #FFFFFF | Input/bề mặt trắng                  |
-| --color-text       | color/text     | #433D3D | Chữ chính                           |
-| --color-text-muted | color/muted    | #766B70 | Chữ phụ                             |
-| --color-accent     | color/accent   | #9B526E | Link/nhấn thương hiệu               |
-| --color-brand-soft | color/primary  | #F4CBDA | Hồng nền; không nhầm với button mới |
-| --color-selected   | color/selected | #F8DFE8 | Chip/tab được chọn                  |
-| --color-border     | color/border   | #E9D6DE | Viền bề mặt                         |
-| --color-info-bg    | color/info     | #EEF7FA | Thông tin, thiết bị                 |
-| --color-info-text  | color/infoText | #487588 | Chữ thông tin                       |
-
-### 3.2. Màu đọc từ button/countdown mới
+### 3.2. Màu của nút và đồng hồ đếm ngược
 
 | Token                     | HEX     | Nguồn                |
 | ------------------------- | ------- | -------------------- |
@@ -98,9 +88,9 @@ Các mã HEX dưới đây được chuyển từ giá trị RGB của variables
 | --countdown-text          | #A04F6D | SegmentedCountdown   |
 | --countdown-shadow        | #BD7D92 | SegmentedCountdown   |
 
-Highlight/gradient trắng của button là lớp trang trí riêng; màu nền vẫn có token độc lập. Không cần cố mô phỏng toàn bộ điểm gradient sinh ra từ Make.
+Nút có token màu nền riêng. Phần bắt sáng màu trắng nằm ở lớp trang trí phía trên.
 
-### 3.3. Màu bổ sung — baseline đề xuất
+### 3.3. Màu semantic đã triển khai
 
 | Token                                | Giá trị            | Vai trò                                           |
 | ------------------------------------ | ------------------ | ------------------------------------------------- |
@@ -124,23 +114,23 @@ Màu trạng thái chưa có hệ chuẩn đầy đủ trong Figma. Kiểm tra t
 | Nội dung Nhật              | Noto Sans JP   | 400, 500, 700                                       |
 | Countdown nổi bật          | Baloo 2        | 800                                                 |
 
-Nunito, Coiny và các font khác đã bàn chỉ là phương án thử; chưa thay font mặc định.
+Trong CSS, phần nội dung ưu tiên Be Vietnam Pro, heading ưu tiên Baloo 2, cả hai đều dự phòng bằng Nunito rồi Segoe UI. Client tự host Nunito variable (400–900), nên trên máy thiếu hai font ưu tiên, chữ Việt dùng Nunito. Tiếng Nhật ưu tiên Noto Sans JP rồi các font Nhật của hệ điều hành. [Token typography](../../client/src/styles/tokens.css) · [Khai báo font](../../client/src/styles/globals.css) · [Font và giấy phép](../../client/src/assets/fonts/)
 Chọn font theo ngôn ngữ, không để toàn bộ câu Nhật rơi vào fallback ngẫu nhiên. Có thể dùng lang="ja" và .text-ja. Không dùng font-size nhỏ để che lỗi layout.
 
 ### 4.2. Type scale dùng khi triển khai
 
-| Token     | Size/line-height | Weight  | Sử dụng                |
-| --------- | ---------------- | ------- | ---------------------- |
-| caption   | 12/20            | 400–600 | Metadata ngắn, badge   |
-| label     | 14/20            | 600     | Nhãn trường            |
-| small     | 14/24            | 400     | Mô tả phụ              |
-| body      | 16/24            | 400     | Nội dung thường, input |
-| button    | 16/24            | 600     | CTA chuẩn mới          |
-| japanese  | 20/32            | 400–700 | Câu Nhật/thẻ học       |
-| section   | 24/32            | 800     | Heading section        |
-| title     | 32/40            | 800     | Trang/form lớn         |
-| hero      | 48/56            | 800     | Home/Auth desktop      |
-| countdown | 40/40            | 800     | Số trong timer 88px    |
+| Token     | Size/line-height | Weight  | Sử dụng                 |
+| --------- | ---------------- | ------- | ----------------------- |
+| caption   | 12/20            | 400–600 | Metadata ngắn, badge    |
+| label     | 14/20            | 600     | Nhãn trường             |
+| small     | 14/24            | 400     | Mô tả phụ               |
+| body      | 16/24            | 400     | Nội dung thường, input  |
+| button    | 16/24            | 600     | CTA chuẩn mới           |
+| japanese  | 20/32            | 400–700 | Câu Nhật/thẻ học        |
+| section   | 24/32            | 800     | Heading section         |
+| title     | 32/40            | 800     | Trang/form lớn          |
+| hero      | 48/56            | 800     | Hero tham chiếu desktop |
+| countdown | 40/40            | 800     | Số trong timer 88px     |
 
 Scale chủ yếu từ rules v1; button/countdown cập nhật theo mẫu mới. Compact popup có thể dùng title 24/32 như baseline gọn, không ép 32/40 nếu tiêu đề quá dài. Mobile hero 32/40, title 28/36 là đề xuất responsive.
 Dùng rem cho chữ, hỗ trợ zoom; không cắt dấu Việt hoặc kana. Không thiết lập fixed height cho đoạn nhiều dòng. Counter dùng tabular-nums khi font hỗ trợ và giữ khung số cố định.
@@ -162,7 +152,7 @@ Dùng rem cho chữ, hỗ trợ zoom; không cắt dấu Việt hoặc kana. Kh�
 | Modal shadow             | 0 16px 48px rgba(105,71,86,.16), từ component pilot                      |
 | Countdown shadow         | 3px 4px 0 #BD7D92, từ mẫu mới                                            |
 
-Không làm tròn mọi số đo: radius 14 của button là lựa chọn có chủ ý. Số lẻ do import có thể chuẩn hóa nếu không làm sai bố cục.
+Giữ bán kính bo góc 14px của nút chuẩn.
 
 Motion — baseline đề xuất: 120–180ms cho hover/pressed/focus, 180–240ms mở panel/modal. Chỉ animate opacity/transform nếu phù hợp; không gây layout nhảy. Respect prefers-reduced-motion; tắt animation trang trí và chuyển động countdown mượt khi người dùng giảm chuyển động.
 
@@ -171,7 +161,8 @@ Motion — baseline đề xuất: 120–180ms cho hover/pressed/focus, 180–240
 ### 6.1. Desktop
 
 - Frame tham chiếu: 1440×900. SRS yêu cầu dùng được ở 1366×768; kiểm tra kích thước này trước.
-- Header: 80px. Trang thường max-width 1280px, căn giữa, padding ngang tối thiểu 32px.
+- Header khu học tập bám đầu trang khi cuộn. Hàng điều hướng cao tối thiểu 80px, chia ba vùng trên desktop và đổi bố cục ở 1080px và 480px. Dùng [LearningHeader](../../client/src/components/layout/LearningHeader.jsx) và [CSS của header](../../client/src/components/layout/learning-header.css).
+- Container chuẩn có token rộng tối đa 1280px và gutter desktop 32px. Home dùng container riêng. Landing, Home và Auth cùng dùng nền kem với các mảng sáng hồng, vàng kem và xanh nhạt. Trên Home, nhóm hành động luyện nói nằm cạnh cảnh minh họa, bên dưới có hai lối tắt Kho chủ đề và Ôn cá nhân. [Home](../../client/src/features/home/Home.jsx) · [Nền và bố cục dùng chung](../../client/src/components/ui/study-studio.css)
 - Room: sidebar trái 192px; panel công cụ phải 320px khi mở, nội dung giữa co giãn. Không cộng tất cả chiều rộng thành một khung cố định gây tràn.
 - Room dùng chiều cao viewport; vùng nội dung và panel cuộn riêng khi cần. Chat input và công cụ thiết yếu luôn tiếp cận được.
 - Header Room cho truy cập trực tiếp Kiến thức/Ghi chú/Chat; không gom tất cả vào “Công cụ”.
@@ -180,9 +171,9 @@ Motion — baseline đề xuất: 120–180ms cho hover/pressed/focus, 180–240
 
 ### 6.2. Auth
 
-Hai cột minh họa/form, giữ tỉ lệ gần mẫu (khoảng 55/45), form max-width khoảng 400px. Không dùng width 1463px từ frame làm CSS cố định. Logo và “Về trang chủ” nhất quán giữa hai màn. Chiều cao theo nội dung; đăng ký được cuộn khi màn thấp. Minh họa không đè vào form.
+Đăng nhập và đăng ký cùng dùng AuthSplitLayout. Cột trái có tranh riêng cho từng màn và bong bóng chào Nhật–Việt. Cột phải có liên kết “Về trang chủ”, tiêu đề, form và CTA toàn chiều rộng. Desktop chia cột theo tỉ lệ 1.13:0.87, panel rộng tối đa 30rem và phần nội dung cuộn khi thiếu chiều cao. Từ 767px trở xuống, layout chuyển một cột và thu gọn tranh. [Layout chung](../../client/src/features/auth/AuthSplitLayout.jsx) · [CSS Auth](../../client/src/features/auth/auth-study.css)
 
-### 6.3. Mobile/tablet — baseline đề xuất, chưa phải bản Figma đã duyệt
+### 6.3. Bố cục đề xuất cho điện thoại và máy tính bảng
 
 | Vùng viewport | Hành vi                                                                        |
 | ------------- | ------------------------------------------------------------------------------ |
@@ -194,15 +185,17 @@ Room là màn ưu tiên laptop. Trên màn hẹp, sidebar người tham gia có 
 Modal width: min(kích thước variant, viewport − 32px), max-height: viewport − 32px mobile hoặc −64px desktop. Dùng 100dvh khi phù hợp; tránh nút bị bàn phím che.
 Không scale toàn bộ UI, không dùng absolute cho các khối nội dung chính. Flex/grid có min-width:0 cho text, avatar/icon flex-shrink:0.
 
-## 7. Hợp đồng component dùng chung
+## 7. Component dùng chung
 
 ### 7.1. Button và IconButton
 
-- Button variants: primary, secondary, ghost, danger. Primary/secondary theo mẫu mới; danger là baseline bổ sung.
+- Button có bốn biến thể: primary, secondary, ghost và danger.
 - `appearance="sticker"` dành cho primary, secondary và danger. Dáng viên kẹo có viền trắng và bóng đáy, nhãn vẫn hiện khi loading.
 - Size default 48px, padding ngang 24px (16px nếu footer hai nút cần gọn), gap 8px, radius 14, icon 20px.
-- Size compact 44px; hero 56px là đề xuất, chỉ dùng khi layout cần.
-- Không dùng mỗi màn một loại button. API gợi ý: variant, size, loading, disabled, leadingIcon, trailingIcon, fullWidth.
+- Ba size đã có trong Button là compact 44px, default 48px và hero 56px. Đây là kích thước cơ sở trước khi áp style riêng của màn.
+- Đăng nhập và đăng ký dùng Button primary, `appearance="sticker"`, `fullWidth`. Sticker có bảng màu riêng theo variant, viền trắng, highlight và bóng đáy. [Đăng nhập](../../client/src/features/auth/LoginPage.jsx) · [Đăng ký](../../client/src/features/auth/RegisterPage.jsx) · [Style sticker](../../client/src/components/ui/sticker-controls.css)
+- “Tìm bạn luyện nói” ở Home dùng Button primary cỡ hero với lớp `ck-home-action--main`. “Bắt đầu học” ở Kho chủ đề dùng cùng kiểu CTA này. Lấy mẫu tại [Home](../../client/src/features/home/Home.jsx) và [CSS dùng chung cho hai CTA](../../client/src/components/ui/study-studio.css).
+- Các thuộc tính của [Button](../../client/src/components/ui/controls.jsx): variant, size, loading, disabled, leadingIcon, trailingIcon, fullWidth.
 - States: default, hover, pressed, focus-visible, disabled, loading. Pressed dịch xuống 2px và giảm bóng, không làm vùng bấm/layout nhảy.
 - Loading giữ chiều rộng, chặn submit lặp. Disabled không chỉ dựa vào opacity quá thấp; không phát handler.
 - Dùng button type phù hợp; navigation dùng link. Nút chỉ icon có accessible name; icon trang trí ẩn khỏi screen reader.
@@ -210,7 +203,7 @@ Không scale toàn bộ UI, không dùng absolute cho các khối nội dung ch�
 
 ### 7.2. FormField, Input, PasswordInput, Select, Checkbox
 
-- FormField sở hữu label, helper và error; Input sở hữu control. Label luôn hiện, không dùng placeholder thay label.
+- FormField hiển thị nhãn, hướng dẫn và lỗi. Input nhận dữ liệu người dùng nhập. Label luôn hiện, không dùng placeholder thay label.
 - Default cao 48px, padding ngang 16px, font body 16/24, radius 12px.
 - States: empty, filled, hover, focus, disabled, readonly, error, loading nếu có.
 - Lỗi đặt ngay dưới trường, liên kết bằng aria-describedby; error có aria-invalid.
@@ -227,7 +220,7 @@ Không scale toàn bộ UI, không dùng absolute cho các khối nội dung ch�
 - Không gắn min-height 400 cho mọi trạng thái; search có thể giữ vùng ổn định nếu cần, phải qua review.
 - Popup match: người luyện ở một hàng, avatar 48px cố định; timer ở hàng riêng; điểm chung; footer hai nút gap 12px, secondary trái/primary phải.
 - Form thường primary trước secondary theo pilot; không đảo thứ tự tùy hứng giữa các trạng thái cùng luồng.
-- Popup match không có mascot lớn. Không ép tên dài thành một chữ/ký tự mỗi dòng.
+- Trong hộp thoại tìm được bạn, dành đủ chiều rộng cho tên người luyện để tên dài xuống dòng theo từ.
 - Focus vào dialog khi mở, trap focus, trả focus khi đóng; có title và mô tả phù hợp.
 - Escape/bấm overlay đóng cho dialog thông thường. Luồng đang tìm/chờ/đang ghi có hậu quả: đóng phải gọi hành động hủy hợp lệ hoặc xác nhận, không chỉ ẩn UI để lại tác vụ chạy.
 - Modal lồng nhau hạn chế; chỉ dùng alert dialog khi có hậu quả cần xác nhận.
@@ -243,6 +236,12 @@ Không scale toàn bộ UI, không dùng absolute cho các khối nội dung ch�
 | Avatar              | 32/40/48/64px theo ngữ cảnh; popup match 48, Room pilot 40; aspect-ratio 1; initials fallback          |
 | ParticipantCard     | Avatar/video, tên, kết nối, mic/cam; tách local control khỏi trạng thái remote; tên dài có cách xem đủ |
 | Panel/Drawer        | Header, close, body cuộn; chat, ghi chú, kiến thức tái sử dụng khung                                   |
+
+#### Kho chủ đề
+
+- Mỗi trang đảo hiển thị tối đa sáu bộ từ danh mục thực tế. Người học chọn công trình, lọc N5–N1 hoặc tìm theo từ khóa. Biển tên cùng kích thước, chữ co theo tên bộ. Bộ lọc và tìm kiếm mở rộng tại chỗ, bộ lọc thu gọn vẫn hiện lựa chọn. [Trang đảo](../../client/src/features/library/TopicsPage.jsx) · [Lọc và tìm kiếm](../../client/src/features/library/TopicCatalogControls.jsx)
+- Panel hiển thị tên, cấp độ, mô tả, tranh và CTA “Bắt đầu học”, cùng ba lối Kiến thức, Flashcard và Quiz. CTA mở trang chi tiết của bộ đang chọn. [Panel và các lối học](../../client/src/features/library/TopicPresentation.jsx)
+- Nền đảo, công trình, mascot và minh họa là các lớp riêng. Chủ đề mới dùng hình dự phòng khi chưa khớp một bộ tranh. Nước, thuyền và người câu chuyển động nhẹ khi chờ. Khi đổi trang, người câu kéo cá và nhịp chèo mạnh hơn. Dùng chế độ giảm chuyển động của cảnh khi người học bật reduced motion. [Ánh xạ tranh](../../client/src/features/library/topic-art.js) · [Cảnh ven đảo](../../client/src/features/library/IslandWaterfront.jsx) · [CSS chuyển động](../../client/src/features/library/island-waterfront.css)
 
 ### 7.5. Countdown
 
@@ -264,7 +263,6 @@ Không scale toàn bộ UI, không dùng absolute cho các khối nội dung ch�
 - Flashcard: mặt hỏi/đáp + rating Again/Hard/Good theo SRS; rating gửi backend, chờ xác nhận lịch.
 - Quiz: lựa chọn/đã trả lời/kết quả, tối đa 5 câu theo ngân hàng chủ đề; không tự cập nhật FSRS.
 - DataTable/Pagination/ContentStatusBadge dành Admin; nháp/xuất bản/ẩn và xác nhận hành động theo yêu cầu.
-- Chưa có màn Figma của các component domain sau phòng; đây là hợp đồng khởi đầu, cần review màn mẫu.
 
 ## 8. Trạng thái sản phẩm cần thể hiện
 
@@ -281,9 +279,9 @@ Không scale toàn bộ UI, không dùng absolute cho các khối nội dung ch�
 | Review       | Không có mục, đến hạn, câu hỏi/đáp án, đang gửi đánh giá, lỗi, hoàn tất                           |
 | Admin        | Loading, lọc rỗng, lỗi validation, nháp/xuất bản/ẩn, hết quyền                                    |
 
-Theo SRS local: khách chỉ vào bằng mã, ôn thử trong 15 phút sau phiên; mã mời 10 phút; reconnect tối đa 5 phút. UI nhận expiresAt và trạng thái từ backend, không tạo quyền riêng bằng local timer. Kiểm tra lại nếu yêu cầu được cập nhật.
+Khách vào phòng bằng mã mời và có 15 phút ôn thử sau phiên. Mã mời có hiệu lực 10 phút. Thời gian kết nối lại tối đa là 5 phút. Giao diện hiển thị thời hạn theo expiresAt và trạng thái do backend trả về.
 
-## 9. Quy tắc copy, icon và asset
+## 9. Nhãn, biểu tượng và hình ảnh
 
 - CTA dùng động từ cụ thể: “Bắt đầu tìm”, “Hủy tìm”, “Luyện cùng”, “Vào phòng”, “Lưu thay đổi”.
 - Mỗi bước hiển thị thông tin cần để ra quyết định. Hướng dẫn dài chuyển sang disclosure/help khi hợp lý.
@@ -291,72 +289,26 @@ Theo SRS local: khách chỉ vào bằng mã, ôn thử trong 15 phút sau phiê
 - Icon chức năng: chọn một bộ SVG thống nhất, cùng stroke/bo nét, size 20/24. Icon pixel chưa là mặc định.
 - Logo/mascot là asset độc lập; text thông thường, button, timer, badge, nền pastel đơn giản dựng bằng code.
 - Không dùng emoji làm icon chức năng chuẩn vì hình hiển thị khác giữa hệ điều hành.
-- Giữ aspect ratio; mascot object-fit:contain, ảnh đại diện object-fit:cover. Fallback khi ảnh lỗi.
-- Image trang trí alt=""; image mang thông tin có alt ngắn; ảnh không thay nhãn nút.
-- Bảng chuẩn bị asset chi tiết ở mục 12.
+- Giữ đúng tỉ lệ ảnh. Dùng object-fit:contain cho mascot và object-fit:cover cho ảnh đại diện. Chuẩn bị ảnh thay thế khi tải lỗi.
+- Để alt="" cho ảnh trang trí. Viết mô tả ngắn cho ảnh mang thông tin và giữ nhãn chữ trên nút.
+- Thư mục asset và quy cách bổ sung ở mục 12.
 
-## 10. Tổ chức và luật FE
+## 10. Tổ chức mã frontend
 
-Đây là gợi ý cấu trúc; đối chiếu repo thật trước khi tạo thư mục. Tài liệu kiến trúc local không đồng nghĩa đã kiểm tra package.json hoặc code FE hiện tại.
-
-```text
-src/
-  styles/tokens.css
-  styles/globals.css
-  components/ui/
-  components/layout/
-  features/auth/
-  features/matching/
-  features/room/
-  features/library/
-  features/review/
-  features/admin/
-  lib/api/
-  assets/
-```
+CSS nền tảng nằm trong [styles](../../client/src/styles/), control dùng chung trong [components/ui](../../client/src/components/ui/), khung trang trong [components/layout](../../client/src/components/layout/). Các màn và style đặc thù nằm trong [features](../../client/src/features/). Tra [ComponentPreview](../../client/src/demo/ComponentPreview.jsx) để xem các component mẫu.
 
 - tokens.css là nguồn giá trị thực thi; Tailwind/theme tham chiếu cùng token, không giữ hai bảng màu độc lập.
 - Component dùng semantic variant thay vì mỗi trang truyền arbitrary class để đổi toàn bộ hình thức.
 - Cho phép layout đặc thù theo feature; không tạo “universal card” với hàng chục boolean chỉ để gộp mọi màn.
 - Tách API, state và logic gọi/ghép/FSRS khỏi component trình bày.
 - Dùng mock đi qua adapter/API boundary tương tự dữ liệu thật. Không mock thành công cố định trong component dùng chung.
-- Dữ liệu session/auth theo hợp đồng backend. Không nhét secret vào bundle hoặc log nội dung riêng.
+- Dữ liệu session/auth theo hợp đồng backend. Giữ thông tin bí mật ngoài bundle của client và tránh ghi nội dung riêng tư vào log.
 - Trạng thái đổi bộ/vai/hoàn tất được server xác nhận; không suy ra quyền từ một nhãn trong Figma.
 - Các controls phức tạp nên dùng primitive truy cập được sẵn có nếu repo đã dùng; tránh tự tạo hành vi dialog/select thiếu bàn phím.
-- Lệnh lint/build/typecheck/test lấy từ package.json thực tế, không ghi lệnh giả.
+- Dùng các script lint, build, typecheck và test trong package.json.
 - Mỗi quyết định thiết kế mới ghi nguồn, ngày, trạng thái; thay token/component trước rồi cập nhật màn sử dụng.
 
-### Ví dụ token khởi đầu
-
-Đây là ví dụ minh họa để chuyển vào code khi khởi tạo, chưa phải file CSS đã tích hợp:
-
-```css
-:root {
-  --color-background: #fffcf8;
-  --color-surface: #fffcf8;
-  --color-text: #433d3d;
-  --color-text-muted: #766b70;
-  --color-border: #e9d6de;
-  --color-accent: #9b526e;
-  --button-primary-bg: #efadc3;
-  --button-primary-border: #b8748d;
-  --button-primary-shadow: #a9677e;
-  --button-primary-text: #49383e;
-  --font-body: 'Be Vietnam Pro', sans-serif;
-  --font-heading: 'Baloo 2', sans-serif;
-  --font-japanese: 'Noto Sans JP', sans-serif;
-  --control-height: 3rem;
-  --radius-button: 0.875rem;
-  --radius-card: 1rem;
-  --radius-dialog: 1.5rem;
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-}
-```
+Giá trị thực thi của màu semantic, font stack, spacing, radius, kích thước control và thời lượng motion nằm trong [tokens.css](../../client/src/styles/tokens.css). Style theo ngữ cảnh như sticker và cảnh học tập được định nghĩa ở component sử dụng chúng.
 
 ## 11. Kiểm tra và điều kiện hoàn thành
 
@@ -364,20 +316,14 @@ src/
 2. So sánh màn thật ở 1440×900 và 1366×768 với frame nguồn, không so ở canvas zoom nhỏ.
 3. Kiểm tra 390px cho form/modal/trang thường; ghi rõ Room mobile còn giới hạn nếu chưa hoàn thiện.
 4. Keyboard: tab order, focus-visible, modal trap/restore, Escape, password toggle và radio/tab.
-5. Test nội dung dài, email dài, tên người dùng dài, ảnh thiếu, error dưới field, loading.
+5. Thử tên và email dài, ảnh bị thiếu, lỗi dưới trường nhập và trạng thái đang tải.
 6. Test 30→0, refresh/tab ngủ, mất mạng/reconnect; CTA phản ánh trạng thái server.
 7. Không có overflow ngang ngoài vùng chủ ý; không cắt dấu; không scale avatar thành oval.
 8. Kiểm tra tương phản, zoom 200%, reduced motion và touch target.
-9. Chạy kiểm tra repo phù hợp; test ưu tiên timer, hành động hủy, submit lặp, quyền và state transitions. Không viết test snapshot chỉ để khóa màu/padding đang đổi.
-10. Không coi Summary/Library/Admin là đã khớp Figma khi những section đó chưa có nội dung.
+9. Kiểm tra vị trí mascot trên cả màn rộng và màn hẹp. Mascot cần đủ chỗ để hiển thị mà vẫn giữ rõ tiêu đề, nội dung và nút thao tác.
+10. Chạy kiểm tra repo phù hợp; test ưu tiên timer, hành động hủy, submit lặp, quyền và state transitions. Không viết test snapshot chỉ để khóa màu/padding đang đổi.
 
-### Thứ tự khởi tạo FE
-
-P0: token/font → Button/IconButton → FormField/Input → Modal → AuthLayout/AppShell → trang xem thử → màn Đăng nhập.
-P1: lựa chọn/Card/Avatar/Tabs → Countdown/ParticipantCard → Enter Kaiwa/Room.
-P2: Review/Admin/Shared States khi có màn và hợp đồng dữ liệu.
-
-### Các việc còn mở trước khi chốt v1.1
+### Các điểm thiết kế cần đối chiếu khi cập nhật Figma
 
 - Đồng bộ lại bảng rules cũ với Button 48 và timer mới.
 - Review modal padding 24/32 và radius 24/30 trong một màn thật.
@@ -385,33 +331,26 @@ P2: Review/Admin/Shared States khi có màn và hợp đồng dữ liệu.
 - Chốt nguồn và hành vi countdown chọn bộ.
 - Chuẩn hóa chữ nhỏ trong Auth/Room; các frame Room cũ còn 1201px cần bố cục lại.
 - Dựng mobile mẫu, hoàn thiện focus/loading/error states.
-- Chốt bộ icon, asset nguồn và font files; chưa chọn hướng pixel cho toàn app.
-- Sửa các prompt cũ về bộ riêng/flashcard/quiz/Admin cho khớp SRS trước khi nhờ gen tiếp.
+- Đối chiếu font thực tế (§4.1) và các asset hiện có (§12) khi cập nhật thư viện Figma.
 
-## 12. Asset checklist — hình ảnh cần chuẩn bị riêng
+## 12. Asset hiện có và quy cách bổ sung
 
-Không yêu cầu vẽ mới tất cả: asset đã có trong Figma có thể xuất lại nếu có file gốc/chất lượng phù hợp. Tên file dưới đây là đề nghị, chưa phải file đã xuất.
+| Thư mục                                     | Tài nguyên dùng trong frontend                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------------- |
+| [brand](../../client/src/assets/brand/)     | Logo `chii-logo.svg`.                                                           |
+| [auth](../../client/src/assets/auth/)       | Hai cảnh riêng `login-scene.webp` và `register-scene.webp`.                     |
+| [mascots](../../client/src/assets/mascots/) | Nhân vật và hình đại diện minh họa dùng trên các màn.                           |
+| [library](../../client/src/assets/library/) | Các lớp của bản đồ đảo, công trình, mascot, tranh chủ đề và biểu tượng học tập. |
+| [ui](../../client/src/assets/ui/)           | Họa tiết dùng chung, gồm `sticker-flowers.svg`.                                 |
+| [fonts](../../client/src/assets/fonts/)     | Nunito variable và giấy phép OFL.                                               |
 
-| Ưu tiên  | Asset                        | Số lượng tối thiểu | Dạng bàn giao                                                      | Nơi dùng / tình trạng                                                           |
-| -------- | ---------------------------- | -----------------: | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| P0       | Logo biểu tượng “ち”         |                  1 | SVG; có bản vuông                                                  | Logo đã có hình trong file; cần bản sạch                                        |
-| P0       | Wordmark Chiikaiwa           |                  1 | SVG outline hoặc biểu tượng SVG + chữ live                         | Header/Auth; đồng bộ một phiên bản                                              |
-| P0       | Mascot thỏ và mèo            |                  2 | PNG/WebP nền trong, chiều cao khoảng 800–1200px nếu nguồn cho phép | Home/Auth; Figma có ảnh thỏ/mèo, cần kiểm tra file gốc; không phóng lớn ảnh nhỏ |
-| P0       | Avatar mặc định              |                0–1 | SVG/PNG hoặc initials dựng code                                    | Chưa bắt buộc minh họa; initials đủ cho FE ban đầu                              |
-| P1       | Ảnh bìa chủ đề               |      3 cho mẫu đầu | SVG hoặc WebP, khoảng 800×400, tỉ lệ 2:1                           | Cà phê, đời sống đại học, việc làm thêm; hiện Room dùng một hình bộ thẻ lặp lại |
-| P1       | Favicon                      |       1 bộ từ logo | SVG/ICO + PNG nếu cần                                              | Tab trình duyệt; không cần thiết kế lại                                         |
-| P2       | Minh họa rỗng/lỗi/thành công |                0–3 | SVG hoặc WebP trong suốt                                           | Một nhóm nhỏ tái dùng; không cần mỗi lỗi một mascot                             |
-| P2       | Ảnh chia sẻ social           |                  1 | PNG/WebP 1200×630                                                  | Nếu triển khai cần link preview                                                 |
-| Tùy chọn | Bộ icon pixel/trang trí      |  Một bộ thống nhất | SVG hoặc pixel PNG tại kích thước nguyên                           | Chỉ làm sau khi chốt hướng; chưa thay toàn bộ icon chức năng                    |
-| Tùy chọn | Mascot biểu cảm/animation    |                  0 | SVG/WebP hoặc animation tối ưu                                     | Không chặn nhánh FE base                                                        |
+Icon thao tác có thể dựng bằng [Icon](../../client/src/components/ui/controls.jsx) hoặc [StudyIcon](../../client/src/components/ui/StudyIcon.jsx) theo component đang tái sử dụng. Các lối học trên đảo dùng biểu tượng minh họa cùng bộ với trang chi tiết.
 
 ### Quy cách bàn giao
 
-- Tên gợi ý: logo-mark.svg, logo-wordmark.svg, mascot-rabbit.webp, mascot-cat.webp, topic-cafe.webp, topic-campus.webp, topic-part-time.webp.
-- Giữ một master chất lượng cao; bản dùng web tối ưu dung lượng, không thêm nền trắng vào mascot.
+- Giữ bản gốc chất lượng cao. Khi xuất cho web, nén ảnh và giữ nền trong suốt của mascot.
 - SVG có viewBox, crop đúng bounds; logo outline chữ nếu cần tái hiện ổn định. Không outline text UI thông thường.
 - Ảnh bìa cùng tỉ lệ, phong cách, vùng an toàn; không nhúng tên chủ đề vào ảnh.
 - Ghi nguồn, tác giả/giấy phép hoặc điều kiện sử dụng, nơi dùng và alt text vào asset manifest.
 - Font files và icon pack là tài nguyên riêng cần chốt nguồn, không phải hình phải tự vẽ.
 - Nền blob, bong bóng thoại, viền/bóng button, spinner, countdown và initials avatar có thể dựng bằng CSS/SVG; không cần chuẩn bị ảnh.
-- Chưa tải hoặc xuất bất kỳ asset nào trong lượt viết tài liệu này.
