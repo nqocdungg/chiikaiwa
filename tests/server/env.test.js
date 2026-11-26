@@ -38,6 +38,11 @@ describe('environment', () => {
       readEnv({ ...source, APP_ORIGIN: 'private-config-value' }),
     ).toThrow('APP_ORIGIN must be a valid HTTP origin');
   });
+  it('rejects malformed TRUSTED_PROXY_IPS without exposing raw values', () => {
+    expect(() =>
+      readEnv({ ...source, TRUSTED_PROXY_IPS: 'bad-proxy-ip-value' }),
+    ).toThrow('TRUSTED_PROXY_IPS must contain valid IP addresses');
+  });
   it('requires a strong JWT_SECRET in production without exposing the secret', () => {
     expect(() =>
       readEnv({

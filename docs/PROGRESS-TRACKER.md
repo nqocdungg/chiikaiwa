@@ -624,6 +624,41 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
 
 ## Sprint 3
 
+### BE-034 — Thống kê hoạt động tích lũy
+
+- Ngày cập nhật: 2026-11-24
+- Trạng thái: Còn dở — endpoint và các bộ đếm TX-01/TX-06/TX-09/TX-10 đã triển khai; chưa đủ điều kiện Done.
+- PR: Chưa có; nhánh `feature/BE-034-lifetime-statistics` từ `develop@9b2a674`.
+- Đã làm: Thêm `GET /api/v1/admin/statistics`, chỉ cho Admin và trả đúng bốn bộ đếm; thiếu document hoặc trường bộ đếm không hợp lệ trả `503 SERVICE_UNAVAILABLE`, không tạo số 0 giả. Tăng bộ đếm bằng `$inc` và `$max updatedAt` nguyên tử trong cùng transaction nghiệp vụ, chỉ khi bộ đếm hiện tại hợp lệ; không tạo document và không điền hay tính toán bộ đếm khác. Bộ đếm hiện tại thiếu, âm, thập phân hoặc sai kiểu, hoặc document `lifetime` chưa tồn tại: rollback toàn bộ giao dịch nghiệp vụ (06 §11.2 fail-closed) và log tên bộ đếm cùng lý do (không ghi giá trị). Các bộ đếm khác không bị đọc hay sửa. Baseline do migration `20261124000100-ensure-lifetime-statistics` tạo cho DB rỗng; dừng với lỗi khi DB đã có dữ liệu mà thiếu baseline; tài liệu runbook trong `server/persistence/migrations/README.md` hướng dẫn chi tiết quy trình chèn baseline thủ công trước migration từ snapshot/nguồn tin cậy (không đếm lại từ collection đã bị xóa log khách/thẻ). TX-09 (`study-review-service.js`) dùng `incrementReviewCount`. TX-06 (`session-lifecycle-service.js`) tăng `startedSessions` sau CAS thành công. Bổ sung các bài test mức đăng ký (bộ đếm khác thiếu/sai kiểu thì thành công; `registeredAccounts` không hợp lệ hoặc document thiếu thì rollback user và actor_states), test log chi tiết, test migration fail-fast và retry sau khi chèn baseline.
+- File liên quan:
+  - `server/modules/statistics/admin-statistics-router.js`
+  - `server/modules/statistics/statistics-repository.js`
+  - `server/modules/statistics/statistics-service.js`
+  - `server/modules/learning/study-review-service.js`
+  - `server/modules/identity/identity-service.js`
+  - `server/modules/sessions/session-lifecycle-service.js`
+  - `server/modules/quiz/quiz-repository.js`
+  - `server/modules/quiz/quiz-service.js`
+  - `server/persistence/migrations/20261124000100-ensure-lifetime-statistics.js`
+  - `server/persistence/migrations/README.md`
+  - `server/persistence/seed/seed-content.js`
+  - `server/app.js`
+  - `docs/api/openapi.yaml`
+  - `tests/server/admin-http.test.js`
+  - `tests/server/openapi-contract.test.js`
+  - `tests/integration/admin-statistics.integration.test.js`
+  - `tests/integration/auth.integration.test.js`
+  - `tests/integration/guest-trials.integration.test.js`
+  - `tests/integration/password-reset.integration.test.js`
+  - `tests/integration/profile-catalogs.integration.test.js`
+  - `tests/integration/quiz-api.integration.test.js`
+  - `tests/integration/session-lifecycle.integration.test.js`
+  - `tests/server/content-seed-idempotency.test.js`
+  - `docs/PROGRESS-TRACKER.md`
+- Kiểm chứng: `npm run check` PASS: format, lint, typecheck, 43 file unit/HTTP/component (593 tests), 26 file integration (388 tests) và production build. `npm run openapi:check` PASS (17/17). `git diff --check` PASS. Build có cảnh báo chunk Vite lớn hơn 500 kB.
+- Tiếp theo: Kiểm chứng OPS-005 restore lifetime từ cùng snapshot và bảo toàn bộ đếm sau cleanup; nhận review của Ngọc Dung rồi mở PR về `develop`.
+- Lưu ý/blocker: DB production hiện có dữ liệu cần tạo baseline thủ công trước khi chạy migration sau khi đối chiếu số liệu (migration chỉ tạo cho DB rỗng và fail-fast nếu DB đã có dữ liệu mà thiếu baseline); OPS-005 chưa có. Không sửa thiết kế 01–07; chưa commit/push hoặc đánh dấu Done.
+
 ### BE-039 — Sửa rò thông tin nháp trong danh mục học liệu learner
 
 - Ngày cập nhật: 2026-11-23
@@ -639,3 +674,19 @@ Tái tạo bằng `python scripts/generate-fsrs-fixtures.py`, rồi `npx prettie
   - `git diff --check`: pass, gồm cả cập nhật tracker này.
 - Tiếp theo: Tạo PR vào `develop`, kiểm tra CI và chờ reviewer Ngọc Dung review; chỉ cập nhật Done khi đủ điều kiện DoD.
 - Lưu ý/blocker: PR/CI và review độc lập chưa có. Không thêm migration/index hoặc backfill. Index hiện hành của `content_items` là `{kind: 1, status: 1, level: 1, _id: 1}` (`06 §10.1`), không có `createdAt` để hỗ trợ đầy đủ cursor/sort; vì vậy không khẳng định truy vấn có cursor index. Hiệu năng chưa được đo bằng `explain`; nếu cần, đánh giá riêng theo quy mô dữ liệu.
+
+### BE-038 — Hoàn thiện giới hạn request xuyên các API
+
+- Ngày cập nhật: 2026-11-25
+- Trạng thái: Sẵn sàng merge / Chờ kiểm chứng Vercel sau deploy (chưa Done).
+- PR: [PR #64](https://github.com/nqocdungg/chiikaiwa/pull/64), nhánh `feature/BE-038-request-rate-limits`, base `develop`.
+- Đã làm:
+  - Chuẩn hóa giới hạn tốc độ tập trung tại `server/middleware/rate-limit.js` với `rate_limits` TTL (`purgeAt`) và tăng bộ đếm nguyên tử: giới hạn đăng nhập (`10/15p` theo IP và emailKey hash), quên mật khẩu (`20/15p` theo IP và `3/15p` theo emailKey hash không lộ tồn tại tài khoản), tra cứu mã mời/dùng thử khách dùng chung (`20/5p` theo IP trên `/guest-trials` và `/invitation-requests`, không tính đúp `write-actor` cho khách), và giới hạn ghi nghiệp vụ (`120/phút` theo actor) trên các router invitation và admin content, loại trừ endpoint đọc/polling.
+  - Cập nhật `docs/api/openapi.yaml` khai báo `429 RateLimited` cho `DELETE /invitations/{invitationId}`, `DELETE /invitation-requests/{requestId}`, `POST /invitation-requests/{requestId}/responses`, `POST /admin/content/{id}/publish` và `POST /admin/content/{id}/hide`; bỏ alias `INVITATION_CODE_LOOKUP_*` dư thừa trong `invitation-service.js`.
+  - Cập nhật `getClientIp`: trên Vercel (`VERCEL` được bật), đọc hop hợp lệ đầu tiên từ `x-vercel-forwarded-for` (validate bằng `isIP`) và rơi về `socketIp` nếu thiếu hoặc không hợp lệ; ngoài Vercel, kiểm tra ranh giới `TRUSTED_PROXY_IPS`, ghi `console.warn` không lộ giá trị thô nếu cấu hình sai định dạng và fallback về `socketIp`. Bổ sung `normalizeRateLimitIp` gom nhóm địa chỉ IPv6 theo tiền tố `/64` chuẩn hóa trước khi hash bucket (giữ nguyên IPv4 và các dạng IPv4-mapped IPv6) cho `login-ip`, `password-reset-ip`, `invitation-code-ip` và `write-actor` dạng `ip:...`. Tài liệu hóa `TRUSTED_PROXY_IPS` và hành vi Vercel tại `.env.example` và `README.md`.
+  - Bổ sung unit test cho `getClientIp` (bao gồm `VERCEL`, chuỗi phân tách dấu phẩy, fallback và cảnh báo `TRUSTED_PROXY_IPS`) và `normalizeRateLimitIp` (gom nhóm IPv6 `/64`, giữ nguyên IPv4), validation `env.js`, contract OpenAPI và integration test cố định `Date` kiểm runtime `429` + `Retry-After` cho cả 3 mutation của invitation và chống xoay host IPv6 trong cùng `/64`.
+- File liên quan: `server/middleware/rate-limit.js`, `server/config/env.js`, `server/modules/content/content-admin-router.js`, `server/modules/invitations/invitation-router.js`, `server/modules/invitations/invitation-service.js`, `docs/api/openapi.yaml`, `.env.example`, `README.md`, `docs/qa/BE-038-review-validation.md`, `docs/PROGRESS-TRACKER.md`, `tests/server/auth.test.js`, `tests/server/env.test.js`, `tests/server/openapi-contract.test.js`, `tests/integration/rate-limit.integration.test.js`.
+- Kiểm chứng: `npm run check` **PASS 100%** trên Node `v24.22.2` / `npm@11.21.1` (Prettier `format:check`, ESLint 0 warnings, TypeScript `typecheck` 0 errors, `44` file / `607` unit-HTTP-component tests, `26` file / `366` integration tests trên MongoDB 8.2.7 replica set tạm, Vite build và `node --check`); `git diff --check` đạt.
+- Tiếp theo / Lưu ý:
+  - Phụ thuộc kiểm chứng hạ tầng cho Question trên PR #64 (`IP trên Vercel Preview — Not Run`, xem `docs/qa/BE-038-review-validation.md`): sau khi deploy Preview, cần gửi request từ hai mạng/IP độc lập để xác nhận hai mạng không bị gộp chung bucket và header giả mạo không tự chọn bucket. Trạng thái Preview Ready và unit test pass không thay thế bài kiểm tra thực tế này.
+  - Phụ thuộc BE-028 cho tiêu chí heartbeat (`Heartbeat — Not Run`): nhánh hiện chưa có endpoint matching heartbeat; khi BE-028 tích hợp, cần kiểm chứng heartbeat không tăng quota ghi và vẫn hoạt động khi quota ghi đã đầy. Không sửa thiết kế `01–07` và chưa đánh dấu Done trên Project Tracker.

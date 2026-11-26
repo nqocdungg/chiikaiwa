@@ -3,6 +3,7 @@ import {
   RoomServiceClient,
   ServerError,
   DataPacket_Kind,
+  TrackSource,
 } from 'livekit-server-sdk';
 import { readLiveKitEnv } from '../../config/env.js';
 
@@ -46,20 +47,53 @@ export async function notifyMediaSession(roomName, sessionId, version) {
 
 /** @param {string} roomName @param {string} actorKey */
 export async function readMediaParticipant(roomName, actorKey) {
-  const { url, apiKey, apiSecret } = readLiveKitEnv();
-  const host = url.replace(/^ws/u, 'http');
-  const client = new RoomServiceClient(host, apiKey, apiSecret, {
-    requestTimeout: 5,
-  });
-  let participants;
-  try {
-    participants = await client.listParticipants(roomName);
-  } catch (error) {
-    if (error instanceof ServerError && error.code === 'not_found') return null;
-    throw error;
-  }
+  const participants = await listMediaParticipants(roomName);
   const participant = participants.find((item) => item.identity === actorKey);
   return participant?.state === ParticipantInfo_State.ACTIVE
     ? participant.sid
     : null;
+}
+
+/** @param {string} roomName */
+export async function listMediaParticipants(roomName) {
+  try {
+    return await roomClient().listParticipants(roomName);
+  } catch (error) {
+    if (error instanceof ServerError && error.code === 'not_found') return [];
+    throw error;
+  }
+}
+
+const screenSources = [
+  TrackSource.SCREEN_SHARE,
+  TrackSource.SCREEN_SHARE_AUDIO,
+];
+
+/** @param {import('livekit-server-sdk').ParticipantInfo} participant */
+export function hasScreenMedia(participant) {
+  return (
+    !participant.permission ||
+    (participant.permission.canPublish &&
+      (!participant.permission.canPublishSources.length ||
+        participant.permission.canPublishSources.some((source) =>
+          screenSources.includes(source),
+        ))) ||
+    participant.tracks.some((track) => screenSources.includes(track.source))
+  );
+}
+
+/** @param {string} roomName @param {string} actorKey @param {boolean} grant */
+export function setScreenPermission(roomName, actorKey, grant) {
+  return roomClient().updateParticipant(roomName, actorKey, {
+    permission: {
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+      canPublishSources: [
+        TrackSource.CAMERA,
+        TrackSource.MICROPHONE,
+        ...(grant ? screenSources : []),
+      ],
+    },
+  });
 }

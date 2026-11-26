@@ -25,6 +25,7 @@ import {
 } from './crypto.js';
 import { DEFAULT_AVATAR_KEY, toSelfDto } from './dto.js';
 import { resolveGuestTrialDeadline } from '../learning/guest-write-guard.js';
+import { incrementLifetimeCounter } from '../statistics/statistics-repository.js';
 import {
   validateEmptyObjectInput,
   validateIdempotencyKey,
@@ -93,19 +94,10 @@ export async function registerUser(rawBody, { now = new Date() } = {}) {
       await db
         .collection('actor_states')
         .insertOne(/** @type {any} */ (actorStateDoc), { session });
-      await db.collection('statistics').updateOne(
-        /** @type {any} */ ({ _id: 'lifetime' }),
-        {
-          $inc: { registeredAccounts: 1 },
-          $set: { updatedAt: now },
-          $setOnInsert: {
-            startedSessions: 0,
-            reviewCount: 0,
-            submittedQuizCount: 0,
-          },
-        },
-        { upsert: true, session },
-      );
+      await incrementLifetimeCounter(db, 'registeredAccounts', {
+        session,
+        now,
+      });
     });
   } catch (err) {
     if (/** @type {{ code?: number }} */ (err)?.code === 11000) {

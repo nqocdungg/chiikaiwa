@@ -17,8 +17,6 @@ import {
 } from '../identity/crypto.js';
 
 export const INVITATION_TTL_MS = 10 * 60 * 1000;
-export const INVITATION_CODE_LOOKUP_WINDOW_MS = 5 * 60 * 1000;
-export const INVITATION_CODE_LOOKUP_MAX = 20;
 const CODE_LENGTH = 10;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const { ObjectId } = mongoose.Types;
