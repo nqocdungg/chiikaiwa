@@ -1,5 +1,36 @@
 import { expect, it } from 'vitest';
+import { assertTopicContentV2Reviewed } from '../../server/persistence/seed/topic-content-v2.js';
 import manifest from '../../server/persistence/seed/topic-content-v2.json' with { type: 'json' };
+
+it('chỉ cho phép nạp học liệu đã duyệt đúng revision', () => {
+  const review = {
+    scenarioVersionId: 'reviewed-version',
+    reviewStatus: 'approved',
+    humanReviewer: 'Reviewer',
+  };
+  const source = {
+    reviewStatus: 'approved',
+    entries: [
+      {
+        kind: 'scenario',
+        seedKey: 'test-topic',
+        versionId: 'reviewed-version',
+      },
+    ],
+    metadata: { scenarioReviewBySeedKey: { 'test-topic': review } },
+  };
+
+  expect(() => assertTopicContentV2Reviewed(source)).not.toThrow();
+  source.reviewStatus = 'draft';
+  expect(() => assertTopicContentV2Reviewed(source)).toThrow(
+    'chưa có duyệt độc lập',
+  );
+  source.reviewStatus = 'approved';
+  source.entries[0].versionId = 'new-version';
+  expect(() => assertTopicContentV2Reviewed(source)).toThrow(
+    'chưa có duyệt độc lập',
+  );
+});
 
 it('giữ bốn phương án cùng dạng trong câu hỏi cách dùng ngữ pháp', () => {
   const questions = manifest.entries.filter(({ payload }) =>

@@ -81,7 +81,17 @@ Tài liệu này xác định các tiêu chí bắt buộc khi biên soạn dữ
 npx vitest run --project integration tests/integration/topic-content-v2.integration.test.js
 ```
 
-Ca kiểm thử trỏ tới replica set tạm độc lập với `.env`. Nó chuyển manifest sang bốn nhóm dữ liệu của DATA-002, chạy seed hai lần rồi đối chiếu bộ theo cấp, kiến thức và số tình huống mỗi bộ. Dữ liệu xuất bản trong ca kiểm thử phục vụ kiểm tra luồng đọc. Dataset v2 vẫn ở trạng thái chờ duyệt và chưa đăng ký vào `npm run db:seed`.
+Ca kiểm thử trỏ tới replica set tạm độc lập với `.env`. Nó dùng cùng bộ chuyển manifest với lệnh seed v2, chạy seed hai lần rồi đối chiếu bộ theo cấp, kiến thức và số tình huống mỗi bộ. Dữ liệu xuất bản trong ca kiểm thử phục vụ kiểm tra luồng đọc.
+
+### Nạp bản đã duyệt
+
+Sau khi hoàn tất review độc lập, ghi `humanReviewer` và `reviewStatus: "approved"` vào phiếu của từng tình huống, khớp với `scenarioVersionId` được duyệt. Đặt `reviewStatus` của manifest thành `"approved"` khi đã duyệt đủ. Dùng `npm run db:status` để xác nhận database đích đã có các migration theo [hướng dẫn thiết lập](local.md).
+
+```sh
+npm run db:seed:topics -- chiikaiwa_dev
+```
+
+Chạy với URI của môi trường đích và tên database trùng `MONGODB_DB_NAME`. Lệnh hỗ trợ dev, demo và test. Nó yêu cầu sẵn một Admin đang hoạt động và kiểm tra trạng thái duyệt trước khi kết nối. Sau khi xác nhận bộ mới xuất hiện đúng cấp và dữ liệu đọc được, dùng thao tác **Ẩn** của Admin với đúng các bộ cũ đã được đối chiếu bên dưới. Bản đã dùng trong lịch sử vẫn truy được qua revision đã lưu.
 
 ### Đối chiếu trước khi thay dữ liệu đã xuất bản
 

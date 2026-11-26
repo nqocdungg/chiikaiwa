@@ -13,7 +13,7 @@ import {
 } from '../../server/persistence/database.js';
 import { up as applyDesignIndexes } from '../../server/persistence/migrations/20261103000100-add-design-indexes.js';
 import { seedContentDataset } from '../../server/persistence/seed/seed-content.js';
-import manifest from '../../server/persistence/seed/topic-content-v2.json' with { type: 'json' };
+import { prepareTopicContentV2 } from '../../server/persistence/seed/topic-content-v2.js';
 
 const { ObjectId } = mongoose.Types;
 
@@ -39,26 +39,7 @@ it('nạp học liệu v2, nạp lại và đọc danh mục trên replica set c
   const db = await connectDatabase();
   await applyDesignIndexes(db);
 
-  const revisionMap = new Map(
-    Object.entries(manifest.metadata.revisionMigrationBySeedKey),
-  );
-  /** @param {string} kind */
-  const recordsFor = (kind) =>
-    manifest.entries
-      .filter((entry) => entry.kind === kind)
-      .map(({ seedKey, contentId, versionId, payload }) => ({
-        ...payload,
-        contentId,
-        versionId,
-        revision: revisionMap.has(seedKey) ? 2 : 1,
-      }));
-
-  const dataset = {
-    knowledges: recordsFor('knowledge'),
-    questions: recordsFor('question'),
-    scenarios: recordsFor('scenario'),
-    decks: recordsFor('deck'),
-  };
+  const dataset = prepareTopicContentV2();
   const options = {
     datasetName: 'topic-content-v2',
     warnOnMissingAdmin: false,
