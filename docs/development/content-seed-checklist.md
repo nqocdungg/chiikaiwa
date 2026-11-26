@@ -70,3 +70,41 @@ Tài liệu này xác định các tiêu chí bắt buộc khi biên soạn dữ
    - Người review chuyên môn kiểm tra tính tự nhiên của câu thoại, độ chính xác của ngữ pháp và từ vựng, mức độ phân loại phù hợp với cấp độ JLPT (N5–N1).
 4. **Nghiệm thu & Seed:**
    - Sau khi review đạt, dữ liệu được chuyển giao cho script seed `DATA-002` để nạp an toàn vào cơ sở dữ liệu.
+
+## 4. Bộ học liệu N5–N1 v2
+
+[Manifest v2](../../server/persistence/seed/topic-content-v2.json) gồm 20 bộ, 60 tình huống, 306 mục kiến thức và 367 câu quiz. Phiếu review theo từng `seedKey` nằm trong `metadata.scenarioReviewBySeedKey`. Người duyệt khác tác giả cần xác nhận tiếng Nhật, bản dịch, cấp độ, ngữ vực, gợi ý, phương án nhiễu và nguồn trước khi xuất bản.
+
+### Kiểm tra seed trên replica set tạm
+
+```sh
+npx vitest run --project integration tests/integration/topic-content-v2.integration.test.js
+```
+
+Ca kiểm thử trỏ tới replica set tạm độc lập với `.env`. Nó dùng cùng bộ chuyển manifest với lệnh seed v2, chạy seed hai lần rồi đối chiếu bộ theo cấp, kiến thức và số tình huống mỗi bộ. Dữ liệu xuất bản trong ca kiểm thử phục vụ kiểm tra luồng đọc.
+
+### Nạp bản đã duyệt
+
+Sau khi hoàn tất review độc lập, ghi `humanReviewer` và `reviewStatus: "approved"` vào phiếu của từng tình huống, khớp với `scenarioVersionId` được duyệt. Đặt `reviewStatus` của manifest thành `"approved"` khi đã duyệt đủ. Dùng `npm run db:status` để xác nhận database đích đã có các migration theo [hướng dẫn thiết lập](local.md).
+
+```sh
+npm run db:seed:topics -- chiikaiwa_dev
+```
+
+Chạy với URI của môi trường đích và tên database trùng `MONGODB_DB_NAME`. Lệnh hỗ trợ dev, demo và test. Nó yêu cầu sẵn một Admin đang hoạt động và kiểm tra trạng thái duyệt trước khi kết nối. Sau khi xác nhận bộ mới xuất hiện đúng cấp và dữ liệu đọc được, dùng thao tác **Ẩn** của Admin với đúng các bộ cũ đã được đối chiếu bên dưới. Bản đã dùng trong lịch sử vẫn truy được qua revision đã lưu.
+
+### Đối chiếu trước khi thay dữ liệu đã xuất bản
+
+Các mục dưới đây là ứng viên đối chiếu từ source seed hiện tại. Xác nhận lại với database đích, vì phiên bản đang xuất bản và bản đã lưu trong lịch sử có thể khác source.
+
+| Bộ trong seed hiện tại                      | contentId hiện tại         | Bộ v2 cần đối chiếu                                                                      |
+| ------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
+| Quán cà phê & Nhà hàng · N5                 | `672000000000000000001001` | Quán cà phê · `b56b39e30e8337dcc5f4be53`                                                 |
+| Giao tiếp Đời sống & Công sở Trung cấp · N3 | `672300000000000000001001` | Đối chiếu theo tình huống với Việc làm thêm, Thuê nhà và sinh hoạt, Dịch vụ và khiếu nại |
+| Thương thảo & Quản trị Doanh nghiệp · N1    | `672500000000000000001001` | Đàm phán và quản trị · `6f8abc023397ff2ad10ea559`                                        |
+
+Các từ có cùng cách viết và loại trong hai nguồn gồm `確認`, `都合`, `交換`, `予定` và `見通し`. Xác nhận nghĩa và cách dùng trước khi tái sử dụng ID. Khi đã xác nhận cùng mục kiến thức, giữ `contentId` hiện tại để người học tiếp tục dùng tiến độ FSRS và thêm revision nếu nội dung thay đổi.
+
+`metadata.revisionMigrationBySeedKey` đối chiếu với manifest v1. Ca seed thử bắt đầu từ database trống. Nếu môi trường đích từng nạp bản v2 trước khi chỉnh, đối chiếu thêm các revision đã có của bản đó để xác định số revision tiếp theo.
+
+Khi chuyển dữ liệu đã có trong project, lập ánh xạ từ ID thực tế, xác nhận các tham chiếu từ mục đã lưu, phiên, quiz và tiến độ rồi chọn bộ cũ cần ẩn. Giữ các revision mà lịch sử đã tham chiếu. Ghi lại danh mục trước và sau khi chuyển, kết quả chạy seed lần hai, và bằng chứng AT-13 theo QA-026.

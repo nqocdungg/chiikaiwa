@@ -1,0 +1,14 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Deterministic knowledge and quiz seed keys in the original topic manifest commit"
+condition = "AND"
+# Preserve the original commit when merging this change.
+commits = ["b8a6dda74d0d8dd5deabbd5cd88e6e21e3ba92aa"]
+paths = ['''^server/persistence/seed/topic-content-v2\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"seedKey"\s*:\s*"(knowledge/(vocab|grammar)|quiz/knowledge)/[0-9a-f]{24}"\s*,?\s*$''']
