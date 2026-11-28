@@ -337,6 +337,7 @@ export function SessionSummaryPage() {
   return (
     <>
       <SessionSummary
+        sessionId={sessionId}
         summary={summary}
         savedKnowledge={savedKnowledge}
         note={note}

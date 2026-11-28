@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Button, Icon } from '../../components/ui/controls.jsx';
 import { Avatar, Badge, Card } from '../../components/ui/surfaces.jsx';
 import { Friends } from '../../components/Friends.jsx';
+import { libraryPath } from '../library/library-api.js';
 
 const confidenceLabels = [
   'Chưa tự tin',
@@ -35,8 +36,9 @@ function duration(milliseconds) {
   return `${minutes} phút ${String(seconds % 60).padStart(2, '0')} giây`;
 }
 
-/** @param {{summary?: import('../kaiwa/session-learning-api.js').SessionSummaryData, savedKnowledge?: import('../library/library-api.js').Knowledge[], assessment?: {confidence: number|null, comment: string}, assessmentStatus?: string, assessmentError?: string, noteError?: string, onNoteChange?: (value: string) => void, onNoteSave?: () => void, onNoteDelete?: () => void, onRefreshPersonal?: () => void, onAssessmentChange?: (value: {confidence: number|null, comment: string}) => void, onAssessmentSave?: () => void, safetyNotice?: string, onOpenSafety?: () => void, phase?: import('../../demo/kaiwa-fixtures.js').Phase, scenarioTitle?: string, outcomes?: {title: string, result: string}[], note: string, noteStatus: string, saved?: string[], knowledge?: typeof import('../../demo/kaiwa-fixtures.js').knowledge, onHome: () => void}} props */
+/** @param {{sessionId?: string, summary?: import('../kaiwa/session-learning-api.js').SessionSummaryData, savedKnowledge?: import('../library/library-api.js').Knowledge[], assessment?: {confidence: number|null, comment: string}, assessmentStatus?: string, assessmentError?: string, noteError?: string, onNoteChange?: (value: string) => void, onNoteSave?: () => void, onNoteDelete?: () => void, onRefreshPersonal?: () => void, onAssessmentChange?: (value: {confidence: number|null, comment: string}) => void, onAssessmentSave?: () => void, safetyNotice?: string, onOpenSafety?: () => void, phase?: import('../../demo/kaiwa-fixtures.js').Phase, scenarioTitle?: string, outcomes?: {title: string, result: string}[], note: string, noteStatus: string, saved?: string[], knowledge?: typeof import('../../demo/kaiwa-fixtures.js').knowledge, onHome: () => void}} props */
 export function SessionSummary({
+  sessionId: propSessionId,
   summary,
   savedKnowledge = [],
   assessment = { confidence: null, comment: '' },
@@ -80,6 +82,7 @@ export function SessionSummary({
   const { session, drawnCards, personal } = summary;
   const members = session.members ?? [];
   const deckVersionId = session.deckVersionId;
+  const sessionId = propSessionId ?? '';
   return (
     <main className="ck-summary" data-screen-id="SC-10">
       <header className="ck-summary-hero">
@@ -363,7 +366,10 @@ export function SessionSummary({
             </Link>
             <Link
               className="ck-button ck-button--secondary"
-              to={`/quiz?deckVersionId=${encodeURIComponent(deckVersionId)}`}
+              to={libraryPath('/quiz', {
+                deckVersionId,
+                sourceSessionId: sessionId,
+              })}
             >
               Luyện quiz
             </Link>
