@@ -29,6 +29,8 @@ import { MatchPage } from './features/matching/MatchPage.jsx';
 import { ProfilePage } from './features/profile/ProfilePage.jsx';
 import { BlockListPage } from './features/safety/BlockListPage.jsx';
 import { SessionSummaryPage } from './features/session-summary/SessionSummaryPage.jsx';
+import { QuizEntryPage } from './features/quiz/QuizEntryPage.jsx';
+import { QuizPage } from './features/quiz/QuizPage.jsx';
 
 const ComponentPreview = import.meta.env.DEV
   ? lazy(() =>
@@ -162,6 +164,12 @@ export function App({ skipInitialAuthCheck = false } = {}) {
             />
           </Route>
 
+          {/* SC-15: Quiz flow (U, G) — standalone focused layout */}
+          <Route element={<ProtectedRoute allowedRoles={['U', 'G']} />}>
+            <Route path="/quiz" element={<QuizEntryPage />} />
+            <Route path="/quiz/:id" element={<QuizPage />} />
+          </Route>
+
           <Route element={<LearningLayout />}>
             {/* SC-03: Learner Home */}
             <Route
@@ -210,10 +218,6 @@ export function App({ skipInitialAuthCheck = false } = {}) {
                 element={
                   <RouteShell screenId="SC-14" title="Ôn tập Flashcard" />
                 }
-              />
-              <Route
-                path="/quiz"
-                element={<RouteShell screenId="SC-15" title="Luyện tập Quiz" />}
               />
             </Route>
 
